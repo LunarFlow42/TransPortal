@@ -12,6 +12,7 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "TransPortal",
         "width": 480,
         "height": 420,
@@ -19,7 +20,8 @@
         "decorations": false,
         "transparent": true,
         "alwaysOnTop": true,
-        "shadow": false
+        "shadow": false,
+        "center": true
       }
     ],
     "security": {
