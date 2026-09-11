@@ -14,11 +14,11 @@
       {
         "label": "main",
         "title": "TransPortal",
-        "width": 500,
-        "height": 580,
+        "width": 520,
+        "height": 650,
         "resizable": true,
-        "decorations": false,
-        "transparent": true,
+        "decorations": true,
+        "transparent": false,
         "alwaysOnTop": true,
         "shadow": true,
         "center": true
