@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { MorphingContainer } from './components/MorphingContainer';
 import { useAppStore } from './store/useAppStore';
 import { Search, Settings, Languages } from 'lucide-react';
+import './App.css';
 
 export const App: React.FC = () => {
   const {
