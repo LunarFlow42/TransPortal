@@ -1,35 +1,151 @@
 @import "tailwindcss";
 
-:root {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+/* Class-based dark mode so Tailwind `dark:` utilities follow the resolved theme. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ------------------------------------------------------------------ *
+ * Design tokens — restrained radii, glass surfaces, indigo→cyan accent
+ * ------------------------------------------------------------------ */
+:root,
+[data-theme="dark"] {
+  --r-win: 14px;
+  --r-card: 12px;
+  --r-inner: 10px;
+  --r-ctrl: 9px;
+
+  --accent-a: #6366f1;
+  --accent-b: #22d3ee;
+
+  /* Overlay glass alpha is user-configurable; the RGB triple stays per-theme. */
+  --surface-rgb: 20 20 25;
+  --surface-alpha: 0.72;
+  --surface-2: rgba(255, 255, 255, 0.05);
+  --surface-3: rgba(255, 255, 255, 0.08);
+  --stroke: rgba(255, 255, 255, 0.1);
+  --stroke-strong: rgba(255, 255, 255, 0.16);
+  --text: #f1f5f9;
+  --muted: #94a3b8;
+  --faint: #64748b;
+  --highlight: rgba(255, 255, 255, 0.09);
+  --hover: rgba(255, 255, 255, 0.08);
+  /* Kept tight so the glow never reaches the window edge and gets clipped
+     into a hard rectangular halo around the rounded card. */
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.32), 0 1px 2px rgba(0, 0, 0, 0.24);
+  --pos-bg: rgba(99, 102, 241, 0.18);
+  --pos-fg: #a5b4fc;
+  --pos-stroke: rgba(99, 102, 241, 0.32);
+  /* Settings window is opaque; only the overlay is translucent. */
+  --window-bg: #16161b;
+  --popover-bg: rgba(28, 28, 34, 0.98);
+
   color-scheme: dark;
 }
 
-html, body, #root {
+[data-theme="light"] {
+  --accent-a: #6366f1;
+  --accent-b: #0891b2;
+
+  --surface-rgb: 255 255 255;
+  --surface-alpha: 0.72;
+  --surface-2: rgba(15, 23, 42, 0.035);
+  --surface-3: rgba(15, 23, 42, 0.06);
+  --stroke: rgba(15, 23, 42, 0.1);
+  --stroke-strong: rgba(15, 23, 42, 0.18);
+  --text: #0f172a;
+  --muted: #64748b;
+  --faint: #94a3b8;
+  --highlight: rgba(255, 255, 255, 0.85);
+  --hover: rgba(15, 23, 42, 0.06);
+  --shadow: 0 2px 8px rgba(15, 23, 42, 0.12), 0 1px 2px rgba(15, 23, 42, 0.08);
+  --pos-bg: rgba(99, 102, 241, 0.14);
+  --pos-fg: #4338ca;
+  --pos-stroke: rgba(99, 102, 241, 0.28);
+  --window-bg: #f6f7f9;
+  --popover-bg: rgba(255, 255, 255, 0.98);
+
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
   margin: 0;
   padding: 0;
   width: 100%;
   min-height: 100%;
-  background-color: #0f0f12 !important;
-  color: #f8fafc;
+  /* Transparent host so the overlay can show its rounded glass card and the
+     settings window can round its own opaque panel. */
+  background-color: transparent;
+  color: var(--text);
   overflow-x: hidden;
   user-select: none;
 }
 
-/* Custom sleek scrollbar for dark card view */
+/* ------------------------------------------------------------------ *
+ * Surfaces
+ * ------------------------------------------------------------------ */
+.surface {
+  position: relative;
+  /* Alpha is driven by the user's overlay-opacity setting. */
+  background: rgb(var(--surface-rgb) / var(--surface-alpha));
+  border: 1px solid var(--stroke);
+  backdrop-filter: blur(26px) saturate(150%);
+  -webkit-backdrop-filter: blur(26px) saturate(150%);
+  box-shadow: var(--shadow), inset 0 1px 0 var(--highlight);
+}
+
+/* Gradient hairline + top highlight, hugging the element's radius. */
+.surface-hairline::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    var(--highlight),
+    rgba(255, 255, 255, 0.02) 42%,
+    rgba(255, 255, 255, 0)
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+.inner-card {
+  background: var(--surface-2);
+  border: 1px solid var(--stroke);
+}
+
+/* Opaque panel for the borderless settings window (no desktop bleed-through). */
+.window-root {
+  background: var(--window-bg);
+}
+
+.focus-ring {
+  outline: none;
+}
+.focus-ring:focus-visible {
+  border-color: rgba(99, 102, 241, 0.65);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.22);
+}
+
+/* ------------------------------------------------------------------ *
+ * Scrollbar
+ * ------------------------------------------------------------------ */
 ::-webkit-scrollbar {
   width: 5px;
 }
-
 ::-webkit-scrollbar-track {
   background: transparent;
 }
-
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--stroke-strong);
   border-radius: 9999px;
 }
-
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: var(--muted);
 }

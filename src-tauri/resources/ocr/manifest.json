@@ -1,0 +1,251 @@
+{
+  "id": "ppocr-v4-fp32-ort-1.22.0",
+  "model_family": "PP-OCRv4 mobile",
+  "precision": "FP32",
+  "runtime_version": "1.22.0",
+  "source": "https://github.com/RapidAI/RapidOCR/blob/4a3070f304467e6d426e78a82afea5cb1181f305/python/rapidocr/default_models.yaml",
+  "models": [
+    {
+      "name": "ch_PP-OCRv4_det_mobile.onnx",
+      "bytes": 4745517,
+      "sha256": "d2a7720d45a54257208b1e13e36a8479894cb74155a5efe29462512d42f49da9",
+      "urls": [
+        "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.9.2/onnx/PP-OCRv4/det/ch_PP-OCRv4_det_mobile.onnx"
+      ]
+    },
+    {
+      "name": "ch_ppocr_mobile_v2.0_cls_mobile.onnx",
+      "bytes": 585532,
+      "sha256": "e47acedf663230f8863ff1ab0e64dd2d82b838fceb5957146dab185a89d6215c",
+      "urls": [
+        "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.9.2/onnx/PP-OCRv4/cls/ch_ppocr_mobile_v2.0_cls_mobile.onnx"
+      ]
+    },
+    {
+      "name": "ch_PP-OCRv4_rec_mobile.onnx",
+      "bytes": 10857958,
+      "sha256": "48fc40f24f6d2a207a2b1091d3437eb3cc3eb6b676dc3ef9c37384005483683b",
+      "urls": [
+        "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.9.2/onnx/PP-OCRv4/rec/ch_PP-OCRv4_rec_mobile.onnx"
+      ]
+    }
+  ],
+  "runtimes": [
+    {
+      "platform": "windows-x86_64",
+      "library": "onnxruntime.dll",
+      "archive": "onnxruntime-win-x64-1.22.0.zip",
+      "format": "zip",
+      "bytes": 72368545,
+      "sha256": "174c616efc0271194488642a72f1a514e01487da4dfe84c49296d66e40ebe0da",
+      "urls": [
+        "https://api.github.com/repos/microsoft/onnxruntime/releases/assets/253300435",
+        "https://github.com/microsoft/onnxruntime/releases/download/v1.22.0/onnxruntime-win-x64-1.22.0.zip"
+      ],
+      "files": [
+        {
+          "name": "onnxruntime.dll",
+          "member": "onnxruntime-win-x64-1.22.0/lib/onnxruntime.dll",
+          "bytes": 12418080,
+          "sha256": "579b636403983254346a5c1d80bd28f1519cd1e284cd204f8d4ff41f8d711559"
+        },
+        {
+          "name": "onnxruntime_providers_shared.dll",
+          "member": "onnxruntime-win-x64-1.22.0/lib/onnxruntime_providers_shared.dll",
+          "bytes": 22064,
+          "sha256": "ba00ea1ef846c9b909c7854bc56c51051a20f9773b3e1153dda118d4b85d0b93"
+        },
+        {
+          "name": "LICENSE-ONNXRuntime.txt",
+          "member": "onnxruntime-win-x64-1.22.0/LICENSE",
+          "bytes": 1094,
+          "sha256": "c250d6278f0b47a6439fb7592b08b58a55eb9f535aa49a1db63211c3f982b674"
+        },
+        {
+          "name": "ThirdPartyNotices.txt",
+          "member": "onnxruntime-win-x64-1.22.0/ThirdPartyNotices.txt",
+          "bytes": 333022,
+          "sha256": "e00f828e0a33de591a355ae6606d2625f5758da7d2c844db7821c9dd3e3647b6"
+        }
+      ]
+    },
+    {
+      "platform": "windows-aarch64",
+      "library": "onnxruntime.dll",
+      "archive": "onnxruntime-win-arm64-1.22.0.zip",
+      "format": "zip",
+      "bytes": 73055483,
+      "sha256": "7008f7ff82f8e7de563a22f2b590e08e706a1289eba606b93de2b56edfb1e04b",
+      "urls": [
+        "https://api.github.com/repos/microsoft/onnxruntime/releases/assets/253300429",
+        "https://github.com/microsoft/onnxruntime/releases/download/v1.22.0/onnxruntime-win-arm64-1.22.0.zip"
+      ],
+      "files": [
+        {
+          "name": "onnxruntime.dll",
+          "member": "onnxruntime-win-arm64-1.22.0/lib/onnxruntime.dll",
+          "bytes": 12679728,
+          "sha256": "79281671a386ed1baab9dbdbb09fe55f99577011472e9526cf9d0b468bb6bcc7"
+        },
+        {
+          "name": "onnxruntime_providers_shared.dll",
+          "member": "onnxruntime-win-arm64-1.22.0/lib/onnxruntime_providers_shared.dll",
+          "bytes": 21048,
+          "sha256": "e80bf226d099fc040f4f18b5d65aa1ae33bcb3f5821f9570b866c4a64e410c83"
+        },
+        {
+          "name": "LICENSE-ONNXRuntime.txt",
+          "member": "onnxruntime-win-arm64-1.22.0/LICENSE",
+          "bytes": 1094,
+          "sha256": "c250d6278f0b47a6439fb7592b08b58a55eb9f535aa49a1db63211c3f982b674"
+        },
+        {
+          "name": "ThirdPartyNotices.txt",
+          "member": "onnxruntime-win-arm64-1.22.0/ThirdPartyNotices.txt",
+          "bytes": 333022,
+          "sha256": "e00f828e0a33de591a355ae6606d2625f5758da7d2c844db7821c9dd3e3647b6"
+        }
+      ]
+    },
+    {
+      "platform": "linux-x86_64",
+      "library": "libonnxruntime.so.1.22.0",
+      "archive": "onnxruntime-linux-x64-1.22.0.tgz",
+      "format": "tgz",
+      "bytes": 7798730,
+      "sha256": "8344d55f93d5bc5021ce342db50f62079daf39aaafb5d311a451846228be49b3",
+      "urls": [
+        "https://api.github.com/repos/microsoft/onnxruntime/releases/assets/253300385",
+        "https://github.com/microsoft/onnxruntime/releases/download/v1.22.0/onnxruntime-linux-x64-1.22.0.tgz"
+      ],
+      "files": [
+        {
+          "name": "LICENSE-ONNXRuntime.txt",
+          "member": "onnxruntime-linux-x64-1.22.0/LICENSE",
+          "bytes": 1073,
+          "sha256": "2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c"
+        },
+        {
+          "name": "ThirdPartyNotices.txt",
+          "member": "onnxruntime-linux-x64-1.22.0/ThirdPartyNotices.txt",
+          "bytes": 326866,
+          "sha256": "e9e90971a8e75a9a8ac0c6412e29c1202d079998389915aa485f46c816c3b4cc"
+        },
+        {
+          "name": "libonnxruntime_providers_shared.so",
+          "member": "onnxruntime-linux-x64-1.22.0/lib/libonnxruntime_providers_shared.so",
+          "bytes": 14632,
+          "sha256": "e4706ea02be3999167f000bb1ff7391c86e95d2d96f78eb33225c14b172a8451"
+        },
+        {
+          "name": "libonnxruntime.so.1.22.0",
+          "member": "onnxruntime-linux-x64-1.22.0/lib/libonnxruntime.so.1.22.0",
+          "bytes": 21042416,
+          "sha256": "3da6146e14e7b8aaec625dde11d6114c7457c87a5f93d744897da8781e35c673"
+        }
+      ]
+    },
+    {
+      "platform": "linux-aarch64",
+      "library": "libonnxruntime.so.1.22.0",
+      "archive": "onnxruntime-linux-aarch64-1.22.0.tgz",
+      "format": "tgz",
+      "bytes": 6849865,
+      "sha256": "bb76395092d150b52c7092dc6b8f2fe4d80f0f3bf0416d2f269193e347e24702",
+      "urls": [
+        "https://api.github.com/repos/microsoft/onnxruntime/releases/assets/253300383",
+        "https://github.com/microsoft/onnxruntime/releases/download/v1.22.0/onnxruntime-linux-aarch64-1.22.0.tgz"
+      ],
+      "files": [
+        {
+          "name": "ThirdPartyNotices.txt",
+          "member": "onnxruntime-linux-aarch64-1.22.0/ThirdPartyNotices.txt",
+          "bytes": 326866,
+          "sha256": "e9e90971a8e75a9a8ac0c6412e29c1202d079998389915aa485f46c816c3b4cc"
+        },
+        {
+          "name": "libonnxruntime.so.1.22.0",
+          "member": "onnxruntime-linux-aarch64-1.22.0/lib/libonnxruntime.so.1.22.0",
+          "bytes": 17643256,
+          "sha256": "0afd69a0ae38c5099fd0e8604dda398ac43dee67cd9c6394b5142b19e82528de"
+        },
+        {
+          "name": "libonnxruntime_providers_shared.so",
+          "member": "onnxruntime-linux-aarch64-1.22.0/lib/libonnxruntime_providers_shared.so",
+          "bytes": 198792,
+          "sha256": "3b53a2c1f3ecb87dedaee20e2a6d4d9aaec133e3ec280e2b9cc34efbed7de423"
+        },
+        {
+          "name": "LICENSE-ONNXRuntime.txt",
+          "member": "onnxruntime-linux-aarch64-1.22.0/LICENSE",
+          "bytes": 1073,
+          "sha256": "2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c"
+        }
+      ]
+    },
+    {
+      "platform": "macos-aarch64",
+      "library": "libonnxruntime.1.22.0.dylib",
+      "archive": "onnxruntime-osx-arm64-1.22.0.tgz",
+      "format": "tgz",
+      "bytes": 25943843,
+      "sha256": "cab6dcbd77e7ec775390e7b73a8939d45fec3379b017c7cb74f5b204c1a1cc07",
+      "urls": [
+        "https://api.github.com/repos/microsoft/onnxruntime/releases/assets/253300410",
+        "https://github.com/microsoft/onnxruntime/releases/download/v1.22.0/onnxruntime-osx-arm64-1.22.0.tgz"
+      ],
+      "files": [
+        {
+          "name": "ThirdPartyNotices.txt",
+          "member": "onnxruntime-osx-arm64-1.22.0/ThirdPartyNotices.txt",
+          "bytes": 326866,
+          "sha256": "e9e90971a8e75a9a8ac0c6412e29c1202d079998389915aa485f46c816c3b4cc"
+        },
+        {
+          "name": "LICENSE-ONNXRuntime.txt",
+          "member": "onnxruntime-osx-arm64-1.22.0/LICENSE",
+          "bytes": 1073,
+          "sha256": "2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c"
+        },
+        {
+          "name": "libonnxruntime.1.22.0.dylib",
+          "member": "onnxruntime-osx-arm64-1.22.0/lib/libonnxruntime.1.22.0.dylib",
+          "bytes": 33481272,
+          "sha256": "2b885992d3d6fa4130d39ec84a80d7504ff52750027c547bb22c86165f19406a"
+        }
+      ]
+    },
+    {
+      "platform": "macos-x86_64",
+      "library": "libonnxruntime.1.22.0.dylib",
+      "archive": "onnxruntime-osx-x86_64-1.22.0.tgz",
+      "format": "tgz",
+      "bytes": 27889590,
+      "sha256": "e4ec94a7696de74fb1b12846569aa94e499958af6ffa186022cfde16c9d617f0",
+      "urls": [
+        "https://api.github.com/repos/microsoft/onnxruntime/releases/assets/253300427",
+        "https://github.com/microsoft/onnxruntime/releases/download/v1.22.0/onnxruntime-osx-x86_64-1.22.0.tgz"
+      ],
+      "files": [
+        {
+          "name": "ThirdPartyNotices.txt",
+          "member": "onnxruntime-osx-x86_64-1.22.0/ThirdPartyNotices.txt",
+          "bytes": 326866,
+          "sha256": "e9e90971a8e75a9a8ac0c6412e29c1202d079998389915aa485f46c816c3b4cc"
+        },
+        {
+          "name": "LICENSE-ONNXRuntime.txt",
+          "member": "onnxruntime-osx-x86_64-1.22.0/LICENSE",
+          "bytes": 1073,
+          "sha256": "2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c"
+        },
+        {
+          "name": "libonnxruntime.1.22.0.dylib",
+          "member": "onnxruntime-osx-x86_64-1.22.0/lib/libonnxruntime.1.22.0.dylib",
+          "bytes": 37411816,
+          "sha256": "283e595e61cf65df7a6b1d59a1616cbd35c8b6399dd90d799d99b71a3ff83160"
+        }
+      ]
+    }
+  ]
+}

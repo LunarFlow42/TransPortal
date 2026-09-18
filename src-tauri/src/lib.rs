@@ -1,14 +1,30 @@
+pub mod anki;
 pub mod commands;
 pub mod dict;
+pub mod dictionary;
+pub mod integrity;
+pub mod native;
+pub mod ocr;
 pub mod provider;
+pub mod shortcut;
+pub mod selection;
+mod shortcut_sequence;
 
 use tauri::{
+    AppHandle, Manager,
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager,
 };
 
-/// Initialize system tray with show/hide and quit options
+/// Bring the shell bubble to the foreground.
+fn focus_shell<R: tauri::Runtime>(app: &AppHandle<R>) {
+    if let Some(window) = app.get_webview_window("shell") {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+/// Initialize the system tray with show/hide and quit options.
 fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let show_item = MenuItem::with_id(app, "show", "Show TransPortal", true, None::<&str>)?;
     let hide_item = MenuItem::with_id(app, "hide", "Hide to Tray", true, None::<&str>)?;
@@ -21,14 +37,9 @@ fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>>
             .menu(&menu)
             .show_menu_on_left_click(false)
             .on_menu_event(|app, event| match event.id.as_ref() {
-                "show" => {
-                    if let Some(window) = app.get_webview_window("main") {
-                        let _ = window.show();
-                        let _ = window.set_focus();
-                    }
-                }
+                "show" => focus_shell(app),
                 "hide" => {
-                    if let Some(window) = app.get_webview_window("main") {
+                    if let Some(window) = app.get_webview_window("shell") {
                         let _ = window.hide();
                     }
                 }
@@ -45,7 +56,7 @@ fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>>
                 } = event
                 {
                     let app: &AppHandle = tray.app_handle();
-                    if let Some(window) = app.get_webview_window("main") {
+                    if let Some(window) = app.get_webview_window("shell") {
                         let is_visible = window.is_visible().unwrap_or(false);
                         if is_visible {
                             let _ = window.hide();
@@ -62,26 +73,126 @@ fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>>
     Ok(())
 }
 
+/// Initialize the lookup service (online-first + optional local ECCEDICT).
+fn setup_dictionary(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    let data_dir = app.path().app_data_dir()?;
+    std::fs::create_dir_all(&data_dir)?;
+    let db_path = data_dir.join("transportal.redb");
+    let store = dict::DictStore::open(&db_path).map_err(|e| -> Box<dyn std::error::Error> {
+        Box::new(std::io::Error::other(e.to_string()))
+    })?;
+    let service = dictionary::LookupService::new(std::sync::Arc::new(store), db_path);
+    app.manage(service);
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let report = integrity::startup_report();
+    if report.blocks_startup() {
+        native::integrity::platform().show_failure(report.error.as_deref().unwrap_or("程序完整性检查失败。"));
+        std::process::exit(2);
+    }
     tauri::Builder::default()
+        .manage(integrity::IntegrityState(std::sync::Mutex::new(report)))
+        // `single-instance` must be the first plugin registered.
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            focus_shell(app);
+        }))
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_store::Builder::new().build())
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
+            let ocr_data = app.path().app_data_dir()?.join("ocr");
+            let ocr_resources = if cfg!(debug_assertions) {
+                Some(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/ocr"))
+            } else {
+                app.path().resource_dir().ok().map(|path| path.join("ocr"))
+            };
+            let ocr_assets = std::sync::Arc::new(ocr::assets::OnnxAssets::new(
+                ocr_resources,
+                ocr_data.clone(),
+                ocr_data.join("downloads"),
+            ));
+            app.manage(ocr::OcrService::new(ocr_assets));
+            app.manage(ocr::region::RegionService::default());
+            ocr::region::RegionService::prewarm(app.handle());
+            app.manage(ocr::monitor::MonitorService::default());
+            app.manage(shortcut::ShortcutBindings::default());
+            app.manage(selection::SelectionService::default());
+            if let Err(e) = setup_dictionary(app) {
+                eprintln!("Failed to initialize dictionary: {e}");
+            }
             if let Err(e) = setup_system_tray(app) {
                 eprintln!("Failed to setup system tray: {e}");
             }
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.set_focus();
-            }
+            app.state::<ocr::OcrService>()
+                .install_observer(app.handle());
+            shortcut::register(app.handle());
+            focus_shell(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             commands::detect_intent,
             commands::translate_text,
             commands::translate_stream,
-            commands::lookup_dict
+            commands::lookup_dict,
+            commands::dict_status,
+            commands::dict_sources,
+            commands::set_dict_source_enabled,
+            commands::move_dict_source,
+            commands::set_dict_source_order,
+            commands::set_hotkey,
+            commands::shortcut_status,
+            commands::finish_startup_checks,
+            commands::retry_shortcuts,
+            commands::integrity_status,
+            commands::verify_integrity,
+            commands::ocr_status,
+            commands::set_ocr_language,
+            commands::set_ocr_config,
+            commands::get_ocr_config,
+            commands::install_onnx_ocr,
+            commands::ocr_image,
+            commands::start_ocr,
+            commands::cancel_ocr,
+            commands::ocr_latest,
+            commands::translate_ocr_picture,
+            commands::export_ocr_picture,
+            commands::begin_auto_ocr,
+            commands::auto_ocr_latest,
+            commands::region_selection,
+            commands::reveal_region,
+            commands::confirm_region,
+            commands::cancel_region,
+            commands::get_capture_mode,
+            commands::set_capture_mode,
+            commands::benchmark_ocr,
+            commands::pause_auto_ocr,
+            commands::stop_auto_ocr,
+            commands::import_eccedict,
+            commands::download_eccedict,
+            commands::capture_selection,
+            commands::set_double_copy_enabled,
+            commands::replace_captured_selection,
+            commands::get_cursor_position,
+            commands::anki_test_connection,
+            commands::anki_list_decks,
+            commands::anki_add_note,
+            commands::generate_examples
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                app.state::<ocr::monitor::MonitorService>().stop(app, true);
+                app.state::<ocr::OcrService>().shutdown(app);
+            }
+        });
 }

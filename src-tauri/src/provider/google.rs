@@ -1,4 +1,4 @@
-use super::{ProviderError, StreamChunk, TranslateQuery, TranslateResult, TranslationDetail, Translator};
+use super::{ProviderError, TranslateQuery, TranslateResult, TranslationDetail, Translator};
 use async_trait::async_trait;
 use reqwest::Client;
 use serde_json::Value;
@@ -112,46 +112,5 @@ impl Translator for GoogleFreeProvider {
             details: if details.is_empty() { None } else { Some(details) },
             provider_name: "GoogleFree".to_string(),
         })
-    }
-
-    async fn translate_stream(
-        &self,
-        query: &TranslateQuery,
-        channel: tauri::ipc::Channel<StreamChunk>,
-    ) -> Result<(), ProviderError> {
-        let result = match self.translate(query).await {
-            Ok(res) => res,
-            Err(e) => {
-                let _ = channel.send(StreamChunk {
-                    text: String::new(),
-                    is_done: true,
-                    error: Some(e.to_string()),
-                });
-                return Err(e);
-            }
-        };
-
-        // Stream words or sentence chunks smoothly
-        let chars: Vec<char> = result.translated_text.chars().collect();
-        let chunk_size = 2.max(chars.len() / 15 + 1);
-
-        for (i, chunk_chars) in chars.chunks(chunk_size).enumerate() {
-            let chunk_str: String = chunk_chars.iter().collect();
-            let is_last = (i + 1) * chunk_size >= chars.len();
-
-            channel
-                .send(StreamChunk {
-                    text: chunk_str,
-                    is_done: is_last,
-                    error: None,
-                })
-                .map_err(|e| ProviderError::Execution(e.to_string()))?;
-
-            if !is_last {
-                tokio::time::sleep(Duration::from_millis(25)).await;
-            }
-        }
-
-        Ok(())
     }
 }

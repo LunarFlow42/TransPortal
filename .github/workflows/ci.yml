@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install frontend deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Build frontend
+        run: pnpm build
+
+      - name: Frontend tests
+        run: pnpm test
+
+      - name: Release integrity tooling tests
+        run: pnpm test:integrity
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+        env:
+          # The repo's .cargo/config.toml points rustc-wrapper at a local sccache.
+          CARGO_BUILD_RUSTC_WRAPPER: ""
+
+      - name: ONNX FP32 inference smoke test
+        run: ./scripts/ocr/smoke-onnx.ps1
+        env:
+          CARGO_BUILD_RUSTC_WRAPPER: ""

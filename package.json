@@ -6,17 +6,26 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "ocr:prepare": "node scripts/ocr/prepare.mjs",
+    "build:desktop": "pnpm ocr:prepare && pnpm build",
+    "build:release": "node scripts/build-release.mjs",
+    "test:integrity": "node --test scripts/integrity/*.node.mjs",
     "preview": "vite preview",
+    "test": "vitest run",
     "tauri": "tauri"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-autostart": "^2.5.1",
+    "@tauri-apps/plugin-dialog": "^2.7.3",
     "@tauri-apps/plugin-opener": "^2",
+    "@tauri-apps/plugin-store": "^2.4.4",
     "clsx": "^2.1.1",
     "framer-motion": "^13.2.0",
     "lucide-react": "^1.43.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "react-router-dom": "^7.18.3",
     "tailwind-merge": "^3.6.0",
     "zustand": "^5.0.15"
   },
@@ -28,6 +37,7 @@
     "@vitejs/plugin-react": "^6.0.2",
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.3",
-    "vite": "^8.0.16"
+    "vite": "^8.0.16",
+    "vitest": "^5.0.0"
   }
 }

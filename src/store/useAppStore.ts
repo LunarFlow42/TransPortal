@@ -1,32 +1,58 @@
 import { create } from 'zustand';
 import { invoke, Channel } from '@tauri-apps/api/core';
+import { forgetScrollTops } from '../utils/scrollMemory';
+import { isNewOcrEvent } from '../utils/ocr';
 import type {
-  AppMode,
+  Density,
   DictEntry,
+  ExampleSentence,
   IntentResult,
+  LookupNode,
   OpenAiConfig,
   ProviderType,
   StreamChunk,
-  TextIntent,
   AnkiConfig,
   AnkiStatus,
+  CaptureOutcome,
+  PersistedSettings,
+  ThemeMode,
+  OcrEvent,
+  OcrMode,
+  OcrEngineId,
+  OcrConfig,
+  TextIntent,
+  PictureTranslation,
+  MonitorUpdate,
+  CaptureMode,
 } from '../types';
 
-interface AppState {
-  // UI Display & Navigation
-  mode: AppMode;
-  queryText: string;
-  intent: TextIntent;
-  wordData: DictEntry | null;
-  translation: string;
-  streamingText: string;
-  isLoading: boolean;
-  isStreaming: boolean;
-  errorMessage: string | null;
+/** Monotonic ids for stack frames. */
+let nodeIdCounter = 0;
+let lookupSession = 0;
+let pictureRequest = 0;
+const nextNodeId = () => (nodeIdCounter += 1);
 
-  // History Navigation Stack (Recursive Drill-down)
-  history: string[];
-  historyIndex: number;
+/** Token per frame guarding against stale streams for the *same* frame. */
+const streamTokens = new Map<number, number>();
+
+/** Cap on concurrent LLM example generations so deep stacks can't stampede. */
+let examplesInFlight = 0;
+const MAX_EXAMPLE_REQUESTS = 3;
+
+interface AppState {
+  // Drill-down lookup stack (top of the array = current frame)
+  lookupStack: LookupNode[];
+  errorMessage: string | null;
+  capture: CaptureOutcome | null;
+  ocr: OcrEvent | null;
+  lastOcrEvent: OcrEvent | null;
+  ocrImageView: boolean;
+  ocrPictureTranslation: PictureTranslation | null;
+  ocrPictureBusy: boolean;
+  ocrPictureError: string | null;
+  ocrTarget: string;
+  autoOcr: MonitorUpdate | null;
+  autoOcrRevision: number;
 
   // Provider & Config
   provider: ProviderType;
@@ -34,37 +60,81 @@ interface AppState {
   ankiConfig: AnkiConfig;
   ankiStatus: AnkiStatus;
   ankiMessage: string | null;
+  hotkey: string;
+  doubleCopyEnabled: boolean;
+  ocrEngine: OcrEngineId;
+  ocrLanguage: string;
+  captureMode: CaptureMode;
+  lastOcrBenchmarkMs: number | null;
+  settingsError: string | null;
+  pinned: boolean;
+  theme: ThemeMode;
+  overlayOpacity: number;
 
-  // Actions
-  setMode: (mode: AppMode) => void;
-  setQueryText: (text: string) => void;
+  // Config actions
   setProvider: (provider: ProviderType) => void;
   setOpenaiConfig: (config: Partial<OpenAiConfig>) => void;
   setAnkiConfig: (config: Partial<AnkiConfig>) => void;
-  
-  // High-level Workflows
-  processText: (text: string, forceMode?: AppMode) => Promise<void>;
-  drillDown: (word: string) => Promise<void>;
-  goBack: () => Promise<void>;
-  goForward: () => Promise<void>;
-  startStreamTranslation: (text: string) => Promise<void>;
+  setHotkey: (hotkey: string) => Promise<boolean>;
+  setDoubleCopyEnabled: (enabled: boolean) => Promise<boolean>;
+  setOcrLanguage: (language: string) => Promise<boolean>;
+  setOcrEngine: (engine: OcrEngineId) => Promise<boolean>;
+  setOcrConfig: (engine: OcrEngineId, language: string) => Promise<boolean>;
+  setCaptureMode: (mode: CaptureMode) => Promise<void>;
+  benchmarkOcr: () => Promise<number>;
+  setTheme: (theme: ThemeMode) => void;
+  setOverlayOpacity: (opacity: number) => void;
+  togglePinned: () => void;
+  hydrate: (settings: Partial<PersistedSettings>) => void;
+
+  // Native selection capture
+  applyCapture: (outcome: CaptureOutcome) => void;
+  applyOcrEvent: (event: OcrEvent) => void;
+  startOcr: (mode: OcrMode) => Promise<void>;
+  startImageOcr: (path: string, mode?: OcrMode) => Promise<void>;
+  cancelOcr: () => void;
+  translateOcrText: (text: string) => void;
+  translateOcrPicture: (texts?: string[]) => Promise<void>;
+  applyAutoOcr: (event: MonitorUpdate) => void;
+  startAutoOcr: (intervalMs?: number) => Promise<void>;
+
+  // Stack navigation
+  processText: (text: string, forceDensity?: Density, forceIntent?: TextIntent) => Promise<void>;
+  pushLookup: (
+    word: string,
+    origin?: { text: string; word: string },
+  ) => Promise<void>;
+  popLookup: () => void;
+  popTo: (index: number) => void;
+  clearLookup: () => void;
+  setDensity: (density: Density) => void;
+  patchNode: (id: number, patch: Partial<LookupNode>) => void;
+
+  // Workflows
+  startStreamTranslation: (text: string, nodeId: number) => Promise<void>;
+  fetchWordExamples: (word: string, nodeId: number) => Promise<void>;
   syncToAnki: (contextSentence?: string) => Promise<boolean>;
   exportTsv: (contextSentence?: string) => void;
 }
 
-export const useAppStore = create<AppState>((set, get) => ({
-  mode: 'bubble',
-  queryText: '',
-  intent: 'sentence',
-  wordData: null,
-  translation: '',
-  streamingText: '',
-  isLoading: false,
-  isStreaming: false,
-  errorMessage: null,
+/** Strip surrounding punctuation from a clicked token. */
+function cleanWord(raw: string): string {
+  return raw.replace(/^[^\w\s]+|[^\w\s]+$/g, '').trim();
+}
 
-  history: [],
-  historyIndex: -1,
+export const useAppStore = create<AppState>((set, get) => ({
+  lookupStack: [],
+  errorMessage: null,
+  capture: null,
+  ocr: null,
+  lastOcrEvent: null,
+  ocrImageView: false,
+  ocrPictureTranslation: null,
+  ocrPictureBusy: false,
+  ocrPictureError: null,
+  ocrTarget: 'zh-CN',
+  autoOcr: null,
+  autoOcrRevision: -1,
 
   provider: 'google_free',
   openaiConfig: {
@@ -80,168 +150,378 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   ankiStatus: 'idle',
   ankiMessage: null,
+  hotkey: 'Alt+Q',
+  doubleCopyEnabled: true,
+  ocrEngine: 'windows',
+  ocrLanguage: 'auto',
+  captureMode: 'transparent',
+  lastOcrBenchmarkMs: null,
+  settingsError: null,
+  pinned: false,
+  theme: 'system',
+  overlayOpacity: 0.72,
 
-  setMode: (mode) => set({ mode }),
-  setQueryText: (queryText) => set({ queryText }),
   setProvider: (provider) => set({ provider }),
   setOpenaiConfig: (config) =>
     set((state) => ({ openaiConfig: { ...state.openaiConfig, ...config } })),
   setAnkiConfig: (config) =>
     set((state) => ({ ankiConfig: { ...state.ankiConfig, ...config } })),
+  setHotkey: async (hotkey) => {
+    try {
+      await invoke('set_hotkey', { accelerator: hotkey });
+      set({ hotkey, settingsError: null });
+      return true;
+    } catch (error) {
+      set({ settingsError: String(error) });
+      return false;
+    }
+  },
+  setDoubleCopyEnabled: async (doubleCopyEnabled) => {
+    try {
+      await invoke('set_double_copy_enabled', { enabled: doubleCopyEnabled });
+      set({ doubleCopyEnabled, settingsError: null });
+      return true;
+    } catch (error) { set({ settingsError: String(error) }); return false; }
+  },
+  setOcrLanguage: (language) => get().setOcrConfig(get().ocrEngine, language),
+  setOcrEngine: (engine) => get().setOcrConfig(engine, 'auto'),
+  setOcrConfig: async (ocrEngine, ocrLanguage) => {
+    try {
+      const applied = await invoke<OcrConfig>('set_ocr_config', {
+        config: { engine: ocrEngine, language: ocrLanguage === 'auto' ? null : ocrLanguage },
+      });
+      set({ ocrEngine: applied.engine, ocrLanguage: applied.language ?? 'auto', settingsError: null });
+      return true;
+    } catch (error) {
+      set({ settingsError: String(error) });
+      return false;
+    }
+  },
+  setCaptureMode: async (captureMode) => {
+    try {
+      await invoke('set_capture_mode', { mode: captureMode });
+      set({ captureMode, settingsError: null });
+    } catch (error) {
+      set({ settingsError: String(error) });
+    }
+  },
+  benchmarkOcr: async () => {
+    try {
+      const ms = await invoke<number>('benchmark_ocr');
+      set({ lastOcrBenchmarkMs: ms, settingsError: null });
+      return ms;
+    } catch (error) {
+      set({ settingsError: String(error) });
+      throw error;
+    }
+  },
+  setTheme: (theme) => set({ theme }),
+  setOverlayOpacity: (overlayOpacity) => set({ overlayOpacity }),
+  togglePinned: () => set((state) => ({ pinned: !state.pinned })),
 
-  processText: async (text: string, forceMode?: AppMode) => {
+  hydrate: (settings) =>
+    set((state) => {
+      if (settings.captureMode) {
+        void invoke('set_capture_mode', { mode: settings.captureMode }).catch(console.error);
+      }
+      return {
+        provider: settings.provider ?? state.provider,
+        openaiConfig: settings.openaiConfig ?? state.openaiConfig,
+        ankiConfig: settings.ankiConfig ?? state.ankiConfig,
+        hotkey: settings.hotkey ?? state.hotkey,
+        doubleCopyEnabled: settings.doubleCopyEnabled ?? state.doubleCopyEnabled,
+        ocrEngine: settings.ocrEngine ?? state.ocrEngine,
+        ocrLanguage: settings.ocrLanguage ?? state.ocrLanguage,
+        captureMode: settings.captureMode ?? state.captureMode,
+        theme: settings.theme ?? state.theme,
+        overlayOpacity: settings.overlayOpacity ?? state.overlayOpacity,
+      };
+    }),
+
+  applyCapture: (outcome) => {
+    get().clearLookup();
+    set({ capture: outcome, autoOcr: null });
+    const text = outcome.text.trim();
+    if (text) {
+      void get().processText(text);
+    }
+  },
+
+  applyOcrEvent: (event) => {
+    if (!isNewOcrEvent(event, get().lastOcrEvent)) return;
+    set({ lastOcrEvent: event });
+    if (event.elapsed_ms != null) {
+      set({ lastOcrBenchmarkMs: event.elapsed_ms });
+    }
+    if (event.stage === 'cancelled') {
+      pictureRequest++;
+      set({ ocr: null, ocrPictureBusy: false, ocrPictureTranslation: null });
+      return;
+    }
+    if (event.stage === 'capturing') get().clearLookup();
+    if (event.stage === 'ready' && event.mode === 'translate') {
+      if (event.picture) {
+        set({ ocr: event, capture: null, errorMessage: null, ocrImageView: true });
+        void get().translateOcrPicture();
+        return;
+      }
+      get().translateOcrText(event.text);
+      return;
+    }
+    // Text-only OCR has no call into detect_intent, dictionary or providers.
+    set({ ocr: event, capture: null, errorMessage: null });
+  },
+
+  startOcr: async (mode) => {
+    try {
+      set({ errorMessage: null });
+      await invoke('start_ocr', { mode });
+    } catch (error) {
+      set({ errorMessage: String(error) });
+    }
+  },
+
+  startImageOcr: async (path, mode = 'text') => {
+    try {
+      set({ errorMessage: null });
+      await invoke('ocr_image', { path, mode });
+    } catch (error) {
+      set({ errorMessage: String(error) });
+    }
+  },
+
+  cancelOcr: () => {
+    pictureRequest++;
+    set({ ocrPictureBusy: false });
+    const current = get().ocr;
+    if (current) {
+      set({ ocr: null, lastOcrEvent: { ...current, stage: 'cancelled' } });
+    }
+    void invoke('cancel_ocr').catch((error) => console.error('OCR cancellation failed:', error));
+  },
+
+  translateOcrText: (text) => {
+    if (!text.trim()) return;
+    set({ ocr: null, capture: { text, method: 'ocr' } });
+    void get().processText(text, 'compact', 'sentence');
+  },
+
+  translateOcrPicture: async (texts) => {
+    const { ocr, provider, openaiConfig, ocrTarget } = get();
+    if (!ocr?.picture || ocr.stage !== 'ready') return;
+    const request = ++pictureRequest;
+    set({ ocrImageView: true, ocrPictureBusy: true, ocrPictureError: null, ocrPictureTranslation: null });
+    const current = () => request === pictureRequest && get().ocr?.id === ocr.id;
+    try {
+      const result = await invoke<PictureTranslation>('translate_ocr_picture', {
+        id: ocr.id, texts: texts ?? null, targetLang: ocrTarget, provider,
+        openaiConfig: provider === 'openai' ? openaiConfig : null,
+      });
+      if (current()) set({ ocrPictureTranslation: result });
+    } catch (error) {
+      if (current()) set({ ocrPictureError: String(error) });
+    } finally {
+      if (current()) set({ ocrPictureBusy: false });
+    }
+  },
+
+  applyAutoOcr: (event) => {
+    if (event.revision <= get().autoOcrRevision) return;
+    if (event.active && event.id !== get().autoOcr?.id) get().clearLookup();
+    set({ autoOcrRevision: event.revision, autoOcr: event.active || event.frame || event.error ? event : null });
+  },
+
+  startAutoOcr: async (intervalMs = 2000) => {
+    const { provider, openaiConfig, ocrTarget } = get();
+    set({ errorMessage: null });
+    try {
+      await invoke('begin_auto_ocr', { options: { provider, openai_config: provider === 'openai' ? openaiConfig : null,
+        target_lang: ocrTarget, interval_ms: intervalMs } });
+    } catch (error) { set({ errorMessage: String(error) }); }
+  },
+
+  processText: async (text, forceDensity, forceIntent) => {
     const clean = text.trim();
     if (!clean) return;
 
-    set({
-      queryText: clean,
-      isLoading: true,
-      errorMessage: null,
-      streamingText: '',
-      translation: '',
-      ankiStatus: 'idle',
-      ankiMessage: null,
-    });
+    const session = ++lookupSession;
+    streamTokens.clear();
+    forgetScrollTops();
+    set({ lookupStack: [], ocr: null, errorMessage: null, ankiStatus: 'idle', ankiMessage: null });
 
     try {
-      // 1. Detect text granularity intent
-      const intentRes = await invoke<IntentResult>('detect_intent', { text: clean });
-      const intent = intentRes.intent;
-      const targetMode = forceMode ?? (intent === 'word' ? 'card' : 'bubble');
+      const intentRes = forceIntent
+        ? { intent: forceIntent }
+        : await invoke<IntentResult>('detect_intent', { text: clean });
+      if (session !== lookupSession) return;
+      const kind: LookupNode['kind'] = intentRes.intent === 'word' ? 'word' : 'sentence';
+      const node: LookupNode = {
+        id: nextNodeId(),
+        kind,
+        text: clean,
+        density: forceDensity ?? (kind === 'word' ? 'dense' : 'compact'),
+        intent: intentRes.intent,
+        wordData: null,
+        translation: '',
+        status: 'loading',
+      };
 
-      set({ intent, mode: targetMode });
+      // A fresh capture starts a new session.
+      set({ lookupStack: [node] });
 
-      if (targetMode === 'card') {
-        // Word Card flow: local-first lookup < 5ms
+      if (kind === 'word') {
         const dictRes = await invoke<DictEntry | null>('lookup_dict', { word: clean });
-        
-        // Update history stack
-        const { history, historyIndex } = get();
-        const nextHistory = [...history.slice(0, historyIndex + 1), clean];
-
-        set({
+        if (session !== lookupSession) return;
+        get().patchNode(node.id, {
           wordData: dictRes,
-          history: nextHistory,
-          historyIndex: nextHistory.length - 1,
-          isLoading: false,
+          status: dictRes ? 'ready' : 'streaming',
         });
-
-        // Async LLM enhancement in background
-        get().startStreamTranslation(clean);
+        if (dictRes) {
+          void get().fetchWordExamples(clean, node.id);
+        } else {
+          void get().startStreamTranslation(clean, node.id);
+        }
       } else {
-        // Sentence Ghost Bubble flow: stream translation immediately
-        set({ wordData: null, isLoading: false });
-        await get().startStreamTranslation(clean);
+        void get().startStreamTranslation(clean, node.id);
       }
     } catch (err: unknown) {
+      if (session !== lookupSession) return;
       const msg = err instanceof Error ? err.message : String(err);
-      set({ isLoading: false, errorMessage: msg });
+      set({ errorMessage: msg });
     }
   },
 
-  drillDown: async (rawWord: string) => {
-    const word = rawWord.replace(/^[^\w\s]+|[^\w\s]+$/g, '').trim();
+  pushLookup: async (rawWord, origin) => {
+    const word = cleanWord(rawWord);
     if (!word) return;
 
-    set({
-      queryText: word,
+    const node: LookupNode = {
+      id: nextNodeId(),
+      kind: 'word',
+      text: word,
+      density: 'dense',
       intent: 'word',
-      mode: 'card',
-      isLoading: true,
+      wordData: null,
+      translation: '',
+      status: 'loading',
+      originText: origin?.text,
+      originWord: origin?.word,
+    };
+
+    set((state) => {
+      const stack = state.lookupStack.slice();
+      if (stack.length > 0) {
+        // Remember which word was clicked so the parent stays highlighted.
+        const parentIndex = stack.length - 1;
+        stack[parentIndex] = { ...stack[parentIndex], highlightWord: word };
+      }
+      stack.push(node);
+      return {
+        lookupStack: stack,
+        errorMessage: null,
+        ankiStatus: 'idle',
+        ankiMessage: null,
+      };
+    });
+
+    try {
+      const dictRes = await invoke<DictEntry | null>('lookup_dict', { word });
+      if (!get().lookupStack.some((frame) => frame.id === node.id)) return;
+      get().patchNode(node.id, {
+        wordData: dictRes,
+        status: dictRes ? 'ready' : 'streaming',
+      });
+      if (dictRes) {
+        void get().fetchWordExamples(word, node.id);
+      } else {
+        void get().startStreamTranslation(word, node.id);
+      }
+    } catch (err: unknown) {
+      if (!get().lookupStack.some((frame) => frame.id === node.id)) return;
+      const msg = err instanceof Error ? err.message : String(err);
+      get().patchNode(node.id, { status: 'error' });
+      set({ errorMessage: msg });
+    }
+  },
+
+  popLookup: () =>
+    set((state) =>
+      state.lookupStack.length > 1
+        ? { lookupStack: state.lookupStack.slice(0, -1) }
+        : {},
+    ),
+
+  popTo: (index) =>
+    set((state) =>
+      index >= 0 && index < state.lookupStack.length - 1
+        ? { lookupStack: state.lookupStack.slice(0, index + 1) }
+        : {},
+    ),
+
+  clearLookup: () => {
+    lookupSession += 1;
+    pictureRequest++;
+    streamTokens.clear();
+    forgetScrollTops();
+    set({
+      lookupStack: [],
+      ocr: null,
+      ocrImageView: false,
+      ocrPictureTranslation: null,
+      ocrPictureBusy: false,
+      ocrPictureError: null,
       errorMessage: null,
-      streamingText: '',
       ankiStatus: 'idle',
       ankiMessage: null,
     });
-
-    try {
-      const dictRes = await invoke<DictEntry | null>('lookup_dict', { word });
-      const { history, historyIndex } = get();
-      const nextHistory = [...history.slice(0, historyIndex + 1), word];
-
-      set({
-        wordData: dictRes,
-        history: nextHistory,
-        historyIndex: nextHistory.length - 1,
-        isLoading: false,
-      });
-
-      // Background stream enhancement for the new word
-      get().startStreamTranslation(word);
-    } catch (err: unknown) {
-      set({ isLoading: false, errorMessage: String(err) });
-    }
   },
 
-  goBack: async () => {
-    const { history, historyIndex } = get();
-    if (historyIndex <= 0) return;
+  setDensity: (density) =>
+    set((state) => {
+      if (state.lookupStack.length === 0) return {};
+      const stack = state.lookupStack.slice();
+      const top = stack[stack.length - 1];
+      stack[stack.length - 1] = { ...top, density };
+      return { lookupStack: stack };
+    }),
 
-    const prevIndex = historyIndex - 1;
-    const word = history[prevIndex];
+  patchNode: (id, patch) =>
+    set((state) => ({
+      lookupStack: state.lookupStack.map((node) =>
+        node.id === id ? { ...node, ...patch } : node,
+      ),
+    })),
 
-    set({
-      historyIndex: prevIndex,
-      queryText: word,
-      isLoading: true,
-      streamingText: '',
-      ankiStatus: 'idle',
-    });
-
-    try {
-      const dictRes = await invoke<DictEntry | null>('lookup_dict', { word });
-      set({ wordData: dictRes, isLoading: false });
-      get().startStreamTranslation(word);
-    } catch (err: unknown) {
-      set({ isLoading: false, errorMessage: String(err) });
-    }
-  },
-
-  goForward: async () => {
-    const { history, historyIndex } = get();
-    if (historyIndex >= history.length - 1) return;
-
-    const nextIndex = historyIndex + 1;
-    const word = history[nextIndex];
-
-    set({
-      historyIndex: nextIndex,
-      queryText: word,
-      isLoading: true,
-      streamingText: '',
-      ankiStatus: 'idle',
-    });
-
-    try {
-      const dictRes = await invoke<DictEntry | null>('lookup_dict', { word });
-      set({ wordData: dictRes, isLoading: false });
-      get().startStreamTranslation(word);
-    } catch (err: unknown) {
-      set({ isLoading: false, errorMessage: String(err) });
-    }
-  },
-
-  startStreamTranslation: async (text: string) => {
+  startStreamTranslation: async (text, nodeId) => {
     const { provider, openaiConfig } = get();
-    set({ isStreaming: true, streamingText: '', errorMessage: null });
+    const token = (streamTokens.get(nodeId) ?? 0) + 1;
+    streamTokens.set(nodeId, token);
+    const isCurrent = () => streamTokens.get(nodeId) === token
+      && get().lookupStack.some((node) => node.id === nodeId);
+
+    let accumulated = '';
+    get().patchNode(nodeId, { status: 'streaming', translation: '' });
 
     const channel = new Channel<StreamChunk>();
-
     channel.onmessage = (chunk) => {
+      if (!isCurrent()) return; // superseded by a newer stream for this frame
+
       if (chunk.error) {
-        set({ errorMessage: chunk.error, isStreaming: false });
+        get().patchNode(nodeId, { status: 'error', translation: accumulated });
+        set({ errorMessage: chunk.error });
         return;
       }
 
       if (chunk.text) {
-        set((state) => ({ streamingText: state.streamingText + chunk.text }));
+        accumulated += chunk.text;
+        get().patchNode(nodeId, { translation: accumulated });
       }
 
       if (chunk.is_done) {
-        set((state) => ({
-          isStreaming: false,
-          translation: state.streamingText,
-        }));
+        get().patchNode(nodeId, {
+          status: accumulated.trim() ? 'ready' : 'notfound',
+          translation: accumulated,
+        });
       }
     };
 
@@ -253,23 +533,62 @@ export const useAppStore = create<AppState>((set, get) => ({
         onChunk: channel,
       });
     } catch (err: unknown) {
-      set({ isStreaming: false, errorMessage: String(err) });
+      if (isCurrent()) {
+        get().patchNode(nodeId, { status: 'error', translation: accumulated });
+        set({ errorMessage: String(err) });
+      }
+    }
+  },
+
+  fetchWordExamples: async (word, nodeId) => {
+    const { provider, openaiConfig } = get();
+    if (provider !== 'openai' || !openaiConfig.api_key) return;
+    if (examplesInFlight >= MAX_EXAMPLE_REQUESTS) return;
+
+    examplesInFlight += 1;
+    try {
+      const examples = await invoke<ExampleSentence[]>('generate_examples', {
+        word,
+        openaiConfig,
+      });
+      if (examples.length === 0) return;
+
+      set((state) => ({
+        lookupStack: state.lookupStack.map((node) => {
+          if (node.id !== nodeId || !node.wordData) return node;
+          return {
+            ...node,
+            wordData: {
+              ...node.wordData,
+              examples: [...(node.wordData.examples ?? []), ...examples],
+            },
+          };
+        }),
+      }));
+    } catch (err) {
+      console.error('generate_examples failed:', err);
+    } finally {
+      examplesInFlight -= 1;
     }
   },
 
   syncToAnki: async (contextSentence?: string) => {
-    const { wordData, queryText, ankiConfig, translation, streamingText } = get();
-    const word = wordData?.word || queryText;
-    if (!word) return false;
+    const { ankiConfig, lookupStack } = get();
+    const node = lookupStack[lookupStack.length - 1];
+    if (!node) return false;
+
+    const word = node.wordData?.word || node.text;
 
     set({ ankiStatus: 'syncing', ankiMessage: 'Connecting to Anki...' });
 
-    const phonetic = wordData?.phonetic || '';
+    const phonetic = node.wordData?.phonetic || '';
     const meaning =
-      wordData?.definitions.map((d) => `<b>${d.pos}</b> ${d.meanings.join('; ')}`).join('<br>') ||
-      translation ||
-      streamingText;
-    const sentence = contextSentence || wordData?.examples[0]?.en || '';
+      node.wordData?.definitions
+        .map((d) => `<b>${d.pos}</b> ${d.meanings.join('; ')}`)
+        .join('<br>') ||
+      node.translation ||
+      '';
+    const sentence = contextSentence || node.originText || node.wordData?.examples[0]?.en || '';
 
     const frontHtml = `
       <div style="font-size: 24px; font-weight: bold; color: #3b82f6;">${word}</div>
@@ -281,37 +600,18 @@ export const useAppStore = create<AppState>((set, get) => ({
       <div style="font-size: 16px; line-height: 1.6;">${meaning}</div>
     `.trim();
 
-    const payload = {
-      action: 'addNote',
-      version: 6,
-      params: {
+    try {
+      await invoke<number>('anki_add_note', {
         note: {
+          endpoint: ankiConfig.endpoint,
           deckName: ankiConfig.deckName,
           modelName: ankiConfig.modelName,
-          fields: {
-            Front: frontHtml,
-            Back: backHtml,
-          },
-          options: {
-            allowDuplicate: false,
-          },
+          front: frontHtml,
+          back: backHtml,
           tags: ['TransPortal', 'AutoSynced'],
+          allowDuplicate: false,
         },
-      },
-    };
-
-    try {
-      const response = await fetch(ankiConfig.endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
       });
-
-      const resJson = await response.json();
-      if (resJson.error) {
-        set({ ankiStatus: 'error', ankiMessage: `Anki Error: ${resJson.error}` });
-        return false;
-      }
 
       set({ ankiStatus: 'success', ankiMessage: `Card added to ${ankiConfig.deckName}!` });
       setTimeout(() => set({ ankiStatus: 'idle', ankiMessage: null }), 3000);
@@ -319,25 +619,30 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (err: unknown) {
       set({
         ankiStatus: 'error',
-        ankiMessage: 'Cannot reach AnkiConnect (ensure Anki is running on port 8765)',
+        ankiMessage: `Anki error: ${err instanceof Error ? err.message : String(err)}`,
       });
       return false;
     }
   },
 
   exportTsv: (contextSentence?: string) => {
-    const { wordData, queryText, translation, streamingText } = get();
-    const word = wordData?.word || queryText;
-    if (!word) return;
+    const { lookupStack } = get();
+    const node = lookupStack[lookupStack.length - 1];
+    if (!node) return;
 
-    const phonetic = wordData?.phonetic || '';
+    const word = node.wordData?.word || node.text;
+    const phonetic = node.wordData?.phonetic || '';
     const meaning =
-      wordData?.definitions.map((d) => `${d.pos} ${d.meanings.join('; ')}`).join(' | ') ||
-      translation ||
-      streamingText;
-    const sentence = contextSentence || wordData?.examples[0]?.en || '';
+      node.wordData?.definitions
+        .map((d) => `${d.pos} ${d.meanings.join('; ')}`)
+        .join(' | ') ||
+      node.translation ||
+      '';
+    const sentence = contextSentence || node.originText || node.wordData?.examples[0]?.en || '';
 
-    const row = [word, phonetic, meaning, sentence].map((f) => `"${f.replace(/"/g, '""')}"`).join('\t');
+    const row = [word, phonetic, meaning, sentence]
+      .map((field) => `"${field.replace(/"/g, '""')}"`)
+      .join('\t');
     const blob = new Blob([`Word\tPhonetic\tDefinition\tContext\n${row}`], {
       type: 'text/tab-separated-values;charset=utf-8;',
     });

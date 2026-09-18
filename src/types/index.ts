@@ -49,14 +49,209 @@ export interface DictEntry {
   phonetic?: string;
   audio_url?: string;
   definitions: PosDefinition[];
+  english_definitions?: PosDefinition[];
   exchange?: string;
   tags: string[];
   examples: ExampleSentence[];
+  source?: string;
 }
 
-export type AppMode = 'bubble' | 'card';
+export type DictSourceKind = 'online' | 'local';
 
-export type ProviderType = 'google_free' | 'openai';
+export interface DictSourceInfo {
+  id: string;
+  label: string;
+  description: string;
+  kind: DictSourceKind;
+  enabled: boolean;
+  available: boolean;
+  last_ok?: boolean | null;
+  last_latency_ms?: number | null;
+}
+
+export interface DictStatus {
+  installed: boolean;
+  entry_count: number;
+  local_path: string;
+}
+
+export interface DictProgress {
+  stage: 'downloading' | 'importing' | 'done';
+  downloaded: number;
+  total?: number | null;
+  imported?: number | null;
+}
+
+/** Visual density of a lookup card. */
+export type Density = 'compact' | 'dense';
+
+/** Lifecycle of a single lookup stack frame. */
+export type LookupStatus =
+  | 'loading'
+  | 'streaming'
+  | 'ready'
+  | 'notfound'
+  | 'error';
+
+/**
+ * One frame in the drill-down lookup stack.
+ *
+ * The stack is a pure LIFO navigation history: clicking a word pushes a frame,
+ * back pops it, and every frame keeps enough of a snapshot to be restored
+ * instantly (content, translation, scroll offset, and origin context).
+ */
+export interface LookupNode {
+  id: number;
+  kind: 'sentence' | 'word';
+  text: string;
+  density: Density;
+  intent: TextIntent;
+  wordData: DictEntry | null;
+  translation: string;
+  status: LookupStatus;
+  /** Sentence/example this frame was opened from (also feeds Anki context). */
+  originText?: string;
+  /** Word clicked in `originText`; the parent frame highlights it. */
+  originWord?: string;
+  /** Word that was clicked *from* this frame (kept after the child is popped). */
+  highlightWord?: string;
+}
+
+export type CaptureMethod = 'ui_automation' | 'clipboard' | 'ocr';
+
+export interface CaptureOutcome {
+  text: string;
+  method: CaptureMethod;
+  error?: string | null;
+  replace_token?: number | null;
+}
+
+export type OcrMode = 'text' | 'translate';
+export interface ShortcutStatus {
+  id: 'selection' | 'ocr_translate' | 'ocr_text' | 'double_copy';
+  label: string;
+  requested: string;
+  active: string | null;
+  error: string | null;
+  system: boolean;
+}
+
+export interface ShortcutReport {
+  revision: number;
+  ready: boolean;
+  shortcuts: ShortcutStatus[];
+}
+
+export interface IntegrityReport {
+  status: 'verified' | 'development' | 'unsupported' | 'missing_manifest' | 'invalid_manifest' | 'mismatch' | 'io_error';
+  version: string;
+  expected_sha256: string | null;
+  actual_sha256: string | null;
+  error: string | null;
+}
+
+export type OcrEngineId = 'windows' | 'onnx';
+export interface OcrConfig {
+  engine: OcrEngineId;
+  language: string | null;
+}
+export type OcrStage = 'capturing' | 'recognizing' | 'ready' | 'cancelled' | 'error';
+
+export interface OcrEvent {
+  id: number;
+  mode: OcrMode;
+  stage: OcrStage;
+  text: string;
+  language: string | null;
+  engine: string;
+  image_path?: string | null;
+  picture?: OcrPicture | null;
+  elapsed_ms: number | null;
+  copied: boolean;
+  copy_error: string | null;
+  error: string | null;
+}
+
+export interface OcrBlock {
+  id: number;
+  text: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface OcrPicture {
+  width: number;
+  height: number;
+  data_url: string;
+  blocks: OcrBlock[];
+}
+
+export interface PictureTranslation {
+  blocks: { id: number; text: string; error: string | null }[];
+  target_lang: string;
+}
+
+export interface ScreenRect { x: number; y: number; width: number; height: number }
+export type RegionPurpose = 'text' | 'translate' | 'monitor';
+export type CaptureMode = 'transparent' | 'frozen';
+export interface RegionSelection { id: number; purpose: RegionPurpose; bounds: ScreenRect; data_url: string; mode: CaptureMode }
+export interface MonitorUpdate {
+  id: number;
+  revision: number;
+  active: boolean;
+  selecting: boolean;
+  paused: boolean;
+  stage: 'selecting' | 'watching' | 'recognizing' | 'translating' | 'paused' | 'error' | 'stopped';
+  interval_ms: number;
+  checks: number;
+  target_lang: string;
+  region: ScreenRect | null;
+  error: string | null;
+  frame: { number: number; picture: OcrPicture; translation: PictureTranslation | null; engine: string; elapsed_ms: number } | null;
+}
+
+export interface OcrEngineInfo {
+    id: OcrEngineId;
+    label: string;
+    languages: { tag: string; label: string }[];
+    available: boolean;
+    error: string | null;
+}
+
+export interface OcrInstallProgress {
+  stage: 'downloading' | 'verifying' | 'ready';
+  file: string;
+  downloaded: number;
+  total: number;
+}
+
+export interface OcrStatus {
+  supported: boolean;
+  engine: OcrEngineInfo;
+  engines: OcrEngineInfo[];
+  config: OcrConfig;
+  onnx: {
+    installed: boolean;
+    installing: boolean;
+    path: string | null;
+    download_bytes: number;
+    installed_bytes: number;
+    error: string | null;
+  };
+  observing_shortcut: boolean;
+  shortcut_error: string | null;
+  translate_shortcut_error: string | null;
+}
+
+export type ProviderType =
+  | 'google_free'
+  | 'youdao_free'
+  | 'tencent_free'
+  | 'openai';
+
+export type ThemeMode = 'system' | 'light' | 'dark';
 
 export interface OpenAiConfig {
   api_key: string;
@@ -73,3 +268,20 @@ export interface AnkiConfig {
 }
 
 export type AnkiStatus = 'idle' | 'syncing' | 'success' | 'error';
+
+export interface PersistedSettings {
+  provider: ProviderType;
+  openaiConfig: OpenAiConfig;
+  ankiConfig: AnkiConfig;
+  hotkey: string;
+  doubleCopyEnabled: boolean;
+  ocrEngine: OcrEngineId;
+  /** `auto` uses Windows profile languages, otherwise an installed BCP-47 tag. */
+  ocrLanguage: string;
+  autostart: boolean;
+  theme: ThemeMode;
+  /** Overlay glass opacity, 0.25–1.0. */
+  overlayOpacity: number;
+  dictSources: { id: string; enabled: boolean }[];
+  captureMode?: CaptureMode;
+}

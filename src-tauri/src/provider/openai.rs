@@ -1,8 +1,8 @@
 use super::{ProviderError, StreamChunk, TranslateQuery, TranslateResult, Translator};
 use async_trait::async_trait;
-use eventsource_stream::Eventsource;
 use futures_util::StreamExt;
 use reqwest::Client;
+use reqwest_eventsource::{Error as EventSourceError, Event, RequestBuilderExt};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::time::Duration;
@@ -53,14 +53,65 @@ impl OpenAiCompatibleProvider {
     }
 
     fn build_system_prompt(&self, target_lang: &str) -> String {
-        if let Some(ref prompt) = self.config.system_prompt {
-            if !prompt.trim().is_empty() {
-                return prompt.clone();
-            }
+        if let Some(prompt) = self.config.system_prompt.as_deref().filter(|s| !s.trim().is_empty()) {
+            return prompt.to_string();
         }
         format!(
             "You are a high-speed professional translator and dictionary assistant. Translate the following user input accurately and naturally into {target_lang}. Provide only the pure translation or explanation, with no preamble or conversational remarks."
         )
+    }
+
+    /// Non-streaming chat completion with an explicit system prompt.
+    ///
+    /// Used by the LLM example-sentence enhancement (not the translator flow).
+    pub async fn chat(
+        &self,
+        system_prompt: &str,
+        user_prompt: &str,
+    ) -> Result<String, ProviderError> {
+        let model = self.config.model.as_deref().unwrap_or("gpt-4o-mini");
+        let url = self.endpoint_url();
+
+        let payload = json!({
+            "model": model,
+            "messages": [
+                { "role": "system", "content": system_prompt },
+                { "role": "user", "content": user_prompt }
+            ],
+            "temperature": self.config.temperature.unwrap_or(0.3),
+            "stream": false
+        });
+
+        let mut request = self.client.post(&url).json(&payload);
+        if !self.config.api_key.is_empty() {
+            request = request.header("Authorization", format!("Bearer {}", self.config.api_key));
+        }
+
+        let response = request.send().await?;
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(ProviderError::Execution(format!(
+                "chat request failed ({status}): {body}"
+            )));
+        }
+
+        let json_val: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| ProviderError::Parse(format!("Failed to parse chat response: {e}")))?;
+
+        let content = json_val["choices"][0]["message"]["content"]
+            .as_str()
+            .unwrap_or("")
+            .trim()
+            .to_string();
+
+        if content.is_empty() {
+            return Err(ProviderError::Parse("empty chat response".to_string()));
+        }
+
+        Ok(content)
     }
 }
 
@@ -148,41 +199,25 @@ impl Translator for OpenAiCompatibleProvider {
             "stream": true
         });
 
-        let mut req = self.client.post(&url).json(&payload);
+        // `reqwest-eventsource` owns the request/retry loop, so we hand it the
+        // builder directly instead of manually reading response bytes.
+        let mut request = self.client.post(&url).json(&payload);
         if !self.config.api_key.is_empty() {
-            req = req.header("Authorization", format!("Bearer {}", self.config.api_key));
+            request = request.header("Authorization", format!("Bearer {}", self.config.api_key));
         }
 
-        let response = match req.send().await {
-            Ok(resp) => resp,
-            Err(e) => {
-                let _ = channel.send(StreamChunk {
-                    text: String::new(),
-                    is_done: true,
-                    error: Some(e.to_string()),
-                });
-                return Err(ProviderError::Network(e));
-            }
-        };
+        let mut stream = request
+            .eventsource()
+            .map_err(|e| ProviderError::Execution(format!("failed to open SSE stream: {e}")))?;
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            let err_msg = format!("OpenAI API error ({status}): {body}");
-            let _ = channel.send(StreamChunk {
-                text: String::new(),
-                is_done: true,
-                error: Some(err_msg.clone()),
-            });
-            return Err(ProviderError::Execution(err_msg));
-        }
-
-        let mut stream = response.bytes_stream().eventsource();
-
-        while let Some(event_result) = stream.next().await {
-            match event_result {
-                Ok(event) => {
-                    let data = event.data.trim();
+        while let Some(event) = stream.next().await {
+            match event {
+                Ok(Event::Open) => {}
+                Ok(Event::Message(message)) => {
+                    let data = message.data.trim();
+                    if data.is_empty() {
+                        continue;
+                    }
                     if data == "[DONE]" {
                         let _ = channel.send(StreamChunk {
                             text: String::new(),
@@ -192,32 +227,33 @@ impl Translator for OpenAiCompatibleProvider {
                         return Ok(());
                     }
 
-                    if let Ok(chunk_json) = serde_json::from_str::<serde_json::Value>(data) {
-                        if let Some(content) = chunk_json["choices"][0]["delta"]["content"].as_str() {
-                            if !content.is_empty() {
-                                channel
-                                    .send(StreamChunk {
-                                        text: content.to_string(),
-                                        is_done: false,
-                                        error: None,
-                                    })
-                                    .map_err(|e| ProviderError::Execution(e.to_string()))?;
-                            }
-                        }
+                    if let Ok(chunk_json) = serde_json::from_str::<serde_json::Value>(data)
+                        && let Some(content) = chunk_json["choices"][0]["delta"]["content"].as_str()
+                        && !content.is_empty()
+                    {
+                        channel
+                            .send(StreamChunk {
+                                text: content.to_string(),
+                                is_done: false,
+                                error: None,
+                            })
+                            .map_err(|e| ProviderError::Execution(e.to_string()))?;
                     }
                 }
+                Err(EventSourceError::StreamEnded) => break,
                 Err(e) => {
+                    let message = e.to_string();
                     let _ = channel.send(StreamChunk {
                         text: String::new(),
                         is_done: true,
-                        error: Some(e.to_string()),
+                        error: Some(message.clone()),
                     });
-                    return Err(ProviderError::Execution(format!("SSE Stream error: {e}")));
+                    return Err(ProviderError::Execution(format!("SSE stream error: {message}")));
                 }
             }
         }
 
-        // Signal completion if not done already
+        // Signal completion if the stream ended without an explicit `[DONE]`.
         let _ = channel.send(StreamChunk {
             text: String::new(),
             is_done: true,

@@ -1,0 +1,9 @@
+[
+  { "name": "english-light", "width": 900, "height": 180, "font": "Segoe UI", "theme": "light", "lines": ["Local OCR smoke test.", "Translate this screenshot."] },
+  { "name": "mixed-light", "width": 900, "height": 180, "font": "Microsoft YaHei", "theme": "light", "lines": ["本地文字识别，无需联网。", "ONNX Runtime supports English."] },
+  { "name": "english-dark", "width": 900, "height": 180, "font": "Segoe UI", "theme": "dark", "lines": ["Local OCR smoke test.", "Translate this screenshot."] },
+  { "name": "transparent", "width": 900, "height": 100, "font": "Segoe UI", "theme": "transparent", "lines": ["Transparent image text."] },
+  { "name": "rotated", "width": 900, "height": 100, "font": "Segoe UI", "theme": "light", "rotate": true, "lines": ["Rotate this text 180 degrees."] },
+  { "name": "blank", "width": 128, "height": 128, "font": "Segoe UI", "theme": "light", "lines": [] },
+  { "name": "tiny", "width": 1, "height": 1, "font": "Segoe UI", "theme": "light", "lines": [] }
+]

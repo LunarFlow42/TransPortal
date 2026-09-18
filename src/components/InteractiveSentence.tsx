@@ -1,72 +1,72 @@
 import React, { useMemo } from 'react';
 import { useAppStore } from '../store/useAppStore';
+import { cn } from '../utils/cn';
+import { tokenizeSentence } from '../utils/tokenize';
 
 interface InteractiveSentenceProps {
   sentence: string;
   currentWord?: string;
   onWordClick?: (word: string) => void;
   className?: string;
+  /** Render word tokens in the muted colour (used for the source snippet). */
+  muted?: boolean;
 }
 
 export const InteractiveSentence: React.FC<InteractiveSentenceProps> = ({
   sentence,
   currentWord,
   onWordClick,
-  className = '',
+  className,
+  muted = false,
 }) => {
-  const drillDown = useAppStore((state) => state.drillDown);
+  const pushLookup = useAppStore((state) => state.pushLookup);
 
-  // Tokenize the sentence into words, punctuation, and whitespace
-  const tokens = useMemo(() => {
-    // Regex splits by word characters (including hyphens and apostrophes) vs non-word tokens
-    const regex = /([a-zA-Z0-9'-]+|[^\s\w]+|\s+)/g;
-    return sentence.match(regex) || [sentence];
-  }, [sentence]);
+  // Tokenize into ASCII words, punctuation, and whitespace. CJK text simply
+  // falls into the non-word runs and is rendered verbatim.
+  const tokens = useMemo(() => tokenizeSentence(sentence), [sentence]);
 
   const handleWordClick = (token: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    const cleanWord = token.replace(/^[^\w]+|[^\w]+$/g, '').trim();
-    if (!cleanWord) return;
+    // A non-empty selection means the user is selecting/copying, not tapping.
+    if (window.getSelection()?.toString()) return;
+
+    const word = token.replace(/^[^\w]+|[^\w]+$/g, '').trim();
+    if (!word) return;
 
     if (onWordClick) {
-      onWordClick(cleanWord);
+      onWordClick(word);
     } else {
-      drillDown(cleanWord);
+      void pushLookup(word, { text: sentence, word });
     }
   };
 
-  const isWordToken = (token: string) => /^[a-zA-Z0-9'-]+$/.test(token);
-
   return (
-    <p className={`text-sm leading-relaxed tracking-normal select-text ${className}`}>
+    <p className={cn('select-text text-sm leading-relaxed tracking-normal', className)}>
       {tokens.map((token, index) => {
-        if (!isWordToken(token)) {
-          // Punctuation or whitespace
-          return (
-            <span key={index} className="text-slate-400">
-              {token}
-            </span>
-          );
+        if (!token.isWord) {
+          // Punctuation / whitespace / CJK runs: keep the inherited colour so
+          // translated Chinese is never dimmed.
+          return <span key={index}>{token.text}</span>;
         }
 
         const isCurrent =
-          currentWord && token.toLowerCase() === currentWord.toLowerCase();
+          currentWord && token.text.toLowerCase() === currentWord.toLowerCase();
 
         return (
           <span
             key={index}
-            onClick={(e) => handleWordClick(token, e)}
-            title={`Click to inspect "${token}"`}
-            className={`
-              inline-block rounded px-1 py-0.5 -mx-0.5 cursor-pointer transition-all duration-150
-              ${
-                isCurrent
-                  ? 'text-indigo-300 font-semibold bg-indigo-500/20 underline decoration-indigo-400/60 underline-offset-4'
-                  : 'text-slate-200 hover:text-cyan-200 hover:bg-cyan-500/20 hover:shadow-xs active:scale-95'
-              }
-            `}
+            onClick={(e) => handleWordClick(token.text, e)}
+            title={`Click to look up "${token.text}"`}
+            className={cn(
+              '-mx-0.5 inline-block cursor-pointer rounded px-1 py-0.5 transition-all duration-150',
+              isCurrent
+                ? 'bg-[var(--pos-bg)] font-semibold text-[var(--pos-fg)] underline decoration-[var(--pos-stroke)] underline-offset-4'
+                : muted
+                  ? 'text-[var(--muted)] hover:bg-[var(--surface-3)] hover:text-[var(--accent-b)]'
+                  : 'text-[var(--text)] hover:bg-[var(--surface-3)] hover:text-[var(--accent-b)] active:scale-95',
+            )}
           >
-            {token}
+            {token.text}
           </span>
         );
       })}
