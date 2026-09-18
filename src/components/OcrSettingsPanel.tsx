@@ -12,11 +12,9 @@ export const OcrSettingsPanel: React.FC<{ disabled?: boolean }> = ({ disabled = 
   const { status, error, loading, refresh } = useOcrStatus();
   const language = useAppStore((state) => state.ocrLanguage);
   const engineId = useAppStore((state) => state.ocrEngine);
-  const captureMode = useAppStore((state) => state.captureMode);
   const lastOcrBenchmarkMs = useAppStore((state) => state.lastOcrBenchmarkMs);
   const setLanguage = useAppStore((state) => state.setOcrLanguage);
   const setEngine = useAppStore((state) => state.setOcrEngine);
-  const setCaptureMode = useAppStore((state) => state.setCaptureMode);
   const benchmarkOcr = useAppStore((state) => state.benchmarkOcr);
   const [changing, setChanging] = useState(false);
   const [installing, setInstalling] = useState(false);
@@ -91,16 +89,6 @@ export const OcrSettingsPanel: React.FC<{ disabled?: boolean }> = ({ disabled = 
           <Select ariaLabel="OCR 识别语言" value={isOnnx ? 'auto' : language}
             onChange={(value) => void setLanguage(value)}
             options={options} disabled={isOnnx || !active?.available || loading || busy} />
-        </div>
-        <div className="flex items-center gap-3">
-          <label className="w-24 shrink-0 text-[13px] text-[var(--muted)]">截屏模式</label>
-          <Select ariaLabel="截屏选区模式" value={captureMode}
-            onChange={(value) => void setCaptureMode(value as 'transparent' | 'frozen')}
-            options={[
-              { value: 'transparent', label: '透视遮罩（响应 <25ms，极速推荐）' },
-              { value: 'frozen', label: '视觉定格（完全冻结屏幕）' },
-            ]}
-            disabled={busy} />
         </div>
         {changing && <p role="status" className="flex items-center gap-1.5 text-[11px] text-[var(--muted)]"><LoaderCircle className="h-3 w-3 animate-spin" />正在加载识别引擎…</p>}
         {status && !status.onnx.installed && (

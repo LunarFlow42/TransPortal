@@ -16,8 +16,8 @@ const BUSY: Record<RegionPurpose, string> = {
 /**
  * `#/ocr-region` — one selector for snips and auto-translation.
  *
- * The frozen desktop fills the window; normalized pointer coordinates avoid
- * DPI assumptions. The window is revealed only after the image has rendered.
+ * An instant, transparent overlay reveals the live desktop directly.
+ * The user drags a rectangle over the real screen with outer darkening.
  */
 export function RegionSelectView() {
   const [selection, setSelection] = useState<RegionSelection | null>(null);
@@ -79,12 +79,6 @@ export function RegionSelectView() {
         x: selection.bounds.x + left, y: selection.bounds.y + top, width: right - left, height: bottom - top,
       } }).catch((error) => { setBusy(false); setError(String(error)); });
     }}>
-    {selection?.mode === 'frozen' && selection.data_url && (
-      <img src={selection.data_url} draggable={false} alt="选择屏幕区域"
-        className="pointer-events-none absolute inset-0 h-full w-full" onLoad={() => {
-          void invoke('reveal_region', { id: selection.id }).catch((error) => setError(String(error)));
-        }} />
-    )}
     {!rect && <div className="pointer-events-none absolute inset-0 bg-black/25" />}
     {rect && <div className="pointer-events-none absolute border-2 border-cyan-300" style={{
       left: `${rect.x * 100}%`, top: `${rect.y * 100}%`, width: `${rect.width * 100}%`, height: `${rect.height * 100}%`,

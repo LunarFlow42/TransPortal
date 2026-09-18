@@ -23,7 +23,6 @@ import type {
   TextIntent,
   PictureTranslation,
   MonitorUpdate,
-  CaptureMode,
 } from '../types';
 
 /** Monotonic ids for stack frames. */
@@ -64,7 +63,6 @@ interface AppState {
   doubleCopyEnabled: boolean;
   ocrEngine: OcrEngineId;
   ocrLanguage: string;
-  captureMode: CaptureMode;
   lastOcrBenchmarkMs: number | null;
   settingsError: string | null;
   pinned: boolean;
@@ -80,7 +78,6 @@ interface AppState {
   setOcrLanguage: (language: string) => Promise<boolean>;
   setOcrEngine: (engine: OcrEngineId) => Promise<boolean>;
   setOcrConfig: (engine: OcrEngineId, language: string) => Promise<boolean>;
-  setCaptureMode: (mode: CaptureMode) => Promise<void>;
   benchmarkOcr: () => Promise<number>;
   setTheme: (theme: ThemeMode) => void;
   setOverlayOpacity: (opacity: number) => void;
@@ -154,7 +151,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   doubleCopyEnabled: true,
   ocrEngine: 'windows',
   ocrLanguage: 'auto',
-  captureMode: 'transparent',
   lastOcrBenchmarkMs: null,
   settingsError: null,
   pinned: false,
@@ -197,14 +193,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       return false;
     }
   },
-  setCaptureMode: async (captureMode) => {
-    try {
-      await invoke('set_capture_mode', { mode: captureMode });
-      set({ captureMode, settingsError: null });
-    } catch (error) {
-      set({ settingsError: String(error) });
-    }
-  },
   benchmarkOcr: async () => {
     try {
       const ms = await invoke<number>('benchmark_ocr');
@@ -220,23 +208,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   togglePinned: () => set((state) => ({ pinned: !state.pinned })),
 
   hydrate: (settings) =>
-    set((state) => {
-      if (settings.captureMode) {
-        void invoke('set_capture_mode', { mode: settings.captureMode }).catch(console.error);
-      }
-      return {
-        provider: settings.provider ?? state.provider,
-        openaiConfig: settings.openaiConfig ?? state.openaiConfig,
-        ankiConfig: settings.ankiConfig ?? state.ankiConfig,
-        hotkey: settings.hotkey ?? state.hotkey,
-        doubleCopyEnabled: settings.doubleCopyEnabled ?? state.doubleCopyEnabled,
-        ocrEngine: settings.ocrEngine ?? state.ocrEngine,
-        ocrLanguage: settings.ocrLanguage ?? state.ocrLanguage,
-        captureMode: settings.captureMode ?? state.captureMode,
-        theme: settings.theme ?? state.theme,
-        overlayOpacity: settings.overlayOpacity ?? state.overlayOpacity,
-      };
-    }),
+    set((state) => ({
+      provider: settings.provider ?? state.provider,
+      openaiConfig: settings.openaiConfig ?? state.openaiConfig,
+      ankiConfig: settings.ankiConfig ?? state.ankiConfig,
+      hotkey: settings.hotkey ?? state.hotkey,
+      doubleCopyEnabled: settings.doubleCopyEnabled ?? state.doubleCopyEnabled,
+      ocrEngine: settings.ocrEngine ?? state.ocrEngine,
+      ocrLanguage: settings.ocrLanguage ?? state.ocrLanguage,
+      theme: settings.theme ?? state.theme,
+      overlayOpacity: settings.overlayOpacity ?? state.overlayOpacity,
+    })),
 
   applyCapture: (outcome) => {
     get().clearLookup();

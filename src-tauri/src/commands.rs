@@ -301,11 +301,6 @@ pub fn auto_ocr_latest(service: State<'_, crate::ocr::monitor::MonitorService>) 
 pub fn region_selection(service: State<'_, crate::ocr::region::RegionService>) -> Option<crate::ocr::region::RegionSelection> { service.selection() }
 
 #[tauri::command]
-pub fn reveal_region(id: u64, app: AppHandle) -> Result<(), String> {
-    app.state::<crate::ocr::region::RegionService>().reveal(&app, id)
-}
-
-#[tauri::command]
 pub fn confirm_region(id: u64, region: crate::native::desktop::ScreenRect, app: AppHandle) -> Result<(), String> {
     crate::ocr::region::confirm(&app, id, region)
 }
@@ -313,16 +308,6 @@ pub fn confirm_region(id: u64, region: crate::native::desktop::ScreenRect, app: 
 #[tauri::command]
 pub fn cancel_region(id: Option<u64>, app: AppHandle) {
     crate::ocr::region::cancel(&app, id);
-}
-
-#[tauri::command]
-pub fn get_capture_mode(service: State<'_, crate::ocr::region::RegionService>) -> crate::ocr::region::CaptureMode {
-    service.get_capture_mode()
-}
-
-#[tauri::command]
-pub fn set_capture_mode(mode: crate::ocr::region::CaptureMode, service: State<'_, crate::ocr::region::RegionService>) {
-    service.set_capture_mode(mode);
 }
 
 #[tauri::command]

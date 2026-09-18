@@ -4,10 +4,10 @@
 //! user drags a rectangle over a still image. Snips crop that frozen image,
 //! which needs no clipboard, no system screenshot tool and no compositor delay.
 
-use super::picture::{Cancellation, encode_png};
-use super::{OcrImage, OcrMode};
+use super::picture::Cancellation;
+use super::OcrMode;
 use crate::native::desktop::{DesktopCapture, ScreenRect};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::sync::{Arc, Mutex};
 use tauri::{
     AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder,
@@ -39,21 +39,11 @@ impl From<OcrMode> for RegionPurpose {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum CaptureMode {
-    #[default]
-    Transparent,
-    Frozen,
-}
-
 #[derive(Clone, Serialize)]
 pub struct RegionSelection {
     pub id: u64,
     pub purpose: RegionPurpose,
     pub bounds: ScreenRect,
-    pub data_url: String,
-    pub mode: CaptureMode,
 }
 
 /// A confirmed rectangle together with the frozen pixels it was drawn on.
@@ -105,7 +95,6 @@ struct State {
 pub struct RegionService {
     desktop: Arc<dyn DesktopCapture>,
     state: Mutex<State>,
-    capture_mode: Mutex<CaptureMode>,
 }
 
 impl Default for RegionService {
@@ -113,19 +102,11 @@ impl Default for RegionService {
         Self {
             desktop: crate::native::desktop::platform(),
             state: Mutex::new(State::default()),
-            capture_mode: Mutex::new(CaptureMode::default()),
         }
     }
 }
 
 impl RegionService {
-    pub fn get_capture_mode(&self) -> CaptureMode {
-        *self.capture_mode.lock().unwrap()
-    }
-
-    pub fn set_capture_mode(&self, mode: CaptureMode) {
-        *self.capture_mode.lock().unwrap() = mode;
-    }
     pub fn selection(&self) -> Option<RegionSelection> {
         let state = self.state.lock().unwrap();
         state
@@ -149,7 +130,7 @@ impl RegionService {
         result
     }
 
-    /// Blocking: freeze the whole virtual desktop and stage it for selection.
+    /// Blocking: grab the desktop in memory and stage it for selection.
     /// Any earlier pending selection is replaced.
     pub fn freeze(
         &self,
@@ -173,15 +154,6 @@ impl RegionService {
         if cancel.is_cancelled() {
             return Err("已取消区域选择。".into());
         }
-        let mode = *self.capture_mode.lock().unwrap();
-        let data_url = match mode {
-            CaptureMode::Transparent => String::new(),
-            CaptureMode::Frozen => encode_png(OcrImage {
-                width: image.width(),
-                height: image.height(),
-                rgba: image.as_raw(),
-            })?,
-        };
         let mut state = self.state.lock().unwrap();
         state.next_id += 1;
         let id = state.next_id;
@@ -190,8 +162,6 @@ impl RegionService {
                 id,
                 purpose,
                 bounds,
-                data_url,
-                mode,
             },
             owner,
             frozen: Arc::new(image),
@@ -226,10 +196,9 @@ impl RegionService {
         let _ = Self::ensure_window(app);
     }
 
-    /// Main thread only: size the selector over the frozen desktop and ask it
-    /// to load selection `id`. In transparent mode it reveals immediately.
+    /// Main thread only: size the selector over the desktop and display the transparent overlay immediately.
     pub fn present(&self, app: &AppHandle, id: u64) -> Result<(), String> {
-        let (bounds, mode) = {
+        let bounds = {
             let state = self.state.lock().unwrap();
             let pending = state
                 .pending
@@ -239,7 +208,7 @@ impl RegionService {
             if pending.cancel.is_cancelled() {
                 return Err("区域选择已取消。".into());
             }
-            (pending.selection.bounds, pending.selection.mode)
+            pending.selection.bounds
         };
         let window = Self::ensure_window(app)?;
         window
@@ -249,30 +218,8 @@ impl RegionService {
             .set_size(PhysicalSize::new(bounds.width, bounds.height))
             .map_err(|e| e.to_string())?;
         let _ = window.emit(SELECTION_EVENT, id);
-        if mode == CaptureMode::Transparent {
-            window.show().map_err(|e| e.to_string())?;
-            window.set_focus().map_err(|e| e.to_string())?;
-        }
-        Ok(())
-    }
-
-    /// The selector calls this once the frozen image has rendered.
-    pub fn reveal(&self, app: &AppHandle, id: u64) -> Result<(), String> {
-        {
-            let state = self.state.lock().unwrap();
-            let pending = state
-                .pending
-                .as_ref()
-                .filter(|pending| pending.selection.id == id)
-                .ok_or("区域选择已取消。")?;
-            if pending.cancel.is_cancelled() {
-                return Err("区域选择已取消。".into());
-            }
-        }
-        if let Some(window) = app.get_webview_window(WINDOW_LABEL) {
-            window.show().map_err(|e| e.to_string())?;
-            window.set_focus().map_err(|e| e.to_string())?;
-        }
+        window.show().map_err(|e| e.to_string())?;
+        window.set_focus().map_err(|e| e.to_string())?;
         Ok(())
     }
 

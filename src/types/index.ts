@@ -195,8 +195,7 @@ export interface PictureTranslation {
 
 export interface ScreenRect { x: number; y: number; width: number; height: number }
 export type RegionPurpose = 'text' | 'translate' | 'monitor';
-export type CaptureMode = 'transparent' | 'frozen';
-export interface RegionSelection { id: number; purpose: RegionPurpose; bounds: ScreenRect; data_url: string; mode: CaptureMode }
+export interface RegionSelection { id: number; purpose: RegionPurpose; bounds: ScreenRect }
 export interface MonitorUpdate {
   id: number;
   revision: number;
@@ -283,5 +282,4 @@ export interface PersistedSettings {
   /** Overlay glass opacity, 0.25–1.0. */
   overlayOpacity: number;
   dictSources: { id: string; enabled: boolean }[];
-  captureMode?: CaptureMode;
 }

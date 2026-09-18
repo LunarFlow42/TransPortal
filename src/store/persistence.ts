@@ -30,7 +30,6 @@ export async function loadSettings(): Promise<Partial<PersistedSettings>> {
     theme,
     overlayOpacity,
     dictSources,
-    captureMode,
   ] = await Promise.all([
     store.get<PersistedSettings['provider']>('provider'),
     store.get<PersistedSettings['openaiConfig']>('openaiConfig'),
@@ -43,7 +42,6 @@ export async function loadSettings(): Promise<Partial<PersistedSettings>> {
     store.get<PersistedSettings['theme']>('theme'),
     store.get<PersistedSettings['overlayOpacity']>('overlayOpacity'),
     store.get<PersistedSettings['dictSources']>('dictSources'),
-    store.get<PersistedSettings['captureMode']>('captureMode'),
   ]);
 
   return {
@@ -58,7 +56,6 @@ export async function loadSettings(): Promise<Partial<PersistedSettings>> {
     theme,
     overlayOpacity,
     dictSources,
-    captureMode,
   };
 }
 
