@@ -81,6 +81,9 @@ windows = { version = "0.58", features = [
 incremental = true
 debug = 1
 
+[profile.dev.package."*"]
+debug = 0
+
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]
 codegen-units = 1
