@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 #[cfg(target_os = "windows")]
+pub(crate) mod dxgi;
+#[cfg(target_os = "windows")]
 mod windows;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -39,6 +41,9 @@ impl ScreenRect {
 pub trait DesktopCapture: Send + Sync {
     fn bounds(&self) -> Result<ScreenRect, String>;
     fn capture(&self, region: ScreenRect) -> Result<image::RgbaImage, String>;
+    fn is_exclusive_fullscreen(&self) -> bool {
+        false
+    }
     /// Keep translated output out of later screenshots to avoid feedback loops.
     fn exclude(&self, window: &tauri::WebviewWindow, enabled: bool) -> Result<(), String>;
 }
@@ -46,7 +51,7 @@ pub trait DesktopCapture: Send + Sync {
 pub fn platform() -> Arc<dyn DesktopCapture> {
     #[cfg(target_os = "windows")]
     {
-        Arc::new(windows::WindowsDesktop)
+        Arc::new(windows::WindowsDesktop::default())
     }
     #[cfg(not(target_os = "windows"))]
     {

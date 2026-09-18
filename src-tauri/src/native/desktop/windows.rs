@@ -1,16 +1,29 @@
 use super::{DesktopCapture, ScreenRect};
-use windows::Win32::Foundation::HWND;
+use std::sync::Mutex;
+use windows::Win32::Foundation::{HWND, POINT};
 use windows::Win32::Graphics::Gdi::{
     BI_RGB, BITMAPINFO, BITMAPINFOHEADER, BitBlt, CAPTUREBLT, CreateCompatibleBitmap,
-    CreateCompatibleDC, DIB_RGB_COLORS, DeleteDC, DeleteObject, GetDC, GetDIBits, HBITMAP, HDC,
-    HGDIOBJ, ReleaseDC, SRCCOPY, SelectObject,
+    CreateCompatibleDC, DIB_RGB_COLORS, DeleteDC, DeleteObject, GetDC, GetDIBits, GetMonitorInfoW,
+    HBITMAP, HDC, HGDIOBJ, MONITORINFO, MonitorFromPoint, ReleaseDC, SRCCOPY, SelectObject,
+    MONITOR_DEFAULTTONEAREST,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
-    SetWindowDisplayAffinity, WDA_EXCLUDEFROMCAPTURE, WDA_NONE,
+    GetCursorPos, GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN,
+    SM_YVIRTUALSCREEN, SetWindowDisplayAffinity, WDA_EXCLUDEFROMCAPTURE, WDA_NONE,
 };
+use windows::Win32::UI::Shell::{SHQueryUserNotificationState, QUNS_RUNNING_D3D_FULL_SCREEN};
 
-pub struct WindowsDesktop;
+pub struct WindowsDesktop {
+    dxgi: Mutex<Option<super::dxgi::DxgiDesktop>>,
+}
+
+impl Default for WindowsDesktop {
+    fn default() -> Self {
+        Self {
+            dxgi: Mutex::new(super::dxgi::DxgiDesktop::new().ok()),
+        }
+    }
+}
 
 /// Every GDI resource is released on all allocation/copy/error paths.
 struct CaptureDc {
@@ -38,8 +51,36 @@ impl Drop for CaptureDc {
     }
 }
 
-impl DesktopCapture for WindowsDesktop {
-    fn bounds(&self) -> Result<ScreenRect, String> {
+impl WindowsDesktop {
+    fn active_monitor_bounds() -> Result<ScreenRect, String> {
+        unsafe {
+            let mut pt = POINT::default();
+            let _ = GetCursorPos(&mut pt);
+            let monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+            if !monitor.is_invalid() {
+                let mut info = MONITORINFO {
+                    cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+                    ..Default::default()
+                };
+                if GetMonitorInfoW(monitor, &mut info).as_bool() {
+                    let width = (info.rcMonitor.right - info.rcMonitor.left).max(0) as u32;
+                    let height = (info.rcMonitor.bottom - info.rcMonitor.top).max(0) as u32;
+                    let rect = ScreenRect {
+                        x: info.rcMonitor.left,
+                        y: info.rcMonitor.top,
+                        width,
+                        height,
+                    };
+                    if rect.validate().is_ok() {
+                        return Ok(rect);
+                    }
+                }
+            }
+            Self::virtual_bounds()
+        }
+    }
+
+    fn virtual_bounds() -> Result<ScreenRect, String> {
         let bounds = unsafe {
             ScreenRect {
                 x: GetSystemMetrics(SM_XVIRTUALSCREEN),
@@ -52,11 +93,7 @@ impl DesktopCapture for WindowsDesktop {
         Ok(bounds)
     }
 
-    fn capture(&self, region: ScreenRect) -> Result<image::RgbaImage, String> {
-        region.validate()?;
-        if !self.bounds()?.contains(&region) {
-            return Err("屏幕布局已变化，请重新选择区域。".into());
-        }
+    fn capture_gdi(region: ScreenRect) -> Result<image::RgbaImage, String> {
         unsafe {
             let mut dc = CaptureDc {
                 screen: GetDC(None),
@@ -86,7 +123,6 @@ impl DesktopCapture for WindowsDesktop {
                 SRCCOPY | CAPTUREBLT,
             )
             .map_err(|error| format!("屏幕截图失败：{error}"))?;
-            // GetDIBits requires the bitmap to be deselected first.
             SelectObject(dc.memory, dc.previous);
             dc.previous = HGDIOBJ::default();
             let mut info = BITMAPINFO {
@@ -121,6 +157,38 @@ impl DesktopCapture for WindowsDesktop {
             image::RgbaImage::from_raw(region.width, region.height, bytes)
                 .ok_or_else(|| "截图尺寸无效。".into())
         }
+    }
+}
+
+impl DesktopCapture for WindowsDesktop {
+    fn bounds(&self) -> Result<ScreenRect, String> {
+        Self::active_monitor_bounds()
+    }
+
+    fn is_exclusive_fullscreen(&self) -> bool {
+        unsafe {
+            SHQueryUserNotificationState() == Ok(QUNS_RUNNING_D3D_FULL_SCREEN)
+        }
+    }
+
+    fn capture(&self, region: ScreenRect) -> Result<image::RgbaImage, String> {
+        region.validate()?;
+
+        // Fast path: DXGI Desktop Duplication (GPU physical scanout, handles DirectX/Vulkan/MPO without bleed-through)
+        let dxgi_capture = {
+            let mut guard = self.dxgi.lock().unwrap();
+            if guard.is_none() {
+                *guard = super::dxgi::DxgiDesktop::new().ok();
+            }
+            guard.as_ref().map(|d| d.capture_output(region))
+        };
+
+        if let Some(Ok(image)) = dxgi_capture {
+            return Ok(image);
+        }
+
+        // Resilient fallback: GDI BitBlt
+        Self::capture_gdi(region)
     }
 
     fn exclude(&self, window: &tauri::WebviewWindow, enabled: bool) -> Result<(), String> {
