@@ -27,7 +27,11 @@ mod fallback;
 mod windows;
 
 #[cfg(not(target_os = "windows"))]
+pub use fallback::configure_transparent_window;
+#[cfg(not(target_os = "windows"))]
 use fallback::FallbackSelectionReader;
+#[cfg(target_os = "windows")]
+pub use windows::configure_transparent_window;
 #[cfg(target_os = "windows")]
 use windows::WindowsSelectionReader;
 

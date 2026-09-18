@@ -71,14 +71,15 @@ export const ShellView: React.FC = () => {
   }, [applyCapture]);
 
   useEffect(() => {
-    const size = showShortcutNotice ? { width: 460, height: 460 } : autoOcr || (ocrImageView && ocr?.picture)
+    const noticeHeight = Math.min(480, Math.max(260, 180 + shortcutIssues.length * 75));
+    const size = showShortcutNotice ? { width: 460, height: noticeHeight } : autoOcr || (ocrImageView && ocr?.picture)
       ? { width: 760, height: 680 } : ocr?.stage === 'ready'
       ? { width: 460, height: 400 }
-      : ocr ? WINDOW_SIZES.compact : !hasContent ? { width: 460, height: 330 } : WINDOW_SIZES[topDensity];
+      : ocr ? WINDOW_SIZES.compact : !hasContent ? { width: 460, height: 310 } : WINDOW_SIZES[topDensity];
     void getCurrentWindow().setSize(new LogicalSize(size.width, size.height))
       .then(clampCurrentWindow)
       .catch((error) => console.error('overlay resize failed:', error));
-  }, [topDensity, ocr?.stage, ocrImageView, Boolean(autoOcr), hasContent, showShortcutNotice]);
+  }, [topDensity, ocr?.stage, ocrImageView, Boolean(autoOcr), hasContent, showShortcutNotice, shortcutIssues.length]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -132,7 +133,7 @@ export const ShellView: React.FC = () => {
   };
 
   return (
-    <div className="flex min-h-screen w-full select-none flex-col items-center justify-center bg-transparent p-3">
+    <div className="flex h-full w-full select-none flex-col items-center justify-center bg-transparent overflow-hidden">
       {showShortcutNotice ? (
         <StartupShortcutNotice issues={shortcutIssues} retrying={shortcuts.retrying} error={shortcuts.error}
           onRetry={() => void shortcuts.retry()} onDismiss={() => setDismissedShortcuts(issueKey)} />
@@ -143,7 +144,7 @@ export const ShellView: React.FC = () => {
       ) : hasContent ? (
         <LookupDeck />
       ) : (
-        <Surface className="w-full max-w-[420px] px-5 py-6 text-center">
+        <Surface className="w-full px-5 py-6 text-center">
           <div
             onMouseDown={startWindowDrag}
             className="flex cursor-move items-center justify-end"

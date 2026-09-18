@@ -25,11 +25,11 @@ export const StartupShortcutNotice: React.FC<{
   onRetry: () => void;
   onDismiss: () => void;
 }> = ({ issues, retrying, error, onRetry, onDismiss }) => (
-  <Surface className="flex max-h-[420px] w-full flex-col gap-3 p-4 text-[var(--text)]" role="alert">
+  <Surface className="flex h-full w-full flex-col justify-between gap-3 p-4 text-[var(--text)]" role="alert">
     <div onMouseDown={startWindowDrag} className="flex cursor-move items-center gap-2 text-sm font-semibold">
       <AlertTriangle className="h-4 w-4 text-amber-500" />快捷键需要处理
     </div>
-    <div className="flex flex-col gap-2 overflow-y-auto">
+    <div className="flex flex-1 min-h-0 flex-col gap-2 overflow-y-auto no-scrollbar">
       {issues.map((shortcut) => <Failure key={shortcut.id} shortcut={shortcut} />)}
     </div>
     <p className="text-[11px] text-[var(--muted)]">

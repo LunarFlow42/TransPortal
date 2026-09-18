@@ -174,7 +174,7 @@ impl RegionService {
         if let Some(window) = app.get_webview_window(WINDOW_LABEL) {
             Ok(window)
         } else {
-            WebviewWindowBuilder::new(
+            let window = WebviewWindowBuilder::new(
                 app,
                 WINDOW_LABEL,
                 WebviewUrl::App(format!("index.html#/{WINDOW_LABEL}").into()),
@@ -188,7 +188,9 @@ impl RegionService {
             .shadow(false)
             .transparent(true)
             .build()
-            .map_err(|e| e.to_string())
+            .map_err(|e| e.to_string())?;
+            crate::native::configure_transparent_window(&window);
+            Ok(window)
         }
     }
 

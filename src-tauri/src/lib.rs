@@ -19,6 +19,7 @@ use tauri::{
 /// Bring the shell bubble to the foreground.
 fn focus_shell<R: tauri::Runtime>(app: &AppHandle<R>) {
     if let Some(window) = app.get_webview_window("shell") {
+        native::configure_transparent_window(&window);
         let _ = window.show();
         let _ = window.set_focus();
     }
@@ -134,6 +135,12 @@ pub fn run() {
             }
             app.state::<ocr::OcrService>()
                 .install_observer(app.handle());
+            if let Some(window) = app.get_webview_window("shell") {
+                native::configure_transparent_window(&window);
+            }
+            if let Some(window) = app.get_webview_window("settings") {
+                native::configure_transparent_window(&window);
+            }
             shortcut::register(app.handle());
             focus_shell(app.handle());
             Ok(())

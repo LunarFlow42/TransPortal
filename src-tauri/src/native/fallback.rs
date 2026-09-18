@@ -30,3 +30,5 @@ impl SelectionReader for FallbackSelectionReader {
         Err("native selection capture is only implemented on Windows".to_string())
     }
 }
+
+pub fn configure_transparent_window<R: tauri::Runtime>(_window: &tauri::WebviewWindow<R>) {}

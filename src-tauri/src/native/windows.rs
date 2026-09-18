@@ -211,3 +211,34 @@ impl SelectionReader for WindowsSelectionReader {
         self.read_via_uia()
     }
 }
+
+/// Configure a transparent borderless window on Windows:
+/// - Disables DWM border drawing (`DWMWA_BORDER_COLOR` = `DWMWA_COLOR_NONE`)
+/// - Disables DWM native corner rounding (`DWMWA_WINDOW_CORNER_PREFERENCE` = `DWMWCP_DONOTROUND`)
+pub fn configure_transparent_window<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::Graphics::Dwm::{
+        DwmSetWindowAttribute, DWMWA_BORDER_COLOR, DWMWA_COLOR_NONE,
+        DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND,
+    };
+
+    if let Ok(handle) = window.hwnd() {
+        unsafe {
+            let hwnd = HWND(handle.0);
+            let color = DWMWA_COLOR_NONE;
+            let _ = DwmSetWindowAttribute(
+                hwnd,
+                DWMWA_BORDER_COLOR,
+                &color as *const _ as *const _,
+                std::mem::size_of::<u32>() as u32,
+            );
+            let corner = DWMWCP_DONOTROUND.0;
+            let _ = DwmSetWindowAttribute(
+                hwnd,
+                DWMWA_WINDOW_CORNER_PREFERENCE,
+                &corner as *const _ as *const _,
+                std::mem::size_of::<i32>() as u32,
+            );
+        }
+    }
+}

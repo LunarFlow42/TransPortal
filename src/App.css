@@ -72,12 +72,12 @@ body,
   margin: 0;
   padding: 0;
   width: 100%;
-  min-height: 100%;
+  height: 100%;
   /* Transparent host so the overlay can show its rounded glass card and the
      settings window can round its own opaque panel. */
   background-color: transparent;
   color: var(--text);
-  overflow-x: hidden;
+  overflow: hidden;
   user-select: none;
 }
 
@@ -148,4 +148,12 @@ body,
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--muted);
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
