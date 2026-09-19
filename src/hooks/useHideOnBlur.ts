@@ -3,46 +3,33 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { isAutoHideSuppressed } from '../utils/autoHide';
 import { useAppStore } from '../store/useAppStore';
 
-const HIDE_DELAY_MS = 200;
-
 /**
- * Hide the current window shortly after it loses focus.
+ * Hide the current window immediately when it loses focus.
  *
- * A short delay + focus re-check prevents the window from disappearing while a
- * native drag (which briefly blurs the webview) is in progress.
+ * Guarded against premature hiding when autoHideOnBlur is disabled,
+ * pinned, auto-OCR is actively observing, or when auto-hide is temporarily
+ * suppressed (e.g. during native window dragging or file dialogs).
  */
-export function useHideOnBlur() {
+export function useHideOnBlur(active = true) {
   useEffect(() => {
+    if (!active) return;
     const window = getCurrentWindow();
-    let timer: ReturnType<typeof setTimeout> | undefined;
 
     const unlisten = window.onFocusChanged(({ payload: focused }) => {
-      if (focused) {
-        if (timer) {
-          clearTimeout(timer);
-          timer = undefined;
-        }
-        return;
-      }
+      if (focused) return;
 
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(async () => {
-        timer = undefined;
-        if (isAutoHideSuppressed()) return;
-        if (useAppStore.getState().pinned) return;
-        if (useAppStore.getState().autoOcr?.active) return;
-        try {
-          if (await window.isFocused()) return;
-        } catch {
-          // Fall through and hide if focus state cannot be read.
-        }
-        void window.hide();
-      }, HIDE_DELAY_MS);
+      const store = useAppStore.getState();
+      if (!store.autoHideOnBlur) return;
+      if (isAutoHideSuppressed()) return;
+      if (store.pinned) return;
+      if (store.autoOcr?.active) return;
+
+      void window.hide();
     });
 
     return () => {
-      if (timer) clearTimeout(timer);
       void unlisten.then((dispose) => dispose());
     };
-  }, []);
+  }, [active]);
 }
+

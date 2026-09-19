@@ -47,30 +47,134 @@ export function useBootstrap(persist: boolean) {
       if (disposed) return;
 
       // Only publish settings backed by a successful native registration.
-      useAppStore.getState().hydrate(persist
-        ? { ...settings, hotkey: undefined, doubleCopyEnabled: undefined, ocrEngine: undefined, ocrLanguage: undefined }
-        : settings);
+      useAppStore.getState().hydrate({
+        ...settings,
+        hotkey: undefined,
+        ocrCardHotkey: undefined,
+        ocrPictureHotkey: undefined,
+        ocrTextHotkey: undefined,
+        replaceSelectionHotkey: undefined,
+        silentOcrHotkey: undefined,
+        inputTranslateHotkey: undefined,
+        inkTranslateKey: undefined,
+        doubleCopyEnabled: undefined,
+        clipboardMonitorEnabled: undefined,
+        ocrEngine: undefined,
+        ocrLanguage: undefined,
+      });
+
+      if (settings.dictSources) {
+        await applyDictSources(settings.dictSources);
+      }
+      if (disposed) return;
+
+      if (settings.hotkey) {
+        await useAppStore.getState().setShortcut('selection', settings.hotkey);
+      }
+      if (disposed) return;
+
+      if (settings.ocrCardHotkey) {
+        await useAppStore.getState().setShortcut('ocr_card', settings.ocrCardHotkey);
+      }
+      if (disposed) return;
+
+      if (settings.ocrPictureHotkey) {
+        await useAppStore.getState().setShortcut('ocr_picture', settings.ocrPictureHotkey);
+      }
+      if (disposed) return;
+
+      if (settings.ocrTextHotkey) {
+        await useAppStore.getState().setShortcut('ocr_text', settings.ocrTextHotkey);
+      }
+      if (disposed) return;
+
+      if (settings.replaceSelectionHotkey) {
+        await useAppStore.getState().setShortcut('replace_selection', settings.replaceSelectionHotkey);
+      }
+      if (disposed) return;
+
+      if (settings.silentOcrHotkey) {
+        await useAppStore.getState().setShortcut('silent_ocr', settings.silentOcrHotkey);
+      }
+      if (disposed) return;
+
+      if (settings.inputTranslateHotkey) {
+        await useAppStore.getState().setShortcut('input_translate', settings.inputTranslateHotkey);
+      }
+      if (disposed) return;
+
+      if (settings.inkTranslateKey) {
+        await useAppStore.getState().setInkTranslateKey(settings.inkTranslateKey);
+      }
+      if (disposed) return;
+
+      if (settings.clipboardMonitorEnabled !== undefined) {
+        await useAppStore.getState().setClipboardMonitorEnabled(settings.clipboardMonitorEnabled);
+      }
+      if (disposed) return;
+
+      if (settings.doubleCopyEnabled !== undefined) {
+        await useAppStore.getState().setDoubleCopyEnabled(settings.doubleCopyEnabled);
+      }
+      if (disposed) return;
+
+      const nativeConfig = await invoke<OcrConfig>('get_ocr_config');
+      if (disposed) return;
+      useAppStore.getState().hydrate({
+        ocrEngine: nativeConfig.engine,
+        ocrLanguage: nativeConfig.language ?? 'auto',
+      });
+      if (settings.ocrEngine || settings.ocrLanguage) {
+        await useAppStore.getState().setOcrConfig(
+          settings.ocrEngine ?? nativeConfig.engine,
+          settings.ocrLanguage ?? (nativeConfig.language ?? 'auto'),
+        );
+      }
+      if (disposed) return;
 
       if (persist) {
-        await applyDictSources(settings.dictSources);
-        if (disposed) return;
-        if (settings.hotkey) {
-          await useAppStore.getState().setHotkey(settings.hotkey);
-        }
-        if (disposed) return;
-        if (settings.doubleCopyEnabled !== undefined) {
-          await useAppStore.getState().setDoubleCopyEnabled(settings.doubleCopyEnabled);
-        }
-        if (disposed) return;
-        const nativeConfig = await invoke<OcrConfig>('get_ocr_config');
-        if (disposed) return;
-        useAppStore.getState().hydrate({ ocrEngine: nativeConfig.engine, ocrLanguage: nativeConfig.language ?? 'auto' });
-        if (settings.ocrEngine || settings.ocrLanguage) {
-          await useAppStore.getState().setOcrConfig(settings.ocrEngine ?? nativeConfig.engine, settings.ocrLanguage ?? 'auto');
-        }
-        if (disposed) return;
-        const { hotkey, doubleCopyEnabled, ocrEngine, ocrLanguage } = useAppStore.getState();
-        await emit(SETTINGS_CHANGED_EVENT, { hotkey, doubleCopyEnabled, ocrEngine, ocrLanguage });
+        const {
+          hotkey,
+          ocrCardHotkey,
+          ocrPictureHotkey,
+          ocrTextHotkey,
+          replaceSelectionHotkey,
+          silentOcrHotkey,
+          inputTranslateHotkey,
+          inkTranslateKey,
+          doubleCopyEnabled,
+          clipboardMonitorEnabled,
+          autoPronounce,
+          ocrEngine,
+          ocrLanguage,
+          fontSize,
+          showCrosshairs,
+          aiPromptTemplate,
+          autoHideOnBlur,
+          targetLanguage,
+          ocrPictureDefaultView,
+        } = useAppStore.getState();
+        await emit(SETTINGS_CHANGED_EVENT, {
+          hotkey,
+          ocrCardHotkey,
+          ocrPictureHotkey,
+          ocrTextHotkey,
+          replaceSelectionHotkey,
+          silentOcrHotkey,
+          inputTranslateHotkey,
+          inkTranslateKey,
+          doubleCopyEnabled,
+          clipboardMonitorEnabled,
+          autoPronounce,
+          ocrEngine,
+          ocrLanguage,
+          fontSize,
+          showCrosshairs,
+          aiPromptTemplate,
+          autoHideOnBlur,
+          targetLanguage,
+          ocrPictureDefaultView,
+        });
       }
     })().catch((error) => {
       if (!disposed) useAppStore.setState({ settingsError: `设置恢复失败：${String(error)}` });
@@ -78,11 +182,9 @@ export function useBootstrap(persist: boolean) {
       if (disposed) return;
       ready.current = true;
       setInitialized(true);
-      if (persist) {
-        void invoke('finish_startup_checks').catch((error) => {
-          console.error('failed to finish startup checks:', error);
-        });
-      }
+      void invoke('finish_startup_checks').catch((error) => {
+        console.error('failed to finish startup checks:', error);
+      });
     });
 
     if (persist) {
@@ -96,12 +198,36 @@ export function useBootstrap(persist: boolean) {
         }
         if (state.ankiConfig !== previous.ankiConfig) patch.ankiConfig = state.ankiConfig;
         if (state.hotkey !== previous.hotkey) patch.hotkey = state.hotkey;
+        if (state.ocrCardHotkey !== previous.ocrCardHotkey) patch.ocrCardHotkey = state.ocrCardHotkey;
+        if (state.ocrPictureHotkey !== previous.ocrPictureHotkey) patch.ocrPictureHotkey = state.ocrPictureHotkey;
+        if (state.ocrTextHotkey !== previous.ocrTextHotkey) patch.ocrTextHotkey = state.ocrTextHotkey;
+        if (state.replaceSelectionHotkey !== previous.replaceSelectionHotkey) patch.replaceSelectionHotkey = state.replaceSelectionHotkey;
+        if (state.silentOcrHotkey !== previous.silentOcrHotkey) patch.silentOcrHotkey = state.silentOcrHotkey;
+        if (state.inputTranslateHotkey !== previous.inputTranslateHotkey) patch.inputTranslateHotkey = state.inputTranslateHotkey;
+        if (state.inkTranslateKey !== previous.inkTranslateKey) patch.inkTranslateKey = state.inkTranslateKey;
         if (state.doubleCopyEnabled !== previous.doubleCopyEnabled) patch.doubleCopyEnabled = state.doubleCopyEnabled;
+        if (state.clipboardMonitorEnabled !== previous.clipboardMonitorEnabled) patch.clipboardMonitorEnabled = state.clipboardMonitorEnabled;
+        if (state.autoPronounce !== previous.autoPronounce) patch.autoPronounce = state.autoPronounce;
         if (state.ocrEngine !== previous.ocrEngine) patch.ocrEngine = state.ocrEngine;
         if (state.ocrLanguage !== previous.ocrLanguage) patch.ocrLanguage = state.ocrLanguage;
         if (state.theme !== previous.theme) patch.theme = state.theme;
         if (state.overlayOpacity !== previous.overlayOpacity) {
           patch.overlayOpacity = state.overlayOpacity;
+        }
+        if (state.fontSize !== previous.fontSize) patch.fontSize = state.fontSize;
+        if (state.showCrosshairs !== previous.showCrosshairs) patch.showCrosshairs = state.showCrosshairs;
+        if (state.aiPromptTemplate !== previous.aiPromptTemplate) patch.aiPromptTemplate = state.aiPromptTemplate;
+        if (state.autoHideOnBlur !== previous.autoHideOnBlur) {
+          patch.autoHideOnBlur = state.autoHideOnBlur;
+        }
+        if (state.targetLanguage !== previous.targetLanguage) {
+          patch.targetLanguage = state.targetLanguage;
+        }
+        if (state.ocrPictureDefaultView !== previous.ocrPictureDefaultView) {
+          patch.ocrPictureDefaultView = state.ocrPictureDefaultView;
+        }
+        if (state.acrylicEffect !== previous.acrylicEffect) {
+          patch.acrylicEffect = state.acrylicEffect;
         }
 
         if (Object.keys(patch).length === 0) return;
@@ -123,7 +249,7 @@ export function useBootstrap(persist: boolean) {
 
       return () => {
         disposed = true;
-        void unlisten.then((dispose) => dispose());
+        void unlisten?.then((dispose) => dispose?.());
       };
     }
 

@@ -11,7 +11,6 @@ use windows::Win32::UI::WindowsAndMessaging::{
     GetCursorPos, GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN,
     SM_YVIRTUALSCREEN, SetWindowDisplayAffinity, WDA_EXCLUDEFROMCAPTURE, WDA_NONE,
 };
-use windows::Win32::UI::Shell::{SHQueryUserNotificationState, QUNS_RUNNING_D3D_FULL_SCREEN};
 
 pub struct WindowsDesktop {
     dxgi: Mutex<Option<super::dxgi::DxgiDesktop>>,
@@ -50,6 +49,7 @@ impl Drop for CaptureDc {
         }
     }
 }
+
 
 impl WindowsDesktop {
     fn active_monitor_bounds() -> Result<ScreenRect, String> {
@@ -93,7 +93,7 @@ impl WindowsDesktop {
         Ok(bounds)
     }
 
-    fn capture_gdi(region: ScreenRect) -> Result<image::RgbaImage, String> {
+    pub(crate) fn capture_gdi(region: ScreenRect) -> Result<image::RgbaImage, String> {
         unsafe {
             let mut dc = CaptureDc {
                 screen: GetDC(None),
@@ -111,7 +111,7 @@ impl WindowsDesktop {
                 return Err("无法创建屏幕截图缓冲区。".into());
             }
             dc.previous = SelectObject(dc.memory, dc.bitmap);
-            BitBlt(
+            let blt_res = BitBlt(
                 dc.memory,
                 0,
                 0,
@@ -121,8 +121,21 @@ impl WindowsDesktop {
                 region.x,
                 region.y,
                 SRCCOPY | CAPTUREBLT,
-            )
-            .map_err(|error| format!("屏幕截图失败：{error}"))?;
+            );
+            if blt_res.is_err() {
+                BitBlt(
+                    dc.memory,
+                    0,
+                    0,
+                    region.width as i32,
+                    region.height as i32,
+                    dc.screen,
+                    region.x,
+                    region.y,
+                    SRCCOPY,
+                )
+                .map_err(|error| format!("屏幕截图失败：{error}"))?;
+            }
             SelectObject(dc.memory, dc.previous);
             dc.previous = HGDIOBJ::default();
             let mut info = BITMAPINFO {
@@ -148,7 +161,7 @@ impl WindowsDesktop {
                 DIB_RGB_COLORS,
             );
             if rows != region.height as i32 {
-                return Err("屏幕截图像素不完整。".into());
+                return Err("读取屏幕位图数据失败。".into());
             }
             for pixel in bytes.as_chunks_mut::<4>().0 {
                 pixel.swap(0, 2);
@@ -160,21 +173,32 @@ impl WindowsDesktop {
     }
 }
 
+fn is_all_black(image: &image::RgbaImage) -> bool {
+    !image.pixels().any(|p| p[0] > 0 || p[1] > 0 || p[2] > 0)
+}
+
 impl DesktopCapture for WindowsDesktop {
     fn bounds(&self) -> Result<ScreenRect, String> {
         Self::active_monitor_bounds()
     }
 
-    fn is_exclusive_fullscreen(&self) -> bool {
-        unsafe {
-            SHQueryUserNotificationState() == Ok(QUNS_RUNNING_D3D_FULL_SCREEN)
-        }
-    }
-
     fn capture(&self, region: ScreenRect) -> Result<image::RgbaImage, String> {
         region.validate()?;
 
-        // Fast path: DXGI Desktop Duplication (GPU physical scanout, handles DirectX/Vulkan/MPO without bleed-through)
+        // Primary path: GDI BitBlt captures desktop composition and borderless fullscreen games reliably
+        let gdi_result = Self::capture_gdi(region);
+        if let Ok(ref image) = gdi_result
+            && !is_all_black(image)
+        {
+            return gdi_result;
+        }
+
+        let gdi_was_black = match &gdi_result {
+            Ok(img) => is_all_black(img),
+            Err(_) => false,
+        };
+
+        // Fallback to DXGI only if GDI failed or returned an all-black frame
         let dxgi_capture = {
             let mut guard = self.dxgi.lock().unwrap();
             if guard.is_none() {
@@ -183,12 +207,22 @@ impl DesktopCapture for WindowsDesktop {
             guard.as_ref().map(|d| d.capture_output(region))
         };
 
+        let dxgi_was_black = match &dxgi_capture {
+            Some(Ok(img)) => is_all_black(img),
+            _ => false,
+        };
+
         if let Some(Ok(image)) = dxgi_capture {
-            return Ok(image);
+            if !is_all_black(&image) {
+                return Ok(image);
+            }
         }
 
-        // Resilient fallback: GDI BitBlt
-        Self::capture_gdi(region)
+        if gdi_was_black || dxgi_was_black {
+            return Err("未截取到有效画面（画面为纯黑）。通常是因为游戏处于「独占全屏」模式，请在游戏设置中将显示模式更改为「无边框窗口化 (Borderless)」即可正常取词。".into());
+        }
+
+        gdi_result
     }
 
     fn exclude(&self, window: &tauri::WebviewWindow, enabled: bool) -> Result<(), String> {

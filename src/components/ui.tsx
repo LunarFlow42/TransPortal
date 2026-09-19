@@ -245,7 +245,7 @@ export const Select: React.FC<{
       {open && (
         <ul
           role="listbox"
-          className="absolute z-50 mt-1 max-h-64 w-full overflow-y-auto rounded-[var(--r-inner)] border border-[var(--stroke)] bg-[var(--popover-bg)] p-1 shadow-[0_10px_30px_rgba(0,0,0,0.4)] backdrop-blur-xl"
+          className="absolute z-50 mt-1 max-h-64 w-full min-w-[140px] overflow-y-auto rounded-[var(--r-inner)] border border-[var(--stroke)] bg-[var(--popover-bg)] p-1 shadow-[0_12px_32px_rgba(0,0,0,0.5)] backdrop-blur-xl"
         >
           {options.map((option) => {
             const active = option.value === value;

@@ -5,6 +5,7 @@ import { BookOpen, ChevronDown, ChevronUp, Download, Loader2, Upload } from 'luc
 import { Button, IconButton, Pill, Switch } from './ui';
 import { cn } from '../utils/cn';
 import { saveSettings } from '../store/persistence';
+import { suppressAutoHide } from '../utils/autoHide';
 import type { DictProgress, DictSourceInfo, DictStatus } from '../types';
 
 /** Format large entry counts in a Chinese-friendly way. */
@@ -69,21 +70,23 @@ export const DictionaryPanel: React.FC = () => {
   };
 
   const importCsv = async () => {
-    const selected = await open({
-      multiple: false,
-      filters: [{ name: 'CSV', extensions: ['csv'] }],
-    });
-    if (typeof selected !== 'string') return;
-
-    setBusy('import');
-    setMessage('Importing dictionary… this can take a while.');
+    suppressAutoHide(120000);
     try {
+      const selected = await open({
+        multiple: false,
+        filters: [{ name: 'CSV', extensions: ['csv'] }],
+      });
+      if (typeof selected !== 'string') return;
+
+      setBusy('import');
+      setMessage('Importing dictionary… this can take a while.');
       const count = await invoke<number>('import_eccedict', { path: selected });
       setMessage(`Imported ${formatCount(count)} 词条。`);
       await refresh();
     } catch (error) {
       setMessage(String(error));
     } finally {
+      suppressAutoHide(1000);
       setBusy(null);
     }
   };

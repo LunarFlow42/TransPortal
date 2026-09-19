@@ -204,7 +204,7 @@ impl OcrService {
         if cancel.is_cancelled() { return Err("已停止自动翻译".into()); }
         let (engine, config) = self.registry.snapshot()?;
         let start = Instant::now();
-        let result = engine.recognize(image, config.language.as_deref())?;
+        let result = recognize_with_chinese_retry(engine.as_ref(), image, config.language.as_deref())?;
         if cancel.is_cancelled() { return Err("已停止自动翻译".into()); }
         Ok((result, engine.id().into(), start.elapsed().as_millis() as u64))
     }
@@ -263,6 +263,10 @@ impl OcrService {
                             ScreenEvent::DoubleCopy { clipboard_revision, window } => {
                                 let app = app.clone();
                                 tauri::async_runtime::spawn_blocking(move || crate::shortcut::on_double_copy(&app, clipboard_revision, window));
+                            }
+                            ScreenEvent::InkTranslate { window: _ } => {
+                                let app = app.clone();
+                                tauri::async_runtime::spawn_blocking(move || crate::shortcut::on_hotkey(&app));
                             }
                             ScreenEvent::Snip { clipboard_revision } => {
                                 crate::shortcut::on_system_snip(&app, clipboard_revision);
@@ -423,6 +427,9 @@ impl OcrService {
         path: PathBuf,
     ) -> Result<u64, String> {
         app.state::<super::monitor::MonitorService>().stop(app, true);
+        if self.sessions.lock().unwrap().active.is_some() {
+            self.cancel(app);
+        }
         let (engine, config) = self.registry.snapshot()?;
         let mut event = self.sessions.lock().unwrap().begin(mode, engine.id())?;
         self.translation.lock().unwrap().cancel();
@@ -507,7 +514,7 @@ impl OcrService {
             return;
         }
         let _ = app.emit_to("shell", OCR_EVENT, &event);
-        if show {
+        if show && event.mode != OcrMode::Silent {
             Self::update_window(app, &event);
         }
     }
@@ -618,7 +625,39 @@ impl OcrService {
             language,
         )
     }
+}
 
+fn recognize_with_chinese_retry(
+    engine: &dyn OcrEngine,
+    image: OcrImage<'_>,
+    language: Option<&str>,
+) -> Result<super::RecognizedText, String> {
+    let mut result = engine.recognize(image, language)?;
+    if result.text.trim().is_empty()
+        && let Ok(info) = engine.info()
+    {
+        let chinese_tag = info
+            .languages
+            .iter()
+            .find(|l| l.tag.eq_ignore_ascii_case("zh-Hans-CN"))
+            .or_else(|| info.languages.iter().find(|l| l.tag.to_ascii_lowercase().starts_with("zh-hans")))
+            .or_else(|| info.languages.iter().find(|l| l.tag.to_ascii_lowercase().starts_with("zh")))
+            .map(|l| l.tag.as_str());
+        if let Some(target_lang) = chinese_tag {
+            let already_target = language.is_some_and(|l| l.eq_ignore_ascii_case(target_lang))
+                || result.language.eq_ignore_ascii_case(target_lang);
+            if !already_target
+                && let Ok(retry_result) = engine.recognize(image, Some(target_lang))
+                && !retry_result.text.trim().is_empty()
+            {
+                result = retry_result;
+            }
+        }
+    }
+    Ok(result)
+}
+
+impl OcrService {
     fn recognize_image(
         &self,
         app: &AppHandle,
@@ -636,7 +675,7 @@ impl OcrService {
         event.stage = OcrStage::Recognizing;
         self.publish(app, event.clone(), true);
         let start = Instant::now();
-        let result = engine.recognize(image, language.as_deref())?;
+        let result = recognize_with_chinese_retry(engine.as_ref(), image, language.as_deref())?;
         event.elapsed_ms = Some(start.elapsed().as_millis() as u64);
         if result.text.trim().is_empty() {
             return Err("未识别到文字。请缩小选区、放大文字，或在设置中切换 OCR 识别语言。".into());
@@ -651,9 +690,11 @@ impl OcrService {
             if !sessions.is_current(event.id) {
                 return Ok(());
             }
-            if event.mode == OcrMode::Text {
-                // Never overwrite something the user copied while OCR was running.
-                if image_revision != 0 && self.capture.clipboard_revision() == image_revision {
+            if event.mode == OcrMode::Text || event.mode == OcrMode::Silent {
+                if event.mode == OcrMode::Silent {
+                    let _ = app.clipboard().write_text(event.text.clone());
+                    event.copied = true;
+                } else if image_revision != 0 && self.capture.clipboard_revision() == image_revision {
                     match app.clipboard().write_text(event.text.clone()) {
                         Ok(()) => event.copied = true,
                         Err(error) => {
@@ -680,7 +721,9 @@ impl OcrService {
             event.elapsed_ms.unwrap_or(0)
         );
         let _ = app.emit_to("shell", OCR_EVENT, &event);
-        Self::update_window(app, &event);
+        if event.mode != OcrMode::Silent {
+            Self::update_window(app, &event);
+        }
         Ok(())
     }
 }
@@ -692,7 +735,7 @@ mod tests {
     #[test]
     fn repeated_trigger_cannot_change_an_active_translation_to_text_only() {
         let mut state = SessionState::default();
-        let first = state.begin(OcrMode::Translate, "windows").unwrap();
+        let first = state.begin(OcrMode::Picture, "windows").unwrap();
         assert!(state.begin(OcrMode::Text, "windows").is_err());
         assert_eq!(state.active.unwrap().mode, first.mode);
     }
@@ -703,7 +746,7 @@ mod tests {
         let mut first = state.begin(OcrMode::Text, "windows").unwrap();
         first.stage = OcrStage::Cancelled;
         assert!(state.update(first.clone()));
-        let second = state.begin(OcrMode::Translate, "windows").unwrap();
+        let second = state.begin(OcrMode::Picture, "windows").unwrap();
         first.stage = OcrStage::Ready;
         first.text = "stale text".into();
         assert!(!state.update(first));
@@ -721,5 +764,76 @@ mod tests {
             assert!(!state.update(event));
             assert!(state.active.is_none());
         }
+    }
+
+    struct MockBilingualRetryEngine;
+    impl OcrEngine for MockBilingualRetryEngine {
+        fn id(&self) -> &'static str { "mock" }
+        fn info(&self) -> Result<OcrEngineInfo, String> {
+            Ok(OcrEngineInfo {
+                id: "mock".into(),
+                label: "Mock Engine".into(),
+                languages: vec![
+                    crate::ocr::OcrLanguage { tag: "en-US".into(), label: "English".into() },
+                    crate::ocr::OcrLanguage { tag: "zh-Hans-CN".into(), label: "Chinese".into() },
+                ],
+                available: true,
+                error: None,
+            })
+        }
+        fn recognize(&self, _: OcrImage<'_>, lang: Option<&str>) -> Result<crate::ocr::RecognizedText, String> {
+            if lang == Some("zh-Hans-CN") {
+                Ok(crate::ocr::RecognizedText {
+                    text: "测试文字识别".into(),
+                    language: "zh-Hans-CN".into(),
+                    blocks: vec![],
+                })
+            } else {
+                Ok(crate::ocr::RecognizedText {
+                    text: "".into(),
+                    language: "en-US".into(),
+                    blocks: vec![],
+                })
+            }
+        }
+    }
+
+    #[test]
+    fn empty_recognition_retries_with_chinese_when_available() {
+        let engine = MockBilingualRetryEngine;
+        let dummy_pixels = vec![255u8; 16];
+        let image = OcrImage { width: 2, height: 2, rgba: &dummy_pixels };
+        let result = recognize_with_chinese_retry(&engine, image, None).unwrap();
+        assert_eq!(result.text, "测试文字识别");
+        assert_eq!(result.language, "zh-Hans-CN");
+    }
+
+    #[test]
+    fn recognition_does_not_retry_if_already_chinese() {
+        struct MockAlwaysEmptyChineseEngine;
+        impl OcrEngine for MockAlwaysEmptyChineseEngine {
+            fn id(&self) -> &'static str { "mock_zh" }
+            fn info(&self) -> Result<OcrEngineInfo, String> {
+                Ok(OcrEngineInfo {
+                    id: "mock_zh".into(),
+                    label: "Mock Chinese".into(),
+                    languages: vec![crate::ocr::OcrLanguage { tag: "zh-Hans-CN".into(), label: "Chinese".into() }],
+                    available: true,
+                    error: None,
+                })
+            }
+            fn recognize(&self, _: OcrImage<'_>, _: Option<&str>) -> Result<crate::ocr::RecognizedText, String> {
+                Ok(crate::ocr::RecognizedText {
+                    text: "".into(),
+                    language: "zh-Hans-CN".into(),
+                    blocks: vec![],
+                })
+            }
+        }
+        let engine = MockAlwaysEmptyChineseEngine;
+        let dummy_pixels = vec![255u8; 16];
+        let image = OcrImage { width: 2, height: 2, rgba: &dummy_pixels };
+        let result = recognize_with_chinese_retry(&engine, image, Some("zh-Hans-CN")).unwrap();
+        assert!(result.text.is_empty());
     }
 }

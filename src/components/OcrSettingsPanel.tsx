@@ -13,8 +13,10 @@ export const OcrSettingsPanel: React.FC<{ disabled?: boolean }> = ({ disabled = 
   const language = useAppStore((state) => state.ocrLanguage);
   const engineId = useAppStore((state) => state.ocrEngine);
   const lastOcrBenchmarkMs = useAppStore((state) => state.lastOcrBenchmarkMs);
+  const ocrPictureDefaultView = useAppStore((state) => state.ocrPictureDefaultView);
   const setLanguage = useAppStore((state) => state.setOcrLanguage);
   const setEngine = useAppStore((state) => state.setOcrEngine);
+  const setOcrPictureDefaultView = useAppStore((state) => state.setOcrPictureDefaultView);
   const benchmarkOcr = useAppStore((state) => state.benchmarkOcr);
   const [changing, setChanging] = useState(false);
   const [installing, setInstalling] = useState(false);
@@ -90,6 +92,19 @@ export const OcrSettingsPanel: React.FC<{ disabled?: boolean }> = ({ disabled = 
             onChange={(value) => void setLanguage(value)}
             options={options} disabled={isOnnx || !active?.available || loading || busy} />
         </div>
+        <div className="flex items-center gap-3">
+          <label className="w-24 shrink-0 text-[13px] text-[var(--muted)]">默认图片展示</label>
+          <Select
+            ariaLabel="图片翻译默认展示"
+            value={ocrPictureDefaultView}
+            onChange={(value) => setOcrPictureDefaultView(value as 'translated' | 'original')}
+            options={[
+              { value: 'translated', label: '译图覆写（文字原位替换）' },
+              { value: 'original', label: '截图原图' },
+            ]}
+            disabled={busy}
+          />
+        </div>
         {changing && <p role="status" className="flex items-center gap-1.5 text-[11px] text-[var(--muted)]"><LoaderCircle className="h-3 w-3 animate-spin" />正在加载识别引擎…</p>}
         {status && !status.onnx.installed && (
           <div className="flex flex-col gap-2 rounded-[var(--r-inner)] border border-[var(--stroke)] p-2.5">
@@ -146,6 +161,7 @@ export const OcrSettingsPanel: React.FC<{ disabled?: boolean }> = ({ disabled = 
             ? '中英混合文本在本机识别，首次启用会加载模型。切回系统 OCR 后释放模型会话。'
             : 'Windows OCR 使用已安装的系统语言包；中文截图可明确选择中文识别器。'}
           {status?.supported ? ' 快捷键可在上方设置中自定义。' : ' 此平台可通过浮层的“打开图片”进行识别。'}
+          {' 图片翻译与对照模式下，可随时通过 Tab 键短按切换或长按临时透视原图。'}
         </p>
         {messages.map((message, index) => (
           <p key={index} role="status" className="text-[11px] leading-relaxed text-[var(--muted)]">{message}</p>

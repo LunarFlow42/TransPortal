@@ -192,10 +192,11 @@ pub async fn translate_blocks(
             let result = if let Some(text) = cached {
                 Ok(text)
             } else {
+                let resolved_target = crate::provider::resolve_target_lang(&source, Some(&target));
                 let query = TranslateQuery {
                     text: source.clone(),
                     source_lang: None,
-                    target_lang: Some(target),
+                    target_lang: Some(resolved_target),
                 };
                 match tokio::time::timeout(Duration::from_secs(30), provider.translate(&query))
                     .await

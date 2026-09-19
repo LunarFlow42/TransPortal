@@ -110,7 +110,7 @@ impl SelectionPlatform for WindowsSelection {
         }
         // Read the actual selection again; never blindly paste at a stale caret.
         let selected = match WindowsSelectionReader::new().read_selection() {
-            Ok(text) if !text.trim().is_empty() => text,
+            Ok(content) if !content.text.trim().is_empty() => content.text,
             _ => {
                 copy_selection_to_clipboard()?;
                 restore.owned_revision = Some(self.clipboard_revision());

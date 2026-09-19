@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { save } from '@tauri-apps/plugin-dialog';
 import { Copy, Download, Languages, LoaderCircle } from 'lucide-react';
 import { Button } from './ui';
+import { useAppStore } from '../store/useAppStore';
 import { renderPicture } from '../utils/picture';
 import { suppressAutoHide } from '../utils/autoHide';
 import type { OcrPicture, PictureTranslation } from '../types';
@@ -19,7 +20,8 @@ interface Props {
 
 export const PictureView: React.FC<Props> = ({ picture, translation, busy, error, target = 'zh-CN', onTarget, onTranslate }) => {
   const canvas = useRef<HTMLCanvasElement>(null);
-  const [original, setOriginal] = useState(false);
+  const original = useAppStore((state) => state.ocrPictureOriginal);
+  const toggleOriginal = useAppStore((state) => state.toggleOcrPictureOriginal);
   const [zoom, setZoom] = useState(false);
   const [editing, setEditing] = useState(true);
   const [texts, setTexts] = useState(picture.blocks.map((block) => block.text));
@@ -58,7 +60,9 @@ export const PictureView: React.FC<Props> = ({ picture, translation, busy, error
   const failures = translation?.blocks.filter((block) => block.error) ?? [];
   return <div className="mt-3 space-y-2">
     <div className="flex flex-wrap items-center gap-2 text-xs">
-      <Button size="sm" variant={original ? 'primary' : 'subtle'} onClick={() => setOriginal(!original)}>{original ? '查看译图' : '查看原图'}</Button>
+      <Button size="sm" variant={original ? 'primary' : 'subtle'} onClick={toggleOriginal} title="快捷键 Tab：短按切换，长按透视原图">
+        {original ? '查看译图 (Tab)' : '查看原图 (Tab)'}
+      </Button>
       <Button size="sm" variant="subtle" onClick={() => setZoom(!zoom)}>{zoom ? '适应窗口' : '100% 大小'}</Button>
       <span className="ml-auto text-[10px] text-[var(--faint)]">{picture.width} × {picture.height} · {picture.blocks.length} 段</span>
     </div>
@@ -67,7 +71,7 @@ export const PictureView: React.FC<Props> = ({ picture, translation, busy, error
     </div>
     <div className="flex flex-wrap items-center gap-2">
       {onTranslate && <>
-        <select aria-label="图片翻译目标语言" value={target} disabled={busy} onChange={(e) => onTarget?.(e.target.value)} className="focus-ring rounded-md bg-[var(--surface-2)] p-1.5 text-xs">
+        <select aria-label="图片翻译目标语言" value={target} disabled={busy} onChange={(e) => onTarget?.(e.target.value)} className="cursor-pointer focus-ring rounded-md border border-[var(--stroke)] bg-[var(--surface-2)] p-1.5 text-xs text-[var(--text)]">
           <option value="zh-CN">简体中文</option><option value="en">English</option><option value="ja">日本語</option><option value="ko">한국어</option>
         </select>
         <Button size="sm" variant="primary" disabled={busy || !texts.length || texts.some((text) => !text.trim())} onClick={() => onTranslate(texts)}>

@@ -14,6 +14,7 @@ pub struct OpenAiConfig {
     pub model: Option<String>,
     pub temperature: Option<f32>,
     pub system_prompt: Option<String>,
+    pub prompt_template: Option<String>,
 }
 
 impl Default for OpenAiConfig {
@@ -24,6 +25,7 @@ impl Default for OpenAiConfig {
             model: Some("gpt-4o-mini".to_string()),
             temperature: Some(0.3),
             system_prompt: None,
+            prompt_template: None,
         }
     }
 }
@@ -56,9 +58,14 @@ impl OpenAiCompatibleProvider {
         if let Some(prompt) = self.config.system_prompt.as_deref().filter(|s| !s.trim().is_empty()) {
             return prompt.to_string();
         }
-        format!(
-            "You are a high-speed professional translator and dictionary assistant. Translate the following user input accurately and naturally into {target_lang}. Provide only the pure translation or explanation, with no preamble or conversational remarks."
-        )
+        match self.config.prompt_template.as_deref() {
+            Some("academic") => format!("You are a professional academic translator and editor. Translate or polish the following text into formal, natural academic {target_lang} with scholarly vocabulary. Provide only the translation, with no conversational remarks."),
+            Some("code") => format!("You are an expert developer translator. Translate the following text into concise, technical {target_lang} suitable for code comments, commit messages, or variable naming conventions. Provide only the pure translation, with no explanation."),
+            Some("casual") => format!("You are a native conversational translator. Translate the following text into casual, everyday colloquial {target_lang}. Provide only the translation, with no conversational remarks."),
+            _ => format!(
+                "You are a high-speed professional translator and dictionary assistant. Translate the following user input accurately and naturally into {target_lang}. Provide only the pure translation or explanation, with no preamble or conversational remarks."
+            ),
+        }
     }
 
     /// Non-streaming chat completion with an explicit system prompt.

@@ -17,6 +17,7 @@ pub mod ocr;
 pub mod integrity;
 pub mod desktop;
 pub mod selection;
+pub mod memory;
 
 /// Mark only our synthesized input, leaving accessibility/remapped keys usable.
 pub(crate) const INPUT_MARKER: usize = 0x54524e53;
@@ -27,13 +28,50 @@ mod fallback;
 mod windows;
 
 #[cfg(not(target_os = "windows"))]
-pub use fallback::configure_transparent_window;
+pub use fallback::{
+    configure_transparent_window, get_global_cursor_pos, place_window_smartly,
+    resize_and_clamp_window, set_window_acrylic, set_window_theme,
+};
 #[cfg(not(target_os = "windows"))]
 use fallback::FallbackSelectionReader;
 #[cfg(target_os = "windows")]
-pub use windows::configure_transparent_window;
+pub use windows::{
+    configure_transparent_window, get_global_cursor_pos, place_window_smartly,
+    resize_and_clamp_window, set_window_acrylic, set_window_theme,
+};
 #[cfg(target_os = "windows")]
 use windows::WindowsSelectionReader;
+
+/// Screen bounding box of selected text in physical pixels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SelectionBounds {
+    pub left: i32,
+    pub top: i32,
+    pub width: i32,
+    pub height: i32,
+}
+
+impl SelectionBounds {
+    pub fn union(&self, other: &Self) -> Self {
+        let left = self.left.min(other.left);
+        let top = self.top.min(other.top);
+        let right = (self.left + self.width).max(other.left + other.width);
+        let bottom = (self.top + self.height).max(other.top + other.height);
+        Self {
+            left,
+            top,
+            width: (right - left).max(0),
+            height: (bottom - top).max(0),
+        }
+    }
+}
+
+/// Content returned by a native selection reader.
+#[derive(Debug, Clone)]
+pub struct SelectionContent {
+    pub text: String,
+    pub bounds: Option<SelectionBounds>,
+}
 
 /// How a piece of text was captured.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -53,6 +91,7 @@ pub struct CaptureOutcome {
     /// Populated when the preferred method failed, even if the fallback worked.
     pub error: Option<String>,
     pub replace_token: Option<u64>,
+    pub bounds: Option<SelectionBounds>,
 }
 
 /// Platform-agnostic abstraction over native selected-text retrieval.
@@ -60,7 +99,7 @@ pub trait SelectionReader: Send + Sync {
     /// Human-readable identifier of the concrete strategy.
     fn method(&self) -> CaptureMethod;
     /// Attempt to read the current foreground selection.
-    fn read_selection(&self) -> Result<String, String>;
+    fn read_selection(&self) -> Result<SelectionContent, String>;
 }
 
 /// Instantiate the best reader available for the current target.
@@ -103,6 +142,7 @@ fn read_clipboard_with_retry(app: &AppHandle) -> CaptureOutcome {
                     method: CaptureMethod::Clipboard,
                     error: None,
                     replace_token: None,
+                    bounds: None,
                 };
             }
             Ok(_) => last_error = "clipboard is empty".to_string(),
@@ -116,6 +156,7 @@ fn read_clipboard_with_retry(app: &AppHandle) -> CaptureOutcome {
         method: CaptureMethod::Clipboard,
         error: Some(last_error),
         replace_token: None,
+        bounds: None,
     }
 }
 
@@ -129,13 +170,14 @@ pub fn capture_selected_text(app: &AppHandle) -> CaptureOutcome {
     let reader = platform_reader();
 
     let preferred_error = match reader.read_selection() {
-        Ok(text) if !text.trim().is_empty() => {
-            eprintln!("[capture] UI Automation returned {} chars", text.trim().len());
+        Ok(content) if !content.text.trim().is_empty() => {
+            eprintln!("[capture] UI Automation returned {} chars", content.text.trim().len());
             return CaptureOutcome {
-                text: normalize(&text),
+                text: normalize(&content.text),
                 method: reader.method(),
                 error: None,
                 replace_token: None,
+                bounds: content.bounds,
             };
         }
         Ok(_) => Some("UI Automation returned an empty selection".to_string()),
@@ -149,8 +191,13 @@ pub fn capture_selected_text(app: &AppHandle) -> CaptureOutcome {
     let copy_error = copy_selection_to_clipboard().err();
     if let Some(ref err) = copy_error {
         eprintln!("[capture] Ctrl+C fallback issue: {err}");
-        return CaptureOutcome { text: String::new(), method: CaptureMethod::Clipboard,
-            error: Some(format!("本次取词未复制到新文字：{err}")), replace_token: None };
+        return CaptureOutcome {
+            text: String::new(),
+            method: CaptureMethod::Clipboard,
+            error: Some(format!("本次取词未复制到新文字：{err}")),
+            replace_token: None,
+            bounds: None,
+        };
     }
 
     let mut outcome = read_clipboard_with_retry(app);

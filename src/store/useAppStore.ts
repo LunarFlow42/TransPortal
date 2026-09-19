@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { invoke, Channel } from '@tauri-apps/api/core';
 import { forgetScrollTops } from '../utils/scrollMemory';
 import { isNewOcrEvent } from '../utils/ocr';
+import { resolveTargetLanguage } from '../utils/language';
 import type {
   Density,
   DictEntry,
@@ -18,6 +19,7 @@ import type {
   ThemeMode,
   OcrEvent,
   OcrMode,
+  ShortcutActionId,
   OcrEngineId,
   OcrConfig,
   TextIntent,
@@ -49,9 +51,15 @@ interface AppState {
   ocrPictureTranslation: PictureTranslation | null;
   ocrPictureBusy: boolean;
   ocrPictureError: string | null;
+  ocrPictureOriginal: boolean;
+  ocrPictureDefaultView: 'translated' | 'original';
   ocrTarget: string;
   autoOcr: MonitorUpdate | null;
   autoOcrRevision: number;
+
+  setOcrPictureOriginal: (original: boolean) => void;
+  toggleOcrPictureOriginal: () => void;
+  setOcrPictureDefaultView: (view: 'translated' | 'original') => void;
 
   // Provider & Config
   provider: ProviderType;
@@ -60,7 +68,16 @@ interface AppState {
   ankiStatus: AnkiStatus;
   ankiMessage: string | null;
   hotkey: string;
+  ocrCardHotkey: string;
+  ocrPictureHotkey: string;
+  ocrTextHotkey: string;
+  replaceSelectionHotkey: string;
+  silentOcrHotkey: string;
+  inputTranslateHotkey: string;
+  inkTranslateKey: string;
   doubleCopyEnabled: boolean;
+  clipboardMonitorEnabled: boolean;
+  autoPronounce: boolean;
   ocrEngine: OcrEngineId;
   ocrLanguage: string;
   lastOcrBenchmarkMs: number | null;
@@ -68,19 +85,40 @@ interface AppState {
   pinned: boolean;
   theme: ThemeMode;
   overlayOpacity: number;
+  fontSize: number;
+  showCrosshairs: boolean;
+  aiPromptTemplate: 'direct' | 'academic' | 'code' | 'casual';
+  backTranslation: { text: string; loading: boolean; error: string | null } | null;
+  history: string[];
+  historyIndex: number;
+  autoHideOnBlur: boolean;
+  targetLanguage: string;
+  acrylicEffect: boolean;
 
   // Config actions
   setProvider: (provider: ProviderType) => void;
   setOpenaiConfig: (config: Partial<OpenAiConfig>) => void;
   setAnkiConfig: (config: Partial<AnkiConfig>) => void;
   setHotkey: (hotkey: string) => Promise<boolean>;
+  setShortcut: (action: ShortcutActionId, accelerator: string) => Promise<boolean>;
   setDoubleCopyEnabled: (enabled: boolean) => Promise<boolean>;
+  setClipboardMonitorEnabled: (enabled: boolean) => Promise<void>;
+  setInkTranslateKey: (key: string) => Promise<void>;
+  setFontSize: (size: number) => void;
+  setShowCrosshairs: (show: boolean) => void;
+  setAiPromptTemplate: (template: 'direct' | 'academic' | 'code' | 'casual') => void;
+  runBackTranslation: () => Promise<void>;
+  navigateHistory: (direction: 'prev' | 'next') => void;
+  setAutoPronounce: (enabled: boolean) => void;
+  setAutoHideOnBlur: (enabled: boolean) => void;
+  setTargetLanguage: (targetLanguage: string) => void;
   setOcrLanguage: (language: string) => Promise<boolean>;
   setOcrEngine: (engine: OcrEngineId) => Promise<boolean>;
   setOcrConfig: (engine: OcrEngineId, language: string) => Promise<boolean>;
   benchmarkOcr: () => Promise<number>;
   setTheme: (theme: ThemeMode) => void;
   setOverlayOpacity: (opacity: number) => void;
+  setAcrylicEffect: (enabled: boolean) => void;
   togglePinned: () => void;
   hydrate: (settings: Partial<PersistedSettings>) => void;
 
@@ -129,6 +167,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   ocrPictureTranslation: null,
   ocrPictureBusy: false,
   ocrPictureError: null,
+  ocrPictureOriginal: false,
+  ocrPictureDefaultView: 'translated',
   ocrTarget: 'zh-CN',
   autoOcr: null,
   autoOcrRevision: -1,
@@ -148,7 +188,16 @@ export const useAppStore = create<AppState>((set, get) => ({
   ankiStatus: 'idle',
   ankiMessage: null,
   hotkey: 'Alt+Q',
+  ocrCardHotkey: 'Alt+Shift+X',
+  ocrPictureHotkey: 'Alt+S',
+  ocrTextHotkey: 'Alt+Shift+S',
+  replaceSelectionHotkey: 'Alt+Z',
+  silentOcrHotkey: 'Alt+Shift+C',
+  inputTranslateHotkey: 'Alt+Space',
+  inkTranslateKey: 'None',
   doubleCopyEnabled: true,
+  clipboardMonitorEnabled: false,
+  autoPronounce: true,
   ocrEngine: 'windows',
   ocrLanguage: 'auto',
   lastOcrBenchmarkMs: null,
@@ -156,21 +205,45 @@ export const useAppStore = create<AppState>((set, get) => ({
   pinned: false,
   theme: 'system',
   overlayOpacity: 0.72,
+  fontSize: 14,
+  showCrosshairs: true,
+  aiPromptTemplate: 'direct',
+  backTranslation: null,
+  history: [],
+  historyIndex: -1,
+  autoHideOnBlur: true,
+  targetLanguage: 'zh-CN',
+  acrylicEffect: false,
+
+  setOcrPictureOriginal: (ocrPictureOriginal) => set({ ocrPictureOriginal }),
+  toggleOcrPictureOriginal: () => set((state) => ({ ocrPictureOriginal: !state.ocrPictureOriginal })),
+  setOcrPictureDefaultView: (ocrPictureDefaultView) => set({ ocrPictureDefaultView }),
 
   setProvider: (provider) => set({ provider }),
   setOpenaiConfig: (config) =>
     set((state) => ({ openaiConfig: { ...state.openaiConfig, ...config } })),
   setAnkiConfig: (config) =>
     set((state) => ({ ankiConfig: { ...state.ankiConfig, ...config } })),
-  setHotkey: async (hotkey) => {
+  setShortcut: async (action, accelerator) => {
     try {
-      await invoke('set_hotkey', { accelerator: hotkey });
-      set({ hotkey, settingsError: null });
+      await invoke('set_shortcut', { action, accelerator });
+      const patch: Partial<AppState> = { settingsError: null };
+      if (action === 'selection') patch.hotkey = accelerator;
+      else if (action === 'ocr_card') patch.ocrCardHotkey = accelerator;
+      else if (action === 'ocr_picture' || action === 'ocr_translate') patch.ocrPictureHotkey = accelerator;
+      else if (action === 'ocr_text') patch.ocrTextHotkey = accelerator;
+      else if (action === 'replace_selection') patch.replaceSelectionHotkey = accelerator;
+      else if (action === 'silent_ocr') patch.silentOcrHotkey = accelerator;
+      else if (action === 'input_translate') patch.inputTranslateHotkey = accelerator;
+      set(patch);
       return true;
     } catch (error) {
       set({ settingsError: String(error) });
       return false;
     }
+  },
+  setHotkey: async (hotkey) => {
+    return get().setShortcut('selection', hotkey);
   },
   setDoubleCopyEnabled: async (doubleCopyEnabled) => {
     try {
@@ -179,6 +252,89 @@ export const useAppStore = create<AppState>((set, get) => ({
       return true;
     } catch (error) { set({ settingsError: String(error) }); return false; }
   },
+  setClipboardMonitorEnabled: async (enabled) => {
+    try {
+      await invoke('set_clipboard_monitor_enabled', { enabled });
+      set({ clipboardMonitorEnabled: enabled, settingsError: null });
+    } catch (error) {
+      set({ settingsError: String(error) });
+    }
+  },
+  setInkTranslateKey: async (key) => {
+    try {
+      await invoke('set_ink_translate_key', { key });
+      set({ inkTranslateKey: key, settingsError: null });
+    } catch (error) {
+      set({ settingsError: String(error) });
+    }
+  },
+  setFontSize: (fontSize) => set({ fontSize }),
+  setShowCrosshairs: (showCrosshairs) => set({ showCrosshairs }),
+  setAiPromptTemplate: (aiPromptTemplate) => {
+    set({ aiPromptTemplate });
+    get().setOpenaiConfig({ prompt_template: aiPromptTemplate });
+  },
+  runBackTranslation: async () => {
+    const { lookupStack, provider, openaiConfig, targetLanguage } = get();
+    const node = lookupStack[lookupStack.length - 1];
+    if (!node || !node.translation) return;
+
+    set({ backTranslation: { text: '', loading: true, error: null } });
+
+    const backTarget = targetLanguage.startsWith('zh') ? 'en' : 'zh-CN';
+    let accumulated = '';
+    const channel = new Channel<StreamChunk>();
+    channel.onmessage = (chunk) => {
+      if (chunk.error) {
+        set({ backTranslation: { text: accumulated, loading: false, error: chunk.error } });
+        return;
+      }
+      if (chunk.text) {
+        accumulated += chunk.text;
+        set({ backTranslation: { text: accumulated, loading: true, error: null } });
+      }
+      if (chunk.is_done) {
+        set({ backTranslation: { text: accumulated, loading: false, error: null } });
+      }
+    };
+
+    try {
+      await invoke('translate_stream', {
+        query: { text: node.translation, target_lang: backTarget },
+        provider,
+        openaiConfig: provider === 'openai' ? openaiConfig : null,
+        onChunk: channel,
+      });
+    } catch (err: unknown) {
+      set({ backTranslation: { text: accumulated, loading: false, error: String(err) } });
+    }
+  },
+  navigateHistory: (direction) => {
+    const { history, historyIndex } = get();
+    if (history.length === 0) return;
+    let newIndex = historyIndex;
+    if (direction === 'prev') {
+      if (newIndex === -1) {
+        newIndex = history.length - 2;
+      } else if (newIndex > 0) {
+        newIndex -= 1;
+      }
+    } else if (direction === 'next') {
+      if (newIndex !== -1 && newIndex < history.length - 1) {
+        newIndex += 1;
+      }
+    }
+    if (newIndex >= 0 && newIndex < history.length && newIndex !== historyIndex) {
+      set({ historyIndex: newIndex });
+      const item = history[newIndex];
+      if (item) {
+        void get().processText(item);
+      }
+    }
+  },
+  setAutoPronounce: (autoPronounce) => set({ autoPronounce }),
+  setAutoHideOnBlur: (autoHideOnBlur) => set({ autoHideOnBlur }),
+  setTargetLanguage: (targetLanguage) => set({ targetLanguage, ocrTarget: targetLanguage }),
   setOcrLanguage: (language) => get().setOcrConfig(get().ocrEngine, language),
   setOcrEngine: (engine) => get().setOcrConfig(engine, 'auto'),
   setOcrConfig: async (ocrEngine, ocrLanguage) => {
@@ -205,7 +361,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   setTheme: (theme) => set({ theme }),
   setOverlayOpacity: (overlayOpacity) => set({ overlayOpacity }),
-  togglePinned: () => set((state) => ({ pinned: !state.pinned })),
+  setAcrylicEffect: (acrylicEffect) => set({ acrylicEffect }),
+  togglePinned: () =>
+    set((state) => {
+      const nextPinned = !state.pinned;
+      invoke('set_window_pinned', { pinned: nextPinned }).catch(() => {});
+      return { pinned: nextPinned };
+    }),
 
   hydrate: (settings) =>
     set((state) => ({
@@ -213,11 +375,28 @@ export const useAppStore = create<AppState>((set, get) => ({
       openaiConfig: settings.openaiConfig ?? state.openaiConfig,
       ankiConfig: settings.ankiConfig ?? state.ankiConfig,
       hotkey: settings.hotkey ?? state.hotkey,
+      ocrCardHotkey: settings.ocrCardHotkey ?? state.ocrCardHotkey,
+      ocrPictureHotkey: settings.ocrPictureHotkey ?? state.ocrPictureHotkey,
+      ocrTextHotkey: settings.ocrTextHotkey ?? state.ocrTextHotkey,
+      replaceSelectionHotkey: settings.replaceSelectionHotkey ?? state.replaceSelectionHotkey,
+      silentOcrHotkey: settings.silentOcrHotkey ?? state.silentOcrHotkey,
+      inputTranslateHotkey: settings.inputTranslateHotkey ?? state.inputTranslateHotkey,
+      inkTranslateKey: settings.inkTranslateKey ?? state.inkTranslateKey,
       doubleCopyEnabled: settings.doubleCopyEnabled ?? state.doubleCopyEnabled,
+      clipboardMonitorEnabled: settings.clipboardMonitorEnabled ?? state.clipboardMonitorEnabled,
+      autoPronounce: settings.autoPronounce ?? state.autoPronounce,
       ocrEngine: settings.ocrEngine ?? state.ocrEngine,
       ocrLanguage: settings.ocrLanguage ?? state.ocrLanguage,
       theme: settings.theme ?? state.theme,
       overlayOpacity: settings.overlayOpacity ?? state.overlayOpacity,
+      fontSize: settings.fontSize ?? state.fontSize,
+      showCrosshairs: settings.showCrosshairs ?? state.showCrosshairs,
+      aiPromptTemplate: settings.aiPromptTemplate ?? state.aiPromptTemplate,
+      autoHideOnBlur: settings.autoHideOnBlur ?? state.autoHideOnBlur,
+      targetLanguage: settings.targetLanguage ?? state.targetLanguage,
+      ocrTarget: settings.targetLanguage ?? state.ocrTarget,
+      ocrPictureDefaultView: settings.ocrPictureDefaultView ?? state.ocrPictureDefaultView,
+      acrylicEffect: settings.acrylicEffect ?? state.acrylicEffect,
     })),
 
   applyCapture: (outcome) => {
@@ -241,13 +420,19 @@ export const useAppStore = create<AppState>((set, get) => ({
       return;
     }
     if (event.stage === 'capturing') get().clearLookup();
-    if (event.stage === 'ready' && event.mode === 'translate') {
+    if (event.stage === 'ready' && (event.mode === 'picture' || (event.mode as string) === 'translate')) {
       if (event.picture) {
-        set({ ocr: event, capture: null, errorMessage: null, ocrImageView: true });
+        const isOriginal = get().ocrPictureDefaultView === 'original';
+        set({ ocr: event, capture: null, errorMessage: null, ocrImageView: true, ocrPictureOriginal: isOriginal });
         void get().translateOcrPicture();
         return;
       }
       get().translateOcrText(event.text);
+      return;
+    }
+    if (event.stage === 'ready' && event.mode === 'card') {
+      const isOriginal = get().ocrPictureDefaultView === 'original';
+      set({ ocr: event, capture: null, errorMessage: null, ocrImageView: false, ocrPictureOriginal: isOriginal });
       return;
     }
     // Text-only OCR has no call into detect_intent, dictionary or providers.
@@ -274,7 +459,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   cancelOcr: () => {
     pictureRequest++;
-    set({ ocrPictureBusy: false });
+    const isOriginal = get().ocrPictureDefaultView === 'original';
+    set({ ocrPictureBusy: false, ocrPictureOriginal: isOriginal });
     const current = get().ocr;
     if (current) {
       set({ ocr: null, lastOcrEvent: { ...current, stage: 'cancelled' } });
@@ -292,7 +478,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { ocr, provider, openaiConfig, ocrTarget } = get();
     if (!ocr?.picture || ocr.stage !== 'ready') return;
     const request = ++pictureRequest;
-    set({ ocrImageView: true, ocrPictureBusy: true, ocrPictureError: null, ocrPictureTranslation: null });
+    set({
+      ocrImageView: ocr.mode === 'card' ? get().ocrImageView : true,
+      ocrPictureBusy: true,
+      ocrPictureError: null,
+      ocrPictureTranslation: null,
+    });
     const current = () => request === pictureRequest && get().ocr?.id === ocr.id;
     try {
       const result = await invoke<PictureTranslation>('translate_ocr_picture', {
@@ -329,7 +520,23 @@ export const useAppStore = create<AppState>((set, get) => ({
     const session = ++lookupSession;
     streamTokens.clear();
     forgetScrollTops();
-    set({ lookupStack: [], ocr: null, errorMessage: null, ankiStatus: 'idle', ankiMessage: null });
+    set((state) => {
+      const history = [...state.history];
+      if (history[history.length - 1] !== clean) {
+        history.push(clean);
+        if (history.length > 50) history.shift();
+      }
+      return {
+        lookupStack: [],
+        ocr: null,
+        errorMessage: null,
+        ankiStatus: 'idle',
+        ankiMessage: null,
+        history,
+        historyIndex: -1,
+        backTranslation: null,
+      };
+    });
 
     try {
       const intentRes = forceIntent
@@ -445,6 +652,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     pictureRequest++;
     streamTokens.clear();
     forgetScrollTops();
+    const isOriginal = get().ocrPictureDefaultView === 'original';
     set({
       lookupStack: [],
       ocr: null,
@@ -452,6 +660,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       ocrPictureTranslation: null,
       ocrPictureBusy: false,
       ocrPictureError: null,
+      ocrPictureOriginal: isOriginal,
       errorMessage: null,
       ankiStatus: 'idle',
       ankiMessage: null,
@@ -508,8 +717,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     };
 
     try {
+      const target_lang = resolveTargetLanguage(text, get().targetLanguage);
       await invoke('translate_stream', {
-        query: { text, target_lang: 'zh-CN' },
+        query: { text, target_lang },
         provider,
         openaiConfig: provider === 'openai' ? openaiConfig : null,
         onChunk: channel,

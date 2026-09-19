@@ -119,16 +119,36 @@ export interface LookupNode {
 
 export type CaptureMethod = 'ui_automation' | 'clipboard' | 'ocr';
 
+export interface SelectionBounds {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
 export interface CaptureOutcome {
   text: string;
   method: CaptureMethod;
   error?: string | null;
   replace_token?: number | null;
+  bounds?: SelectionBounds | null;
 }
 
-export type OcrMode = 'text' | 'translate';
+export type OcrMode = 'text' | 'picture' | 'card' | 'silent' | 'translate';
+
+export type ShortcutActionId =
+  | 'selection'
+  | 'ocr_card'
+  | 'ocr_picture'
+  | 'ocr_text'
+  | 'double_copy'
+  | 'replace_selection'
+  | 'silent_ocr'
+  | 'input_translate'
+  | 'ocr_translate';
+
 export interface ShortcutStatus {
-  id: 'selection' | 'ocr_translate' | 'ocr_text' | 'double_copy';
+  id: ShortcutActionId;
   label: string;
   requested: string;
   active: string | null;
@@ -194,8 +214,8 @@ export interface PictureTranslation {
 }
 
 export interface ScreenRect { x: number; y: number; width: number; height: number }
-export type RegionPurpose = 'text' | 'translate' | 'monitor';
-export interface RegionSelection { id: number; purpose: RegionPurpose; bounds: ScreenRect }
+export type RegionPurpose = 'text' | 'translate' | 'picture' | 'card' | 'silent' | 'monitor';
+export interface RegionSelection { id: number; purpose: RegionPurpose; bounds: ScreenRect; image_data_url?: string | null }
 export interface MonitorUpdate {
   id: number;
   revision: number;
@@ -258,6 +278,7 @@ export interface OpenAiConfig {
   model?: string;
   temperature?: number;
   system_prompt?: string;
+  prompt_template?: 'direct' | 'academic' | 'code' | 'casual' | string;
 }
 
 export interface AnkiConfig {
@@ -273,7 +294,16 @@ export interface PersistedSettings {
   openaiConfig: OpenAiConfig;
   ankiConfig: AnkiConfig;
   hotkey: string;
+  ocrCardHotkey?: string;
+  ocrPictureHotkey?: string;
+  ocrTextHotkey?: string;
+  replaceSelectionHotkey?: string;
+  silentOcrHotkey?: string;
+  inputTranslateHotkey?: string;
+  inkTranslateKey?: string;
   doubleCopyEnabled: boolean;
+  clipboardMonitorEnabled?: boolean;
+  autoPronounce: boolean;
   ocrEngine: OcrEngineId;
   /** `auto` uses Windows profile languages, otherwise an installed BCP-47 tag. */
   ocrLanguage: string;
@@ -281,5 +311,26 @@ export interface PersistedSettings {
   theme: ThemeMode;
   /** Overlay glass opacity, 0.25–1.0. */
   overlayOpacity: number;
+  fontSize?: number;
+  showCrosshairs?: boolean;
+  aiPromptTemplate?: 'direct' | 'academic' | 'code' | 'casual';
+  autoHideOnBlur: boolean;
+  targetLanguage: string;
+  ocrPictureDefaultView?: 'translated' | 'original';
+  acrylicEffect?: boolean;
   dictSources: { id: string; enabled: boolean }[];
+}
+
+export interface MemoryReport {
+  total_working_set_bytes: number;
+  total_private_bytes: number;
+  main_working_set_bytes: number;
+  process_count: number;
+}
+
+export interface TrimResult {
+  before_bytes: number;
+  after_bytes: number;
+  trimmed_bytes: number;
+  process_count: number;
 }

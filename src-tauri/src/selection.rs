@@ -42,6 +42,7 @@ fn failure(error: impl Into<String>) -> CaptureOutcome {
         method: CaptureMethod::Clipboard,
         error: Some(error.into()),
         replace_token: None,
+        bounds: None,
     }
 }
 
@@ -125,6 +126,7 @@ impl SelectionService {
                         method: CaptureMethod::Clipboard,
                         error: None,
                         replace_token: None,
+                        bounds: None,
                     },
                     Some(target),
                 ));

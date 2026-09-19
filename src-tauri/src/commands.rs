@@ -156,6 +156,13 @@ pub fn set_hotkey(accelerator: String, app: AppHandle) -> Result<(), String> {
     crate::shortcut::set_selection_hotkey(&app, &accelerator)
 }
 
+/// Configure any global shortcut action individually.
+#[tauri::command]
+pub fn set_shortcut(action: crate::shortcut::ShortcutAction, accelerator: String, app: AppHandle) -> Result<(), String> {
+    crate::shortcut::set_shortcut(&app, action, &accelerator)
+}
+
+
 #[tauri::command]
 pub fn shortcut_status(app: AppHandle) -> crate::shortcut::ShortcutReport {
     crate::shortcut::status(&app)
@@ -300,6 +307,16 @@ pub fn auto_ocr_latest(service: State<'_, crate::ocr::monitor::MonitorService>) 
 #[tauri::command]
 pub fn region_selection(service: State<'_, crate::ocr::region::RegionService>) -> Option<crate::ocr::region::RegionSelection> { service.selection() }
 
+/// Stream raw RGBA physical pixels for zero-latency, 100% lossless canvas freeze.
+#[tauri::command]
+pub fn get_frozen_pixels(
+    id: u64,
+    service: State<'_, crate::ocr::region::RegionService>,
+) -> Result<tauri::ipc::Response, String> {
+    let raw = service.get_frozen_pixels(id)?;
+    Ok(tauri::ipc::Response::new(raw))
+}
+
 #[tauri::command]
 pub fn confirm_region(id: u64, region: crate::native::desktop::ScreenRect, app: AppHandle) -> Result<(), String> {
     crate::ocr::region::confirm(&app, id, region)
@@ -438,6 +455,16 @@ pub fn set_double_copy_enabled(enabled: bool, app: AppHandle) {
 }
 
 #[tauri::command]
+pub fn set_clipboard_monitor_enabled(enabled: bool) {
+    crate::shortcut::set_clipboard_monitor_enabled(enabled);
+}
+
+#[tauri::command]
+pub fn set_ink_translate_key(key: String) {
+    crate::shortcut::set_ink_translate_key(&key);
+}
+
+#[tauri::command]
 pub async fn replace_captured_selection(token: u64, text: String, app: AppHandle) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || app.state::<crate::selection::SelectionService>().replace(&app, token, &text))
         .await.map_err(|error| error.to_string())?
@@ -450,15 +477,27 @@ pub struct CursorPosition {
     pub y: f64,
 }
 
-/// Return the current cursor position in physical screen coordinates.
+/// Return the current cursor position in physical screen coordinates across all monitors.
 #[tauri::command]
 pub fn get_cursor_position(app: AppHandle) -> Option<CursorPosition> {
+    if let Some((x, y)) = crate::native::get_global_cursor_pos() {
+        return Some(CursorPosition {
+            x: x as f64,
+            y: y as f64,
+        });
+    }
     app.get_webview_window("shell")
         .and_then(|window| window.cursor_position().ok())
         .map(|position| CursorPosition {
             x: position.x,
             y: position.y,
         })
+}
+
+/// Sets whether the shell overlay window is pinned in place.
+#[tauri::command]
+pub fn set_window_pinned(pinned: bool) {
+    crate::shortcut::set_pinned(pinned);
 }
 
 /// Probe AnkiConnect and return its API version.
@@ -518,6 +557,49 @@ fn parse_examples(content: &str) -> Vec<ExampleSentence> {
     }
 
     serde_json::from_str::<Vec<ExampleSentence>>(&content[start..=end]).unwrap_or_default()
+}
+
+#[tauri::command]
+pub async fn open_settings_window(app: AppHandle) -> Result<(), String> {
+    crate::open_or_focus_settings(&app)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn resize_and_clamp_window(
+    window: tauri::WebviewWindow,
+    width: f64,
+    height: f64,
+) -> Result<(), String> {
+    crate::native::resize_and_clamp_window(&window, width, height)
+}
+
+#[tauri::command]
+pub fn set_window_acrylic(
+    window: tauri::WebviewWindow,
+    enabled: bool,
+) -> Result<(), String> {
+    crate::native::set_window_acrylic(&window, enabled);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn set_window_theme(
+    window: tauri::WebviewWindow,
+    dark: bool,
+) -> Result<(), String> {
+    crate::native::set_window_theme(&window, dark);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_memory_usage() -> Result<crate::native::memory::MemoryReport, String> {
+    crate::native::memory::get_memory_usage()
+}
+
+#[tauri::command]
+pub fn trim_memory() -> Result<crate::native::memory::TrimResult, String> {
+    crate::native::memory::trim_memory()
 }
 
 #[cfg(test)]

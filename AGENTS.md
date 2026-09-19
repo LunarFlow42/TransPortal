@@ -15,10 +15,15 @@ Frontend (repo root):
 Backend (`src-tauri/`):
 
 - Check: `cargo check`
-- Tests: `cargo test`
+- Tests: `cargo test` (or focused tests e.g. `cargo test commands::tests`)
 - Lint: `cargo clippy`
 
-Always run `cargo check` + `cargo test` and `pnpm exec tsc --noEmit` (or `pnpm build`) after changes.
+### Development & Testing Tips
+
+- **日常开发调试**：继续使用 `pnpm tauri dev` 即可，其增量编译与热重载缓存非常成熟。
+- **快速语法与类型检查**：直接在 `src-tauri/` 执行 `cargo check` 即可。**只要不修改 `Cargo.toml`，在已编译缓存下增量检查只需 ~5 秒**（实测 5.4s），不要有耗时心理负担。只有改动了 `Cargo.toml` 或清理了 target 时才会全量重新扫描依赖元数据（耗时 ~3 分钟）。
+- **单测优先跑特定业务模块**：验证逻辑时务必指定模块过滤运行（例如 `cargo test commands::tests` 仅需 **0.8 秒**，`cargo test dict::tests` 仅需 1 秒），避免每次全量链接所有静态大模型与 ONNX 依赖。
+- **阶段性/提交前最终校验**：在功能完整落地或提交前，再统一执行全量 `cargo check` + `cargo test` 以及 `pnpm exec tsc --noEmit`（或 `pnpm build`）。
 
 ## Conventions
 

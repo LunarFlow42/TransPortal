@@ -79,7 +79,25 @@ describe('OCR settings startup', () => {
     await vi.waitFor(() => expect(lifecycle.initialized).toHaveBeenCalledWith(true));
     expect(invoke).toHaveBeenCalledWith('finish_startup_checks');
     expect(emit).toHaveBeenCalledWith('transportal://settings-changed', {
-      hotkey: 'Alt+Q', doubleCopyEnabled: true, ocrEngine: 'onnx', ocrLanguage: 'auto',
+      hotkey: 'Alt+Q',
+      ocrCardHotkey: 'Alt+Shift+X',
+      ocrPictureHotkey: 'Alt+S',
+      ocrTextHotkey: 'Alt+Shift+S',
+      replaceSelectionHotkey: 'Alt+Z',
+      silentOcrHotkey: 'Alt+Shift+C',
+      inputTranslateHotkey: 'Alt+Space',
+      inkTranslateKey: 'None',
+      doubleCopyEnabled: true,
+      clipboardMonitorEnabled: false,
+      autoPronounce: true,
+      ocrEngine: 'onnx',
+      ocrLanguage: 'auto',
+      fontSize: 14,
+      showCrosshairs: true,
+      aiPromptTemplate: 'direct',
+      autoHideOnBlur: true,
+      targetLanguage: 'zh-CN',
+      ocrPictureDefaultView: 'translated',
     });
     expect(saveSettings).not.toHaveBeenCalled();
     await useAppStore.getState().setOcrEngine('windows');
@@ -127,5 +145,15 @@ describe('OCR settings startup', () => {
     expect(saveSettings).not.toHaveBeenCalled();
     await useAppStore.getState().setDoubleCopyEnabled(true);
     expect(saveSettings).toHaveBeenCalledExactlyOnceWith({ doubleCopyEnabled: true });
+  });
+
+  it('restores targetLanguage setting and saves changing it in persist mode', async () => {
+    vi.mocked(loadSettings).mockResolvedValue({ targetLanguage: 'ja' });
+    mount();
+    await vi.waitFor(() => expect(lifecycle.initialized).toHaveBeenCalledWith(true));
+    expect(useAppStore.getState().targetLanguage).toBe('ja');
+    expect(saveSettings).not.toHaveBeenCalled();
+    useAppStore.getState().setTargetLanguage('en');
+    expect(saveSettings).toHaveBeenCalledWith({ targetLanguage: 'en' });
   });
 });

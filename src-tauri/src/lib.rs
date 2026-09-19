@@ -12,7 +12,7 @@ mod shortcut_sequence;
 
 use tauri::{
     AppHandle, Manager,
-    menu::{Menu, MenuItem},
+    menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
 
@@ -20,17 +20,60 @@ use tauri::{
 fn focus_shell<R: tauri::Runtime>(app: &AppHandle<R>) {
     if let Some(window) = app.get_webview_window("shell") {
         native::configure_transparent_window(&window);
+        let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();
     }
 }
 
-/// Initialize the system tray with show/hide and quit options.
+/// Dynamically create or focus the settings window on demand.
+pub fn open_or_focus_settings<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<tauri::WebviewWindow<R>, String> {
+    if let Some(window) = app.get_webview_window("settings") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+        Ok(window)
+    } else {
+        let window = tauri::WebviewWindowBuilder::new(
+            app,
+            "settings",
+            tauri::WebviewUrl::App("index.html#/settings".into()),
+        )
+        .title("TransPortal Settings")
+        .inner_size(480.0, 660.0)
+        .min_inner_size(420.0, 480.0)
+        .resizable(false)
+        .decorations(false)
+        .transparent(true)
+        .shadow(false)
+        .always_on_top(false)
+        .center()
+        .visible(true)
+        .skip_taskbar(false)
+        .build()
+        .map_err(|e| e.to_string())?;
+
+        native::configure_transparent_window(&window);
+        let win_clone = window.clone();
+        window.on_window_event(move |event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = win_clone.hide();
+            }
+        });
+        let _ = window.set_focus();
+        Ok(window)
+    }
+}
+
+/// Initialize the system tray with show/hide, settings, and quit options.
 fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let show_item = MenuItem::with_id(app, "show", "Show TransPortal", true, None::<&str>)?;
     let hide_item = MenuItem::with_id(app, "hide", "Hide to Tray", true, None::<&str>)?;
+    let settings_item = MenuItem::with_id(app, "settings", "Settings...", true, None::<&str>)?;
+    let separator = PredefinedMenuItem::separator(app)?;
     let quit_item = MenuItem::with_id(app, "quit", "Quit TransPortal", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show_item, &hide_item, &quit_item])?;
+    let menu = Menu::with_items(app, &[&show_item, &hide_item, &settings_item, &separator, &quit_item])?;
 
     if let Some(icon) = app.default_window_icon() {
         let _tray = TrayIconBuilder::new()
@@ -43,6 +86,9 @@ fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>>
                     if let Some(window) = app.get_webview_window("shell") {
                         let _ = window.hide();
                     }
+                }
+                "settings" => {
+                    let _ = open_or_focus_settings(app);
                 }
                 "quit" => {
                     app.exit(0);
@@ -138,10 +184,8 @@ pub fn run() {
             if let Some(window) = app.get_webview_window("shell") {
                 native::configure_transparent_window(&window);
             }
-            if let Some(window) = app.get_webview_window("settings") {
-                native::configure_transparent_window(&window);
-            }
             shortcut::register(app.handle());
+            shortcut::start_clipboard_monitor(app.handle());
             focus_shell(app.handle());
             Ok(())
         })
@@ -156,6 +200,7 @@ pub fn run() {
             commands::move_dict_source,
             commands::set_dict_source_order,
             commands::set_hotkey,
+            commands::set_shortcut,
             commands::shortcut_status,
             commands::finish_startup_checks,
             commands::retry_shortcuts,
@@ -175,6 +220,7 @@ pub fn run() {
             commands::begin_auto_ocr,
             commands::auto_ocr_latest,
             commands::region_selection,
+            commands::get_frozen_pixels,
             commands::confirm_region,
             commands::cancel_region,
             commands::benchmark_ocr,
@@ -184,12 +230,21 @@ pub fn run() {
             commands::download_eccedict,
             commands::capture_selection,
             commands::set_double_copy_enabled,
+            commands::set_clipboard_monitor_enabled,
+            commands::set_ink_translate_key,
             commands::replace_captured_selection,
             commands::get_cursor_position,
             commands::anki_test_connection,
             commands::anki_list_decks,
             commands::anki_add_note,
-            commands::generate_examples
+            commands::generate_examples,
+            commands::open_settings_window,
+            commands::resize_and_clamp_window,
+            commands::set_window_acrylic,
+            commands::set_window_theme,
+            commands::get_memory_usage,
+            commands::trim_memory,
+            commands::set_window_pinned
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

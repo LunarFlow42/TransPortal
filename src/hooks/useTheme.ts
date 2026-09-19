@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useAppStore } from '../store/useAppStore';
+import { setWindowAcrylic, setWindowTheme } from '../utils/windows';
 
 const QUERY = '(prefers-color-scheme: dark)';
 
@@ -11,6 +12,7 @@ const QUERY = '(prefers-color-scheme: dark)';
 export function useTheme() {
   const theme = useAppStore((state) => state.theme);
   const overlayOpacity = useAppStore((state) => state.overlayOpacity);
+  const acrylicEffect = useAppStore((state) => state.acrylicEffect);
 
   useEffect(() => {
     const media = window.matchMedia(QUERY);
@@ -21,6 +23,7 @@ export function useTheme() {
       root.dataset.theme = dark ? 'dark' : 'light';
       root.style.colorScheme = dark ? 'dark' : 'light';
       root.classList.toggle('dark', dark);
+      void setWindowTheme(dark);
     };
 
     apply();
@@ -35,4 +38,11 @@ export function useTheme() {
       overlayOpacity.toFixed(3),
     );
   }, [overlayOpacity]);
+
+  // Sync OS-level DWM Acrylic frosted glass effect and data attribute
+  useEffect(() => {
+    const root = document.documentElement;
+    root.dataset.acrylic = acrylicEffect ? 'true' : 'false';
+    void setWindowAcrylic(acrylicEffect);
+  }, [acrylicEffect]);
 }

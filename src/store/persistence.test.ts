@@ -38,4 +38,13 @@ describe('persistent OCR configuration', () => {
     await expect(loadSettings()).resolves.toMatchObject({ ocrEngine: undefined, ocrLanguage: undefined });
     expect(load).toHaveBeenCalledTimes(2);
   });
+
+  it('loads and saves acrylicEffect correctly', async () => {
+    const { data, store } = settingsFile({ acrylicEffect: true });
+    const { loadSettings, saveSettings } = await import('./persistence');
+    expect(await loadSettings()).toMatchObject({ acrylicEffect: true });
+    await saveSettings({ acrylicEffect: false });
+    expect(Object.fromEntries(data)).toEqual({ acrylicEffect: false });
+    expect(store.save).toHaveBeenCalledOnce();
+  });
 });

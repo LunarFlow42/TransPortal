@@ -80,3 +80,53 @@ describe('automatic monitor events', () => {
     } });
   });
 });
+
+describe('picture original peek/toggle state', () => {
+  it('defaults to false and toggles between translated and original view', () => {
+    expect(useAppStore.getState().ocrPictureOriginal).toBe(false);
+
+    useAppStore.getState().toggleOcrPictureOriginal();
+    expect(useAppStore.getState().ocrPictureOriginal).toBe(true);
+
+    useAppStore.getState().toggleOcrPictureOriginal();
+    expect(useAppStore.getState().ocrPictureOriginal).toBe(false);
+
+    useAppStore.getState().setOcrPictureOriginal(true);
+    expect(useAppStore.getState().ocrPictureOriginal).toBe(true);
+  });
+
+  it('resets ocrPictureOriginal to false on new OCR events, cancellation, and clearLookup', () => {
+    useAppStore.getState().setOcrPictureOriginal(true);
+    expect(useAppStore.getState().ocrPictureOriginal).toBe(true);
+
+    useAppStore.getState().applyOcrEvent(event(2));
+    expect(useAppStore.getState().ocrPictureOriginal).toBe(false);
+
+    useAppStore.getState().setOcrPictureOriginal(true);
+    useAppStore.getState().cancelOcr();
+    expect(useAppStore.getState().ocrPictureOriginal).toBe(false);
+
+    useAppStore.getState().setOcrPictureOriginal(true);
+    useAppStore.getState().clearLookup();
+    expect(useAppStore.getState().ocrPictureOriginal).toBe(false);
+  });
+
+  it('respects ocrPictureDefaultView configuration when processing new OCR events', () => {
+    expect(useAppStore.getState().ocrPictureDefaultView).toBe('translated');
+
+    // Configure default view to 'original'
+    useAppStore.getState().setOcrPictureDefaultView('original');
+    expect(useAppStore.getState().ocrPictureDefaultView).toBe('original');
+
+    useAppStore.getState().applyOcrEvent(event(3));
+    expect(useAppStore.getState().ocrPictureOriginal).toBe(true);
+
+    useAppStore.getState().clearLookup();
+    expect(useAppStore.getState().ocrPictureOriginal).toBe(true);
+
+    // Switch back to 'translated'
+    useAppStore.getState().setOcrPictureDefaultView('translated');
+    useAppStore.getState().applyOcrEvent(event(4));
+    expect(useAppStore.getState().ocrPictureOriginal).toBe(false);
+  });
+});

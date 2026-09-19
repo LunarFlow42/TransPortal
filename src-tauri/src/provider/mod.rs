@@ -5,11 +5,13 @@ use std::time::Duration;
 use thiserror::Error;
 
 pub mod google;
+pub mod lang;
 pub mod openai;
 pub mod tencent;
 pub mod youdao;
 
 pub use google::GoogleFreeProvider;
+pub use lang::resolve_target_lang;
 pub use openai::{OpenAiCompatibleProvider, OpenAiConfig};
 pub use tencent::TencentFreeProvider;
 pub use youdao::YoudaoFreeProvider;

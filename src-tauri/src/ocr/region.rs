@@ -7,6 +7,9 @@
 use super::picture::Cancellation;
 use super::OcrMode;
 use crate::native::desktop::{DesktopCapture, ScreenRect};
+use base64::{engine::general_purpose::STANDARD, Engine};
+use image::codecs::jpeg::JpegEncoder;
+use image::ImageEncoder;
 use serde::Serialize;
 use std::sync::{Arc, Mutex};
 use tauri::{
@@ -21,12 +24,15 @@ pub const WINDOW_LABEL: &str = "ocr-region";
 pub enum RegionPurpose {
     Text,
     Translate,
+    Picture,
+    Card,
+    Silent,
     Monitor,
 }
 
 impl RegionPurpose {
     pub fn is_snip(self) -> bool {
-        matches!(self, Self::Text | Self::Translate)
+        matches!(self, Self::Text | Self::Translate | Self::Picture | Self::Card | Self::Silent)
     }
 }
 
@@ -34,16 +40,41 @@ impl From<OcrMode> for RegionPurpose {
     fn from(mode: OcrMode) -> Self {
         match mode {
             OcrMode::Text => Self::Text,
-            OcrMode::Translate => Self::Translate,
+            OcrMode::Picture => Self::Picture,
+            OcrMode::Card => Self::Card,
+            OcrMode::Silent => Self::Silent,
         }
     }
 }
+
 
 #[derive(Clone, Serialize)]
 pub struct RegionSelection {
     pub id: u64,
     pub purpose: RegionPurpose,
     pub bounds: ScreenRect,
+    pub image_data_url: Option<String>,
+}
+
+/// Encode the captured desktop snapshot as a lightweight JPEG Data URL for the UI freeze background.
+pub fn encode_frozen_jpeg(image: &image::RgbaImage) -> Option<String> {
+    let width = image.width();
+    let height = image.height();
+    if width == 0 || height == 0 {
+        return None;
+    }
+    let raw = image.as_raw();
+    let mut rgb = Vec::with_capacity((width * height * 3) as usize);
+    let (chunks, _) = raw.as_chunks::<4>();
+    for chunk in chunks {
+        rgb.extend_from_slice(&chunk[..3]);
+    }
+    let mut bytes = Vec::new();
+    let encoder = JpegEncoder::new_with_quality(&mut bytes, 85);
+    encoder
+        .write_image(&rgb, width, height, image::ExtendedColorType::Rgb8)
+        .ok()?;
+    Some(format!("data:image/jpeg;base64,{}", STANDARD.encode(bytes)))
 }
 
 /// A confirmed rectangle together with the frozen pixels it was drawn on.
@@ -116,6 +147,19 @@ impl RegionService {
             .map(|pending| pending.selection.clone())
     }
 
+    pub fn get_frozen_pixels(&self, id: u64) -> Result<Vec<u8>, String> {
+        let state = self.state.lock().unwrap();
+        let pending = state
+            .pending
+            .as_ref()
+            .filter(|p| p.selection.id == id)
+            .ok_or("区域选择已过期。")?;
+        if pending.cancel.is_cancelled() {
+            return Err("区域选择已取消。".into());
+        }
+        Ok(pending.frozen.as_raw().clone())
+    }
+
     /// Keep our own overlay windows out of desktop captures.
     pub fn exclude_windows(&self, app: &AppHandle, enabled: bool) -> Result<(), String> {
         let mut result = Ok(());
@@ -162,6 +206,7 @@ impl RegionService {
                 id,
                 purpose,
                 bounds,
+                image_data_url: None,
             },
             owner,
             frozen: Arc::new(image),
@@ -200,7 +245,7 @@ impl RegionService {
 
     /// Main thread only: size the selector over the desktop and display the transparent overlay immediately.
     pub fn present(&self, app: &AppHandle, id: u64) -> Result<(), String> {
-        let bounds = {
+        let selection = {
             let state = self.state.lock().unwrap();
             let pending = state
                 .pending
@@ -210,8 +255,9 @@ impl RegionService {
             if pending.cancel.is_cancelled() {
                 return Err("区域选择已取消。".into());
             }
-            pending.selection.bounds
+            pending.selection.clone()
         };
+        let bounds = selection.bounds;
         let window = Self::ensure_window(app)?;
         window
             .set_position(PhysicalPosition::new(bounds.x, bounds.y))
@@ -219,7 +265,7 @@ impl RegionService {
         window
             .set_size(PhysicalSize::new(bounds.width, bounds.height))
             .map_err(|e| e.to_string())?;
-        let _ = window.emit(SELECTION_EVENT, id);
+        let _ = window.emit(SELECTION_EVENT, &selection);
         window.show().map_err(|e| e.to_string())?;
         window.set_focus().map_err(|e| e.to_string())?;
         Ok(())
@@ -288,6 +334,7 @@ impl RegionService {
 
     pub fn hide_window(app: &AppHandle) {
         if let Some(window) = app.get_webview_window(WINDOW_LABEL) {
+            let _ = window.emit("transportal://region-reset", ());
             let _ = window.hide();
         }
     }
@@ -300,7 +347,7 @@ pub fn confirm(app: &AppHandle, id: u64, region: ScreenRect) -> Result<(), Strin
         RegionPurpose::Monitor => app
             .state::<super::monitor::MonitorService>()
             .confirm(app, confirmed.owner, region),
-        RegionPurpose::Text | RegionPurpose::Translate => {
+        RegionPurpose::Text | RegionPurpose::Translate | RegionPurpose::Picture | RegionPurpose::Card | RegionPurpose::Silent => {
             app.state::<super::OcrService>().finish_capture(app, confirmed);
             Ok(())
         }
@@ -316,7 +363,7 @@ pub fn cancel(app: &AppHandle, id: Option<u64>) {
         Some((RegionPurpose::Monitor, _)) => {
             app.state::<super::monitor::MonitorService>().stop(app, true);
         }
-        Some((RegionPurpose::Text | RegionPurpose::Translate, _)) => {
+        Some((RegionPurpose::Text | RegionPurpose::Translate | RegionPurpose::Picture | RegionPurpose::Card | RegionPurpose::Silent, _)) => {
             app.state::<super::OcrService>().cancel(app);
         }
         None => {}
@@ -351,8 +398,47 @@ mod tests {
     #[test]
     fn snip_purposes_follow_the_ocr_mode() {
         assert_eq!(RegionPurpose::from(OcrMode::Text), RegionPurpose::Text);
-        assert_eq!(RegionPurpose::from(OcrMode::Translate), RegionPurpose::Translate);
-        assert!(RegionPurpose::Translate.is_snip());
+        assert_eq!(RegionPurpose::from(OcrMode::Picture), RegionPurpose::Picture);
+        assert_eq!(RegionPurpose::from(OcrMode::Card), RegionPurpose::Card);
+        assert_eq!(RegionPurpose::from(OcrMode::Silent), RegionPurpose::Silent);
+        assert!(RegionPurpose::Picture.is_snip());
+        assert!(RegionPurpose::Card.is_snip());
+        assert!(RegionPurpose::Silent.is_snip());
         assert!(!RegionPurpose::Monitor.is_snip());
     }
+
+    #[test]
+    fn test_encode_frozen_jpeg() {
+        let mut image = image::RgbaImage::new(10, 10);
+        image.put_pixel(0, 0, image::Rgba([255, 0, 0, 255]));
+        let url = encode_frozen_jpeg(&image).expect("encode succeeds");
+        assert!(url.starts_with("data:image/jpeg;base64,"));
+    }
+
+    #[test]
+    fn test_get_frozen_pixels() {
+        let service = RegionService::default();
+        let cancel = Cancellation::default();
+        let mut state = service.state.lock().unwrap();
+        let mut image = image::RgbaImage::new(10, 10);
+        image.put_pixel(0, 0, image::Rgba([12, 34, 56, 255]));
+        let bounds = ScreenRect { x: 0, y: 0, width: 10, height: 10 };
+        state.pending = Some(Pending {
+            selection: RegionSelection {
+                id: 42,
+                purpose: RegionPurpose::Text,
+                bounds,
+                image_data_url: None,
+            },
+            owner: 1,
+            frozen: Arc::new(image),
+            cancel,
+        });
+        drop(state);
+
+        let pixels = service.get_frozen_pixels(42).expect("get pixels");
+        assert_eq!(pixels.len(), 10 * 10 * 4);
+        assert_eq!(&pixels[0..4], &[12, 34, 56, 255]);
+    }
 }
+

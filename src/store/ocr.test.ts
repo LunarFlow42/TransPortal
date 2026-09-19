@@ -167,3 +167,33 @@ describe('ONNX image input', () => {
     expect(useAppStore.getState().ocr?.image_path).toBe('C:/fixtures/mixed.png');
   });
 });
+
+describe('OCR card mode & shortcut customization', () => {
+  it('handles card mode in applyOcrEvent by keeping ocr ready and ocrImageView false', () => {
+    const cardEvent = ocrEvent({
+      id: 99,
+      mode: 'card',
+      stage: 'ready',
+      text: 'Long cognitive sentence to translate and click.',
+      picture: { width: 400, height: 200, data_url: 'data:image/png;base64,abc', blocks: [] },
+    });
+    useAppStore.getState().applyOcrEvent(cardEvent);
+    expect(useAppStore.getState().ocr?.id).toBe(99);
+    expect(useAppStore.getState().ocr?.mode).toBe('card');
+    expect(useAppStore.getState().ocrImageView).toBe(false);
+  });
+
+  it('configures any global shortcut action individually via setShortcut', async () => {
+    expect(await useAppStore.getState().setShortcut('ocr_card', 'Ctrl+Shift+X')).toBe(true);
+    expect(mockInvoke).toHaveBeenCalledWith('set_shortcut', { action: 'ocr_card', accelerator: 'Ctrl+Shift+X' });
+    expect(useAppStore.getState().ocrCardHotkey).toBe('Ctrl+Shift+X');
+
+    expect(await useAppStore.getState().setShortcut('ocr_picture', 'Ctrl+Alt+S')).toBe(true);
+    expect(mockInvoke).toHaveBeenCalledWith('set_shortcut', { action: 'ocr_picture', accelerator: 'Ctrl+Alt+S' });
+    expect(useAppStore.getState().ocrPictureHotkey).toBe('Ctrl+Alt+S');
+
+    expect(await useAppStore.getState().setShortcut('ocr_text', 'Ctrl+Alt+T')).toBe(true);
+    expect(mockInvoke).toHaveBeenCalledWith('set_shortcut', { action: 'ocr_text', accelerator: 'Ctrl+Alt+T' });
+    expect(useAppStore.getState().ocrTextHotkey).toBe('Ctrl+Alt+T');
+  });
+});

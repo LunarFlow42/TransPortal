@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Button, IconButton, Pill } from './ui';
 import {
+  ArrowLeftRight,
   BookOpen,
   Check,
   ChevronLeft,
@@ -120,6 +121,7 @@ interface LookupCardProps {
   stack: LookupNode[];
   stackIndex: number;
   isTop: boolean;
+  fillHeight?: boolean;
 }
 
 /**
@@ -133,6 +135,7 @@ export const LookupCard: React.FC<LookupCardProps> = ({
   stack,
   stackIndex,
   isTop,
+  fillHeight = false,
 }) => {
   const popLookup = useAppStore((state) => state.popLookup);
   const clearLookup = useAppStore((state) => state.clearLookup);
@@ -143,12 +146,24 @@ export const LookupCard: React.FC<LookupCardProps> = ({
   const exportTsv = useAppStore((state) => state.exportTsv);
   const ankiStatus = useAppStore((state) => state.ankiStatus);
   const ankiMessage = useAppStore((state) => state.ankiMessage);
+  const autoPronounce = useAppStore((state) => state.autoPronounce);
+  const ocr = useAppStore((state) => state.ocr);
+  const fontSize = useAppStore((state) => state.fontSize);
+  const targetLanguage = useAppStore((state) => state.targetLanguage);
+  const setTargetLanguage = useAppStore((state) => state.setTargetLanguage);
+  const aiPromptTemplate = useAppStore((state) => state.aiPromptTemplate);
+  const setAiPromptTemplate = useAppStore((state) => state.setAiPromptTemplate);
+  const backTranslation = useAppStore((state) => state.backTranslation);
+  const runBackTranslation = useAppStore((state) => state.runBackTranslation);
+  const startStreamTranslation = useAppStore((state) => state.startStreamTranslation);
+  const provider = useAppStore((state) => state.provider);
 
   const [copied, setCopied] = useState(false);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const isTopRef = useRef(isTop);
   isTopRef.current = isTop;
+  const hasAutoPronouncedRef = useRef(false);
 
   // Restore the previous scroll offset when this frame becomes the top card.
   useEffect(() => {
@@ -172,6 +187,15 @@ export const LookupCard: React.FC<LookupCardProps> = ({
     [],
   );
 
+  // Auto-pronounce on arrival if configured.
+  useEffect(() => {
+    if (!isTop || !autoPronounce || hasAutoPronouncedRef.current) return;
+    if (node.kind === 'word' && node.status === 'ready' && node.wordData) {
+      hasAutoPronouncedRef.current = true;
+      playPronunciation(node.wordData.word, node.wordData.audio_url, () => {});
+    }
+  }, [isTop, autoPronounce, node.kind, node.status, node.text, node.wordData]);
+
   const total = stack.length;
   const depth = stackIndex + 1;
   const wordData = node.wordData;
@@ -186,7 +210,9 @@ export const LookupCard: React.FC<LookupCardProps> = ({
     } else {
       clearLookup();
       stopPronunciation();
-      void getCurrentWindow().hide();
+      if (!ocr) {
+        void getCurrentWindow().hide();
+      }
     }
   };
 
@@ -281,9 +307,11 @@ export const LookupCard: React.FC<LookupCardProps> = ({
 
   return (
     <div
+      style={{ fontSize: `${fontSize}px` }}
       className={cn(
         'surface surface-hairline relative w-full overflow-hidden rounded-[var(--r-card)] text-[var(--text)]',
         compact ? 'p-3.5' : 'p-4',
+        fillHeight && 'h-full flex flex-col',
       )}
     >
       {/* ------------------------------------------------ header */}
@@ -295,8 +323,8 @@ export const LookupCard: React.FC<LookupCardProps> = ({
         )}
       >
         <div className="flex min-w-0 items-center gap-1.5">
-          {total > 1 && (
-            <IconButton title="Back" onClick={handleBack}>
+          {(total > 1 || Boolean(ocr)) && (
+            <IconButton title={ocr && total === 1 ? "返回截图对照" : "Back"} onClick={handleBack}>
               <ChevronLeft className="h-4 w-4" />
             </IconButton>
           )}
@@ -305,6 +333,39 @@ export const LookupCard: React.FC<LookupCardProps> = ({
             <span className="shrink-0 rounded-full bg-[var(--surface-2)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--muted)]">
               {depth}/{total}
             </span>
+          )}
+          {node.kind === 'sentence' && (
+            <div className="flex items-center gap-1 ml-1">
+              <button
+                type="button"
+                onClick={() => {
+                  const nextLang = targetLanguage.startsWith('zh') ? 'en' : 'zh-CN';
+                  setTargetLanguage(nextLang);
+                  void startStreamTranslation(node.text, node.id);
+                }}
+                title="点击切换目标语言 (中/英)"
+                className="flex items-center gap-1 rounded bg-[var(--surface-2)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--muted)] hover:bg-[var(--hover)] hover:text-[var(--text)] transition-colors border border-[var(--stroke)]"
+              >
+                <span>{targetLanguage.startsWith('zh') ? '自动 ⇄ 中' : '自动 ⇄ En'}</span>
+              </button>
+              {provider === 'openai' && (
+                <select
+                  value={aiPromptTemplate}
+                  onChange={(e) => {
+                    const val = e.target.value as 'direct' | 'academic' | 'code' | 'casual';
+                    setAiPromptTemplate(val);
+                    void startStreamTranslation(node.text, node.id);
+                  }}
+                  className="h-5 cursor-pointer rounded bg-[var(--surface-2)] px-1 py-0 font-mono text-[10px] text-[var(--muted)] hover:text-[var(--text)] outline-none border border-[var(--stroke)]"
+                  title="AI 提示词模板"
+                >
+                  <option value="direct">直译</option>
+                  <option value="academic">学术润色</option>
+                  <option value="code">代码解释</option>
+                  <option value="casual">口语交流</option>
+                </select>
+              )}
+            </div>
           )}
         </div>
 
@@ -332,13 +393,23 @@ export const LookupCard: React.FC<LookupCardProps> = ({
               </IconButton>
             </>
           ) : (
-            <IconButton title="Copy translation" onClick={() => void handleCopy()}>
-              {copied ? (
-                <Check className="h-3.5 w-3.5 text-emerald-400" />
-              ) : (
-                <Copy className="h-3.5 w-3.5" />
-              )}
-            </IconButton>
+            <>
+              <IconButton
+                title="回译验证 (⇌)"
+                onClick={() => void runBackTranslation()}
+                active={Boolean(backTranslation)}
+                className={backTranslation ? 'text-[var(--accent-b)]' : undefined}
+              >
+                <ArrowLeftRight className="h-3.5 w-3.5" />
+              </IconButton>
+              <IconButton title="Copy translation" onClick={() => void handleCopy()}>
+                {copied ? (
+                  <Check className="h-3.5 w-3.5 text-emerald-400" />
+                ) : (
+                  <Copy className="h-3.5 w-3.5" />
+                )}
+              </IconButton>
+            </>
           )}
           {densityButton}
           {pinButton}
@@ -369,7 +440,7 @@ export const LookupCard: React.FC<LookupCardProps> = ({
           onScroll={() => scrollRef.current && rememberScrollTop(node.id, scrollRef.current.scrollTop)}
           className={cn(
             'flex select-text flex-col gap-1.5 overflow-y-auto pr-0.5',
-            compact ? 'mt-2.5 max-h-[130px]' : 'mt-3 max-h-[440px]',
+            fillHeight ? 'mt-2.5 flex-1 min-h-0' : (compact ? 'mt-2.5 max-h-[520px]' : 'mt-3 max-h-[560px]'),
           )}
         >
           <InteractiveSentence
@@ -400,6 +471,25 @@ export const LookupCard: React.FC<LookupCardProps> = ({
               </>
             )}
           </div>
+
+          {backTranslation && (
+            <div className="mt-2 rounded-[var(--r-inner)] border border-[var(--stroke)] bg-[var(--surface-2)]/80 p-2 text-xs">
+              <div className="flex items-center justify-between text-[10px] text-[var(--faint)] mb-1">
+                <span className="flex items-center gap-1 font-mono">
+                  <ArrowLeftRight className="h-2.5 w-2.5" />
+                  <span>回译验证</span>
+                </span>
+                {backTranslation.loading && <span className="animate-pulse">翻译中...</span>}
+              </div>
+              {backTranslation.error ? (
+                <span className="text-rose-400">{backTranslation.error}</span>
+              ) : (
+                <span className="text-[var(--text)] select-text">
+                  {backTranslation.text || (backTranslation.loading ? '正在反向翻译...' : '')}
+                </span>
+              )}
+            </div>
+          )}
         </div>
       ) : (
         <div
@@ -407,24 +497,36 @@ export const LookupCard: React.FC<LookupCardProps> = ({
           onScroll={() => scrollRef.current && rememberScrollTop(node.id, scrollRef.current.scrollTop)}
           className={cn(
             'flex select-text flex-col gap-3 overflow-y-auto pr-1',
-            compact ? 'mt-2.5 max-h-[130px]' : 'mt-3 max-h-[440px]',
+            fillHeight ? 'mt-2.5 flex-1 min-h-0' : (compact ? 'mt-2.5 max-h-[520px]' : 'mt-3 max-h-[560px]'),
           )}
         >
           {/* Headword */}
           <div className="flex flex-wrap items-baseline gap-2.5">
-            <h1 className="text-2xl font-bold capitalize tracking-tight">{displayWord}</h1>
+            <h1
+              onClick={handlePronounce}
+              title="点击发音"
+              className="cursor-pointer text-2xl font-bold capitalize tracking-tight transition-colors hover:text-[var(--accent-b)]"
+            >
+              {displayWord}
+            </h1>
             {phones
               ? phones.map((phone) => (
                   <span
                     key={phone.label}
-                    className="whitespace-nowrap font-mono text-xs text-[var(--accent-b)]"
+                    onClick={handlePronounce}
+                    title="点击发音"
+                    className="cursor-pointer whitespace-nowrap font-mono text-xs text-[var(--accent-b)] transition-opacity hover:opacity-80"
                   >
                     <span className="mr-0.5 text-[var(--faint)]">{phone.label}</span>
                     {phone.value}
                   </span>
                 ))
               : wordData?.phonetic && (
-                  <span className="font-mono text-sm text-[var(--accent-b)]">
+                  <span
+                    onClick={handlePronounce}
+                    title="点击发音"
+                    className="cursor-pointer font-mono text-sm text-[var(--accent-b)] transition-opacity hover:opacity-80"
+                  >
                     {wordData.phonetic}
                   </span>
                 )}
@@ -455,7 +557,9 @@ export const LookupCard: React.FC<LookupCardProps> = ({
               {exchanges.map((item, idx) => (
                 <span
                   key={idx}
-                  className="rounded-full border border-[var(--stroke)] bg-[var(--surface-2)] px-2 py-0.5 text-[11px]"
+                  onClick={() => void useAppStore.getState().pushLookup(item.value, { text: displayWord, word: item.value })}
+                  title={`点击查词并朗读 "${item.value}"`}
+                  className="cursor-pointer rounded-full border border-[var(--stroke)] bg-[var(--surface-2)] px-2 py-0.5 text-[11px] transition-colors hover:border-[var(--accent-b)] hover:text-[var(--text)]"
                 >
                   <span className="mr-1 text-[var(--muted)]">{item.label}</span>
                   {item.value}

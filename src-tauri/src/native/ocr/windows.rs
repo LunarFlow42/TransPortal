@@ -57,21 +57,116 @@ impl Drop for Apartment {
 
 const LANGUAGE_HELP: &str = "Windows OCR 语言包不可用。请在 Windows 设置 → 时间和语言 → 语言和区域中添加语言并安装光学字符识别功能，然后刷新 OCR 设置。";
 
+fn normalize_chinese_alias(lower: &str) -> Option<&'static str> {
+    match lower {
+        "zh" | "zh-cn" | "zh-hans" | "zh-hans-cn" => Some("zh-Hans-CN"),
+        "zh-tw" | "zh-hant" | "zh-hant-tw" => Some("zh-Hant-TW"),
+        "zh-hk" | "zh-hant-hk" => Some("zh-Hant-HK"),
+        _ => None,
+    }
+}
+
+fn find_matching_language(
+    available: &windows::Foundation::Collections::IVectorView<Language>,
+    requested: &str,
+) -> Option<Language> {
+    let clean = requested.trim().replace('_', "-");
+    let lower = clean.to_ascii_lowercase();
+
+    let mut items = Vec::new();
+    for lang in available {
+        if let Ok(tag_hstring) = lang.LanguageTag() {
+            let tag = tag_hstring.to_string();
+            items.push((tag, lang));
+        }
+    }
+
+    // 1. Exact match (case-insensitive)
+    for (tag, lang) in &items {
+        if tag.eq_ignore_ascii_case(&clean) {
+            return Some(lang.clone());
+        }
+    }
+
+    // 2. Chinese alias match against available languages
+    if let Some(target) = normalize_chinese_alias(&lower) {
+        if let Some((_, lang)) = items.iter().find(|(tag, _)| tag.eq_ignore_ascii_case(target)) {
+            return Some(lang.clone());
+        }
+        let prefix = if target.contains("Hans") { "zh-hans" } else { "zh-hant" };
+        if let Some((_, lang)) = items.iter().find(|(tag, _)| tag.to_ascii_lowercase().starts_with(prefix)) {
+            return Some(lang.clone());
+        }
+        if let Some((_, lang)) = items.iter().find(|(tag, _)| tag.to_ascii_lowercase().starts_with("zh")) {
+            return Some(lang.clone());
+        }
+    }
+
+    // 3. Prefix match: e.g. "en" matches "en-US", or "en-us" matches "en"
+    for (tag, lang) in &items {
+        let tag_lower = tag.to_ascii_lowercase();
+        if tag_lower.starts_with(&format!("{lower}-")) || lower.starts_with(&format!("{tag_lower}-")) {
+            return Some(lang.clone());
+        }
+    }
+
+    None
+}
+
 fn create_engine(language: Option<&str>) -> Result<NativeOcrEngine, String> {
+    let available = NativeOcrEngine::AvailableRecognizerLanguages().ok();
+
     if let Some(tag) = language {
-        let language = Language::CreateLanguage(&HSTRING::from(tag))
+        if let Some(ref list) = available
+            && let Some(lang) = find_matching_language(list, tag)
+            && let Ok(engine) = NativeOcrEngine::TryCreateFromLanguage(&lang)
+        {
+            return Ok(engine);
+        }
+        // Fall back to direct tag creation with normalization
+        let clean = tag.trim().replace('_', "-");
+        let target_tag = normalize_chinese_alias(&clean.to_ascii_lowercase()).unwrap_or(&clean);
+        let language = Language::CreateLanguage(&HSTRING::from(target_tag))
             .map_err(|e| format!("无效的 OCR 语言 {tag}：{e}"))?;
         return NativeOcrEngine::TryCreateFromLanguage(&language)
             .map_err(|_| format!("{tag} 的 OCR 语言包不可用。{LANGUAGE_HELP}"));
     }
+
+    // When language is None (auto), check AvailableRecognizerLanguages().
+    // If any Chinese recognizer is available, prefer it over a Latin-only language like en-US,
+    // because Chinese recognizers on Windows are bilingual (recognize both Chinese and English).
+    if let Some(ref list) = available {
+        let mut items = Vec::new();
+        for lang in list {
+            if let Ok(tag_hstring) = lang.LanguageTag() {
+                items.push((tag_hstring.to_string(), lang));
+            }
+        }
+        let chinese_candidate = items
+            .iter()
+            .find(|(tag, _)| tag.eq_ignore_ascii_case("zh-Hans-CN"))
+            .or_else(|| items.iter().find(|(tag, _)| tag.to_ascii_lowercase().starts_with("zh-hans")))
+            .or_else(|| items.iter().find(|(tag, _)| tag.to_ascii_lowercase().starts_with("zh")));
+
+        if let Some((_, lang)) = chinese_candidate
+            && let Ok(engine) = NativeOcrEngine::TryCreateFromLanguage(lang)
+        {
+            return Ok(engine);
+        }
+    }
+
     if let Ok(engine) = NativeOcrEngine::TryCreateFromUserProfileLanguages() {
         return Ok(engine);
     }
+
     // A usable pack may be installed without appearing in the user's preferred
     // language list. Fall back deterministically to the first installed pack.
-    let languages = NativeOcrEngine::AvailableRecognizerLanguages()
-        .map_err(|e| format!("{LANGUAGE_HELP} ({e})"))?;
-    for language in languages {
+    let languages = match available {
+        Some(list) => list,
+        None => NativeOcrEngine::AvailableRecognizerLanguages()
+            .map_err(|e| format!("{LANGUAGE_HELP} ({e})"))?,
+    };
+    for language in &languages {
         if let Ok(engine) = NativeOcrEngine::TryCreateFromLanguage(&language) {
             return Ok(engine);
         }
@@ -223,3 +318,49 @@ fn to_bitmap(image: &OcrImage<'_>, width: u32, height: u32) -> Result<SoftwareBi
     }
     Ok(bitmap)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_windows_ocr_auto_prefers_chinese_when_installed() {
+        let _apartment = Apartment::new().unwrap();
+        let engine = create_engine(None);
+        assert!(engine.is_ok(), "create_engine(None) should succeed: {:?}", engine.err());
+        let engine = engine.unwrap();
+        let lang = engine.RecognizerLanguage().unwrap().LanguageTag().unwrap().to_string();
+        assert!(lang.to_ascii_lowercase().starts_with("zh"), "Expected Chinese recognizer, got: {lang}");
+    }
+
+    #[test]
+    fn test_windows_ocr_normalizes_zh_cn() {
+        let _apartment = Apartment::new().unwrap();
+        let engine = create_engine(Some("zh-CN"));
+        assert!(engine.is_ok(), "create_engine(Some(\"zh-CN\")) should succeed: {:?}", engine.err());
+        let engine = engine.unwrap();
+        let lang = engine.RecognizerLanguage().unwrap().LanguageTag().unwrap().to_string();
+        assert_eq!(lang, "zh-Hans-CN");
+    }
+
+    #[test]
+    fn test_windows_ocr_normalizes_zh() {
+        let _apartment = Apartment::new().unwrap();
+        let engine = create_engine(Some("zh"));
+        assert!(engine.is_ok(), "create_engine(Some(\"zh\")) should succeed: {:?}", engine.err());
+        let engine = engine.unwrap();
+        let lang = engine.RecognizerLanguage().unwrap().LanguageTag().unwrap().to_string();
+        assert_eq!(lang, "zh-Hans-CN");
+    }
+
+    #[test]
+    fn test_windows_ocr_en_us() {
+        let _apartment = Apartment::new().unwrap();
+        let engine = create_engine(Some("en-US"));
+        assert!(engine.is_ok(), "create_engine(Some(\"en-US\")) should succeed: {:?}", engine.err());
+        let engine = engine.unwrap();
+        let lang = engine.RecognizerLanguage().unwrap().LanguageTag().unwrap().to_string();
+        assert_eq!(lang, "en-US");
+    }
+}
+

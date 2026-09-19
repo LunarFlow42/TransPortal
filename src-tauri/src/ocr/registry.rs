@@ -62,16 +62,18 @@ impl OcrRegistry {
 
     /// The old engine/config stays usable until validation and model loading
     /// succeed. The command layer never switches on an OCR engine's name.
-    pub fn configure(&self, config: OcrConfig) -> Result<OcrConfig, String> {
+    pub fn configure(&self, mut config: OcrConfig) -> Result<OcrConfig, String> {
         let engine = self.engine(&config.engine)?;
         let info = engine.info()?;
         if !info.available {
             return Err(info.error.unwrap_or_else(|| "OCR 引擎不可用".into()));
         }
-        if let Some(ref tag) = config.language
-            && !info.languages.iter().any(|language| &language.tag == tag)
-        {
-            return Err(format!("{} 不支持识别语言 {tag}", info.label));
+        if let Some(ref tag) = config.language {
+            if let Some(matched) = match_language_tag(&info.languages, tag) {
+                config.language = Some(matched.tag.clone());
+            } else {
+                return Err(format!("{} 不支持识别语言 {tag}", info.label));
+            }
         }
         let mut current = self.config.lock().unwrap();
         engine.prepare()?;
@@ -83,6 +85,60 @@ impl OcrRegistry {
         *current = config.clone();
         Ok(config)
     }
+}
+
+pub fn match_language_tag<'a>(
+    languages: &'a [super::OcrLanguage],
+    requested: &str,
+) -> Option<&'a super::OcrLanguage> {
+    let clean = requested.trim().replace('_', "-");
+    let lower = clean.to_ascii_lowercase();
+
+    // 1. Exact match (case-insensitive)
+    if let Some(lang) = languages.iter().find(|l| l.tag.eq_ignore_ascii_case(&clean)) {
+        return Some(lang);
+    }
+
+    // 2. Chinese alias matching
+    if lower == "zh" || lower == "zh-cn" || lower == "zh-hans" || lower == "zh-hans-cn" {
+        if let Some(lang) = languages.iter().find(|l| l.tag.eq_ignore_ascii_case("zh-Hans-CN")) {
+            return Some(lang);
+        }
+        if let Some(lang) = languages.iter().find(|l| l.tag.to_ascii_lowercase().starts_with("zh-hans")) {
+            return Some(lang);
+        }
+        if let Some(lang) = languages.iter().find(|l| l.tag.to_ascii_lowercase().starts_with("zh")) {
+            return Some(lang);
+        }
+    } else if lower == "zh-tw" || lower == "zh-hant" || lower == "zh-hant-tw" {
+        if let Some(lang) = languages.iter().find(|l| l.tag.eq_ignore_ascii_case("zh-Hant-TW")) {
+            return Some(lang);
+        }
+        if let Some(lang) = languages.iter().find(|l| l.tag.to_ascii_lowercase().starts_with("zh-hant")) {
+            return Some(lang);
+        }
+        if let Some(lang) = languages.iter().find(|l| l.tag.to_ascii_lowercase().starts_with("zh")) {
+            return Some(lang);
+        }
+    } else if lower == "zh-hk" || lower == "zh-hant-hk" {
+        if let Some(lang) = languages.iter().find(|l| l.tag.eq_ignore_ascii_case("zh-Hant-HK")) {
+            return Some(lang);
+        }
+        if let Some(lang) = languages.iter().find(|l| l.tag.to_ascii_lowercase().starts_with("zh-hant")) {
+            return Some(lang);
+        }
+        if let Some(lang) = languages.iter().find(|l| l.tag.to_ascii_lowercase().starts_with("zh")) {
+            return Some(lang);
+        }
+    }
+
+    // 3. Prefix / subtag match: e.g. "en" matches "en-US", "en-us" matches "en-US", etc.
+    languages.iter().find(|l| {
+        let tag_lower = l.tag.to_ascii_lowercase();
+        tag_lower.starts_with(&format!("{lower}-"))
+            || lower.starts_with(&format!("{tag_lower}-"))
+            || tag_lower.contains(&lower)
+    })
 }
 
 #[cfg(test)]
@@ -168,5 +224,78 @@ mod tests {
             .unwrap();
         assert_eq!(registry.config().engine, "next");
         assert!(old.released.load(Ordering::Relaxed));
+    }
+
+    #[test]
+    fn language_tag_matching_handles_aliases_case_and_prefixes() {
+        let languages = vec![
+            crate::ocr::OcrLanguage {
+                tag: "en-US".into(),
+                label: "English".into(),
+            },
+            crate::ocr::OcrLanguage {
+                tag: "zh-Hans-CN".into(),
+                label: "Chinese (Simplified)".into(),
+            },
+        ];
+
+        // Chinese aliases
+        assert_eq!(match_language_tag(&languages, "zh-CN").unwrap().tag, "zh-Hans-CN");
+        assert_eq!(match_language_tag(&languages, "zh").unwrap().tag, "zh-Hans-CN");
+        assert_eq!(match_language_tag(&languages, "zh_cn").unwrap().tag, "zh-Hans-CN");
+        assert_eq!(match_language_tag(&languages, "zh-hans").unwrap().tag, "zh-Hans-CN");
+        assert_eq!(match_language_tag(&languages, "zh-hans-cn").unwrap().tag, "zh-Hans-CN");
+
+        // English prefix and case
+        assert_eq!(match_language_tag(&languages, "en").unwrap().tag, "en-US");
+        assert_eq!(match_language_tag(&languages, "en-us").unwrap().tag, "en-US");
+        assert_eq!(match_language_tag(&languages, "EN-US").unwrap().tag, "en-US");
+
+        // Unsupported
+        assert!(match_language_tag(&languages, "ja").is_none());
+        assert!(match_language_tag(&languages, "fr").is_none());
+    }
+
+    #[test]
+    fn language_tag_matching_supports_onnx_bilingual_tag() {
+        let languages = vec![crate::ocr::OcrLanguage {
+            tag: "zh-Hans-en".into(),
+            label: "Chinese + English".into(),
+        }];
+
+        assert_eq!(match_language_tag(&languages, "zh-CN").unwrap().tag, "zh-Hans-en");
+        assert_eq!(match_language_tag(&languages, "zh").unwrap().tag, "zh-Hans-en");
+        assert_eq!(match_language_tag(&languages, "en").unwrap().tag, "zh-Hans-en");
+    }
+
+    #[test]
+    fn configure_normalizes_language_tag() {
+        struct LangEngine;
+        impl OcrEngine for LangEngine {
+            fn id(&self) -> &'static str { "lang" }
+            fn info(&self) -> Result<OcrEngineInfo, String> {
+                Ok(OcrEngineInfo {
+                    id: "lang".into(),
+                    label: "Lang Engine".into(),
+                    languages: vec![
+                        crate::ocr::OcrLanguage { tag: "en-US".into(), label: "English".into() },
+                        crate::ocr::OcrLanguage { tag: "zh-Hans-CN".into(), label: "Chinese".into() },
+                    ],
+                    available: true,
+                    error: None,
+                })
+            }
+            fn prepare(&self) -> Result<(), String> { Ok(()) }
+            fn release(&self) {}
+            fn recognize(&self, _: OcrImage<'_>, _: Option<&str>) -> Result<RecognizedText, String> { unreachable!() }
+        }
+
+        let registry = OcrRegistry::new(vec![Arc::new(LangEngine)], "lang");
+        let result = registry.configure(OcrConfig {
+            engine: "lang".into(),
+            language: Some("zh-CN".into()),
+        }).unwrap();
+        assert_eq!(result.language, Some("zh-Hans-CN".into()));
+        assert_eq!(registry.config().language, Some("zh-Hans-CN".into()));
     }
 }

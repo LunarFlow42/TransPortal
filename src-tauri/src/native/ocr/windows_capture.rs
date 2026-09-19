@@ -25,6 +25,7 @@ pub struct WindowsScreenCapture;
 thread_local! {
     static EVENTS: RefCell<Option<SyncSender<ScreenEvent>>> = const { RefCell::new(None) };
     static SNIP_KEY_DOWN: Cell<bool> = const { Cell::new(false) };
+    static INK_KEY_DOWN: Cell<bool> = const { Cell::new(false) };
     static DOUBLE_COPY: RefCell<crate::shortcut_sequence::DoubleCopyDetector> = RefCell::new(Default::default());
     static MODIFIERS: RefCell<crate::shortcut_sequence::ModifierKeys> = RefCell::new(Default::default());
 }
@@ -53,6 +54,19 @@ unsafe extern "system" fn keyboard_hook(code: i32, wparam: WPARAM, lparam: LPARA
                 EVENTS.with_borrow(|sender| { if let Some(sender) = sender {
                     let _ = sender.try_send(ScreenEvent::DoubleCopy { clipboard_revision: revision, window });
                 } });
+            }
+
+            let ink_vk = crate::shortcut::INK_TRANSLATE_KEY.load(std::sync::atomic::Ordering::Relaxed);
+            if ink_vk != 0 && key.vkCode == ink_vk {
+                if down {
+                    INK_KEY_DOWN.set(true);
+                } else if up && INK_KEY_DOWN.replace(false) {
+                    EVENTS.with_borrow(|sender| {
+                        if let Some(sender) = sender {
+                            let _ = sender.try_send(ScreenEvent::InkTranslate { window });
+                        }
+                    });
+                }
             }
         }
         // Observe remapped/accessibility shortcuts too. Nothing here injects

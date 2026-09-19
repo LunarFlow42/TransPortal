@@ -1,19 +1,21 @@
-import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { invoke } from '@tauri-apps/api/core';
+import { LogicalSize } from '@tauri-apps/api/dpi';
 import { currentMonitor, getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
 import { suppressAutoHide } from './autoHide';
 
 /**
- * Bring the dedicated settings window to the front.
+ * Open or bring the dedicated settings window to the front dynamically.
  *
  * Suppresses the overlay's auto-hide first so focusing the settings window
  * does not dismiss the overlay that triggered it.
  */
 export async function openSettingsWindow(): Promise<void> {
   suppressAutoHide();
-  const settings = await WebviewWindow.getByLabel('settings');
-  if (!settings) return;
-  await settings.show();
-  await settings.setFocus();
+  try {
+    await invoke('open_settings_window');
+  } catch (error) {
+    console.error('Failed to open settings window:', error);
+  }
 }
 
 /** Growing an OCR result/card must not push its bottom below the work area. */
@@ -31,4 +33,44 @@ export async function clampCurrentWindow(): Promise<void> {
   const x = Math.min(maxX, Math.max(minX, position.x));
   const y = Math.min(maxY, Math.max(minY, position.y));
   if (x !== position.x || y !== position.y) await window.setPosition(new PhysicalPosition(x, y));
+}
+
+/**
+ * Atomically resize the current window and clamp it within the screen's safe work area.
+ * Executes natively in a single DWM compositor transaction, eliminating edge jitter and overflow.
+ */
+export async function resizeAndClampWindow(width: number, height: number): Promise<void> {
+  try {
+    await invoke('resize_and_clamp_window', { width, height });
+  } catch {
+    // Fallback for mocked/unsupported environments
+    try {
+      await getCurrentWindow().setSize(new LogicalSize(width, height));
+      await clampCurrentWindow();
+    } catch (error) {
+      console.error('Failed to resize and clamp window:', error);
+    }
+  }
+}
+
+/**
+ * Configure OS-level DWM Acrylic frosted glass effect on the current window.
+ */
+export async function setWindowAcrylic(enabled: boolean): Promise<void> {
+  try {
+    await invoke('set_window_acrylic', { enabled });
+  } catch (error) {
+    console.warn('Failed to set window acrylic effect:', error);
+  }
+}
+
+/**
+ * Configure DWM theme (dark/light) to coordinate backdrop material tinting.
+ */
+export async function setWindowTheme(dark: boolean): Promise<void> {
+  try {
+    await invoke('set_window_theme', { dark });
+  } catch (error) {
+    console.warn('Failed to set window theme:', error);
+  }
 }

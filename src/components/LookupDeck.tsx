@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { LookupCard } from './LookupCard';
 import { useAppStore } from '../store/useAppStore';
+import { cn } from '../utils/cn';
 
 /**
  * How many frames are physically mounted. Deeper history lives only in the
@@ -9,18 +10,22 @@ import { useAppStore } from '../store/useAppStore';
  */
 const VISIBLE_DEPTH = 3;
 
+interface LookupDeckProps {
+  fillHeight?: boolean;
+}
+
 /**
  * Renders the drill-down lookup stack as a deck of cards: the top frame is
  * interactive, the ones beneath peek out from behind with a scale/dim offset
  * to convey depth.
  */
-export const LookupDeck: React.FC = () => {
+export const LookupDeck: React.FC<LookupDeckProps> = ({ fillHeight = false }) => {
   const stack = useAppStore((state) => state.lookupStack);
   const visible = stack.slice(-VISIBLE_DEPTH);
   const offset = stack.length - visible.length;
 
   return (
-    <div className="relative w-full pt-3">
+    <div className={cn('relative w-full pt-3', fillHeight && 'h-full flex flex-col')}>
       {visible.map((node, i) => {
         const depth = visible.length - 1 - i; // 0 = top frame
         const stackIndex = offset + i;
@@ -41,10 +46,19 @@ export const LookupDeck: React.FC = () => {
               transformOrigin: 'top center',
               pointerEvents: isTop ? 'auto' : 'none',
             }}
-            className={isTop ? 'relative' : 'absolute inset-x-0 top-3'}
+            className={cn(
+              isTop ? 'relative' : 'absolute inset-x-0 top-3',
+              fillHeight && isTop && 'flex-1 flex flex-col min-h-0',
+            )}
             aria-hidden={!isTop}
           >
-            <LookupCard node={node} stack={stack} stackIndex={stackIndex} isTop={isTop} />
+            <LookupCard
+              node={node}
+              stack={stack}
+              stackIndex={stackIndex}
+              isTop={isTop}
+              fillHeight={fillHeight}
+            />
           </motion.div>
         );
       })}

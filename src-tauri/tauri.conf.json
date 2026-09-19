@@ -29,23 +29,6 @@
         "visible": true,
         "skipTaskbar": true,
         "focus": true
-      },
-      {
-        "label": "settings",
-        "title": "TransPortal Settings",
-        "url": "index.html#/settings",
-        "width": 480,
-        "height": 660,
-        "minWidth": 420,
-        "minHeight": 480,
-        "resizable": false,
-        "decorations": false,
-        "transparent": true,
-        "shadow": false,
-        "alwaysOnTop": false,
-        "center": true,
-        "visible": false,
-        "skipTaskbar": false
       }
     ],
     "security": {

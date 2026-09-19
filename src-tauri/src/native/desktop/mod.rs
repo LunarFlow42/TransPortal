@@ -41,9 +41,6 @@ impl ScreenRect {
 pub trait DesktopCapture: Send + Sync {
     fn bounds(&self) -> Result<ScreenRect, String>;
     fn capture(&self, region: ScreenRect) -> Result<image::RgbaImage, String>;
-    fn is_exclusive_fullscreen(&self) -> bool {
-        false
-    }
     /// Keep translated output out of later screenshots to avoid feedback loops.
     fn exclude(&self, window: &tauri::WebviewWindow, enabled: bool) -> Result<(), String>;
 }
@@ -107,5 +104,25 @@ mod tests {
             .validate()
             .is_err()
         );
+    }
+
+    #[test]
+    fn test_desktop_capture_pipeline() {
+        let p = super::platform();
+        if let Ok(bounds) = p.bounds() {
+            assert!(bounds.width > 0 && bounds.height > 0);
+            let test_region = ScreenRect {
+                x: bounds.x,
+                y: bounds.y,
+                width: 50,
+                height: 50,
+            };
+            assert!(test_region.validate().is_ok());
+            let result = p.capture(test_region);
+            if let Ok(img) = result {
+                assert_eq!(img.width(), 50);
+                assert_eq!(img.height(), 50);
+            }
+        }
     }
 }

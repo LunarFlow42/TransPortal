@@ -18,8 +18,12 @@ pub const OCR_EVENT: &str = "transportal://ocr";
 #[serde(rename_all = "snake_case")]
 pub enum OcrMode {
     Text,
-    Translate,
+    #[serde(alias = "translate")]
+    Picture,
+    Card,
+    Silent,
 }
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -114,6 +118,7 @@ pub enum ScreenEvent {
         clipboard_revision: u32,
     },
     DoubleCopy { clipboard_revision: u32, window: usize },
+    InkTranslate { window: usize },
     Cancel,
 }
 

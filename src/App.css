@@ -157,3 +157,26 @@ body,
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* ------------------------------------------------------------------ *
+ * Form controls: Native select & option contrast in WebView2
+ * ------------------------------------------------------------------ */
+select {
+  color-scheme: dark;
+}
+
+[data-theme="light"] select {
+  color-scheme: light;
+}
+
+select option {
+  background-color: #1e1e24;
+  color: #f1f5f9;
+  padding: 4px 8px;
+}
+
+[data-theme="light"] select option {
+  background-color: #ffffff;
+  color: #0f172a;
+}
+
