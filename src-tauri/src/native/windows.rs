@@ -450,13 +450,15 @@ pub fn place_window_smartly<R: tauri::Runtime>(
     window: &tauri::WebviewWindow<R>,
     anchor_bounds: Option<&super::SelectionBounds>,
     center: bool,
+    no_activate: bool,
 ) -> Result<(), String> {
     use windows::Win32::Foundation::{HWND, POINT, RECT};
     use windows::Win32::Graphics::Gdi::{
         GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTONEAREST,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
-        GetWindowRect, SetWindowPos, SWP_NOACTIVATE, SWP_NOSIZE, SWP_NOZORDER,
+        GetWindowRect, SetWindowPos, ShowWindow, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOSIZE,
+        SWP_SHOWWINDOW, SW_SHOWNOACTIVATE,
     };
 
     let handle = window.hwnd().map_err(|e| e.to_string())?;
@@ -517,15 +519,28 @@ pub fn place_window_smartly<R: tauri::Runtime>(
     );
 
     unsafe {
-        let _ = SetWindowPos(
-            hwnd,
-            HWND::default(),
-            clamped_x,
-            clamped_y,
-            0,
-            0,
-            SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOSIZE,
-        );
+        if no_activate {
+            let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+            let _ = SetWindowPos(
+                hwnd,
+                HWND_TOPMOST,
+                clamped_x,
+                clamped_y,
+                0,
+                0,
+                SWP_NOACTIVATE | SWP_NOSIZE | SWP_SHOWWINDOW,
+            );
+        } else {
+            let _ = SetWindowPos(
+                hwnd,
+                HWND_TOPMOST,
+                clamped_x,
+                clamped_y,
+                0,
+                0,
+                SWP_NOSIZE | SWP_SHOWWINDOW,
+            );
+        }
     }
 
     Ok(())

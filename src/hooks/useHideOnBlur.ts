@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { isAutoHideSuppressed } from '../utils/autoHide';
+import { isAudioPlaying } from '../utils/audio';
 import { useAppStore } from '../store/useAppStore';
 
 /**
@@ -23,6 +24,7 @@ export function useHideOnBlur(active = true) {
       if (isAutoHideSuppressed()) return;
       if (store.pinned) return;
       if (store.autoOcr?.active) return;
+      if (isAudioPlaying()) return;
 
       void window.hide();
     });

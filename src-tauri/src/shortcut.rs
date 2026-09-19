@@ -13,6 +13,12 @@ use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut,
 pub const STATUS_EVENT: &str = "transportal://shortcut-status";
 pub const RECORD_EVENT: &str = "transportal://shortcut-recorded";
 pub const SELECTION_EVENT: &str = "transportal://selection";
+pub const SHELL_SHOWN_EVENT: &str = "transportal://shell-shown";
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ShellShownPayload {
+    pub no_activate: bool,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -531,11 +537,12 @@ pub fn on_input_translate(app: &AppHandle) {
     if let Some(settings) = app.get_webview_window("settings") { let _ = settings.hide(); }
     if let Some(window) = app.get_webview_window("shell") {
         if !is_pinned() || !window.is_visible().unwrap_or(false) {
-            let _ = crate::native::place_window_smartly(&window, None, true);
+            let _ = crate::native::place_window_smartly(&window, None, true, false);
         }
         let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();
+        let _ = app.emit_to("shell", SHELL_SHOWN_EVENT, ShellShownPayload { no_activate: false });
         let _ = app.emit_to("shell", "transportal://focus-input", ());
     }
 }
@@ -608,7 +615,7 @@ pub fn on_hotkey(app: &AppHandle) {
     app.state::<OcrService>().cancel(app);
     let outcome = app.state::<crate::selection::SelectionService>().capture(app);
     let _ = app.emit_to("shell", SELECTION_EVENT, &outcome);
-    show_shell_with_anchor(app, outcome.bounds.as_ref());
+    show_shell_with_anchor(app, outcome.bounds.as_ref(), true);
 }
 pub fn on_double_copy(app: &AppHandle, revision: u32, window: usize) {
     if record(app, "Ctrl+C+C") { return; }
@@ -618,23 +625,30 @@ pub fn on_double_copy(app: &AppHandle, revision: u32, window: usize) {
         app.state::<crate::ocr::monitor::MonitorService>().stop(app, true);
         app.state::<OcrService>().cancel(app);
         let _ = app.emit_to("shell", SELECTION_EVENT, &outcome);
-        show_shell_with_anchor(app, outcome.bounds.as_ref());
+        show_shell_with_anchor(app, outcome.bounds.as_ref(), true);
     }
 }
 
 pub fn show_shell(app: &AppHandle) {
-    show_shell_with_anchor(app, None);
+    show_shell_with_anchor(app, None, false);
 }
 
-pub fn show_shell_with_anchor(app: &AppHandle, anchor_bounds: Option<&crate::native::SelectionBounds>) {
+pub fn show_shell_with_anchor(
+    app: &AppHandle,
+    anchor_bounds: Option<&crate::native::SelectionBounds>,
+    no_activate: bool,
+) {
     if let Some(settings) = app.get_webview_window("settings") { let _ = settings.hide(); }
     if let Some(window) = app.get_webview_window("shell") {
         if !is_pinned() || !window.is_visible().unwrap_or(false) {
-            let _ = crate::native::place_window_smartly(&window, anchor_bounds, false);
+            let _ = crate::native::place_window_smartly(&window, anchor_bounds, false, no_activate);
         }
-        let _ = window.unminimize();
-        let _ = window.show();
-        let _ = window.set_focus();
+        if !no_activate {
+            let _ = window.unminimize();
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+        let _ = app.emit_to("shell", SHELL_SHOWN_EVENT, ShellShownPayload { no_activate });
     }
 }
 

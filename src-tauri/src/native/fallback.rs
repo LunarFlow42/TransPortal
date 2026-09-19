@@ -73,6 +73,7 @@ pub fn place_window_smartly<R: tauri::Runtime>(
     window: &tauri::WebviewWindow<R>,
     _anchor_bounds: Option<&super::SelectionBounds>,
     center: bool,
+    _no_activate: bool,
 ) -> Result<(), String> {
     let scale_factor = window.scale_factor().map_err(|e| e.to_string())?;
     let window_size = window.outer_size().map_err(|e| e.to_string())?;

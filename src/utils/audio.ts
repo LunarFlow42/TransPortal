@@ -1,4 +1,10 @@
 let currentAudio: HTMLAudioElement | null = null;
+let isSpeaking = false;
+
+/** Whether audio pronunciation is actively playing. */
+export function isAudioPlaying(): boolean {
+  return (currentAudio !== null && !currentAudio.paused) || isSpeaking;
+}
 
 /** Stop any pronunciation currently playing (audio element or speech synthesis). */
 export function stopPronunciation(): void {
@@ -9,6 +15,7 @@ export function stopPronunciation(): void {
     currentAudio.src = '';
     currentAudio = null;
   }
+  isSpeaking = false;
   if ('speechSynthesis' in window) {
     window.speechSynthesis.cancel();
   }
@@ -45,14 +52,20 @@ export function playPronunciation(
 
 function speak(word: string, onEnd: () => void): void {
   if (!('speechSynthesis' in window)) {
+    isSpeaking = false;
     onEnd();
     return;
   }
   window.speechSynthesis.cancel();
+  isSpeaking = true;
   const utterance = new SpeechSynthesisUtterance(word);
   utterance.lang = 'en-US';
   utterance.rate = 0.9;
-  utterance.onend = onEnd;
-  utterance.onerror = onEnd;
+  const handleEnd = () => {
+    isSpeaking = false;
+    onEnd();
+  };
+  utterance.onend = handleEnd;
+  utterance.onerror = handleEnd;
   window.speechSynthesis.speak(utterance);
 }
