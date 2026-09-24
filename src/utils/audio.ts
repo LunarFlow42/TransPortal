@@ -16,7 +16,7 @@ export function stopPronunciation(): void {
     currentAudio = null;
   }
   isSpeaking = false;
-  if ('speechSynthesis' in window) {
+  if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
     window.speechSynthesis.cancel();
   }
 }
@@ -51,7 +51,7 @@ export function playPronunciation(
 }
 
 function speak(word: string, onEnd: () => void): void {
-  if (!('speechSynthesis' in window)) {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
     isSpeaking = false;
     onEnd();
     return;

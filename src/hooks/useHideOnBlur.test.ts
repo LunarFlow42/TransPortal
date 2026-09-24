@@ -28,6 +28,7 @@ vi.mock('react', async (importOriginal) => ({
 
 describe('useHideOnBlur', () => {
   beforeEach(() => {
+    vi.useFakeTimers();
     vi.clearAllMocks();
     focusCallback = null;
     lifecycle.effects.length = 0;
@@ -35,14 +36,16 @@ describe('useHideOnBlur', () => {
       autoHideOnBlur: true,
       pinned: false,
       autoOcr: null,
+      smoothTransitions: true,
     });
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
-  it('hides immediately when window loses focus and autoHideOnBlur is true', () => {
+  it('hides after 100ms dismiss animation when window loses focus and autoHideOnBlur is true', () => {
     useHideOnBlur(true);
     const effect = lifecycle.effects[0];
     effect();
@@ -50,6 +53,18 @@ describe('useHideOnBlur', () => {
     expect(focusCallback).toBeTypeOf('function');
     focusCallback!({ payload: false });
 
+    expect(mockHide).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(100);
+    expect(mockHide).toHaveBeenCalledTimes(1);
+  });
+
+  it('hides immediately when smoothTransitions is disabled', () => {
+    useAppStore.setState({ smoothTransitions: false });
+    useHideOnBlur(true);
+    const effect = lifecycle.effects[0];
+    effect();
+
+    focusCallback!({ payload: false });
     expect(mockHide).toHaveBeenCalledTimes(1);
   });
 

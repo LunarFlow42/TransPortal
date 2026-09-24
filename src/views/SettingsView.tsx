@@ -164,6 +164,8 @@ export const SettingsView: React.FC = () => {
     setOverlayOpacity,
     acrylicEffect,
     setAcrylicEffect,
+    smoothTransitions,
+    setSmoothTransitions,
   } = useAppStore();
   const [recordingAction, setRecordingAction] = useState<ShortcutActionId | null>(null);
   const [autostart, setAutostart] = useState(false);
@@ -303,7 +305,7 @@ export const SettingsView: React.FC = () => {
             />
           </div>
 
-          {isMatch(['appearance', '外观', '界面', 'theme', '主题', 'opacity', '透明度', '毛玻璃', '亚克力', 'acrylic', 'font', '字号', 'crosshairs', '对齐', 'autohide', '隐藏']) && (
+          {isMatch(['appearance', '外观', '界面', 'theme', '主题', 'opacity', '透明度', '毛玻璃', '亚克力', 'acrylic', '动效', '动画', '过渡', '平滑', 'transition', 'animation', 'font', '字号', 'crosshairs', '对齐', 'autohide', '隐藏']) && (
             <Section label="Appearance 外观与界面" icon={<Palette className="h-3.5 w-3.5" />}>
               <Surface variant="inner" className="flex flex-col gap-2.5 p-3">
                 <div className="flex items-center gap-3">
@@ -362,6 +364,20 @@ export const SettingsView: React.FC = () => {
                     checked={acrylicEffect}
                     onChange={() => setAcrylicEffect(!acrylicEffect)}
                     label="系统级亚克力毛玻璃"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between gap-3 border-t border-[var(--stroke)] pt-2.5">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[13px] font-medium">平滑进出过渡动效</span>
+                    <p className="text-[10px] text-[var(--faint)]">
+                      浮层唤醒时 120ms 阻尼微弹簧展开，收起时 100ms 优雅淡出，消除首帧闪烁。
+                    </p>
+                  </div>
+                  <Switch
+                    checked={smoothTransitions}
+                    onChange={() => setSmoothTransitions(!smoothTransitions)}
+                    label="平滑进出过渡动效"
                   />
                 </div>
 

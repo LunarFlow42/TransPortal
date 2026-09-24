@@ -318,6 +318,7 @@ export interface PersistedSettings {
   targetLanguage: string;
   ocrPictureDefaultView?: 'translated' | 'original';
   acrylicEffect?: boolean;
+  smoothTransitions?: boolean;
   dictSources: { id: string; enabled: boolean }[];
 }
 

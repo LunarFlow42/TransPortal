@@ -320,6 +320,15 @@ pub fn configure_transparent_window<R: tauri::Runtime>(window: &tauri::WebviewWi
                 &corner as *const _ as *const _,
                 std::mem::size_of::<i32>() as u32,
             );
+            // Disable OS-default window transition animations (DWMWA_TRANSITIONS_FORCEDISABLED = 3)
+            // so Windows doesn't apply its default zoom/fade or minimize/maximize stutter.
+            let disable_transitions: windows::Win32::Foundation::BOOL = true.into();
+            let _ = DwmSetWindowAttribute(
+                hwnd,
+                windows::Win32::Graphics::Dwm::DWMWINDOWATTRIBUTE(3),
+                &disable_transitions as *const _ as *const _,
+                std::mem::size_of::<windows::Win32::Foundation::BOOL>() as u32,
+            );
         }
     }
 }

@@ -3,6 +3,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { isAutoHideSuppressed } from '../utils/autoHide';
 import { isAudioPlaying } from '../utils/audio';
 import { useAppStore } from '../store/useAppStore';
+import { dismissShell } from './useWindowAnimation';
 
 /**
  * Hide the current window immediately when it loses focus.
@@ -26,7 +27,7 @@ export function useHideOnBlur(active = true) {
       if (store.autoOcr?.active) return;
       if (isAudioPlaying()) return;
 
-      void window.hide();
+      void dismissShell();
     });
 
     return () => {

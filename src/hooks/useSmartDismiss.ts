@@ -1,9 +1,9 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { getCurrentWindow } from '@tauri-apps/api/window';
 import { listen } from '@tauri-apps/api/event';
 import { useAppStore } from '../store/useAppStore';
 import { isAutoHideSuppressed } from '../utils/autoHide';
 import { isAudioPlaying } from '../utils/audio';
+import { dismissShell } from './useWindowAnimation';
 
 export interface ShellShownEvent {
   no_activate: boolean;
@@ -44,7 +44,7 @@ export function useSmartDismiss(active = true) {
 
     clearTimers();
     isNoActivateRef.current = false;
-    void getCurrentWindow().hide();
+    void dismissShell();
   }, [clearTimers]);
 
   useEffect(() => {

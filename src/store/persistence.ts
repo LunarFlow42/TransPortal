@@ -45,6 +45,7 @@ export async function loadSettings(): Promise<Partial<PersistedSettings>> {
     targetLanguage,
     ocrPictureDefaultView,
     acrylicEffect,
+    smoothTransitions,
     dictSources,
   ] = await Promise.all([
     store.get<PersistedSettings['provider']>('provider'),
@@ -73,6 +74,7 @@ export async function loadSettings(): Promise<Partial<PersistedSettings>> {
     store.get<PersistedSettings['targetLanguage']>('targetLanguage'),
     store.get<PersistedSettings['ocrPictureDefaultView']>('ocrPictureDefaultView'),
     store.get<PersistedSettings['acrylicEffect']>('acrylicEffect'),
+    store.get<PersistedSettings['smoothTransitions']>('smoothTransitions'),
     store.get<PersistedSettings['dictSources']>('dictSources'),
   ]);
 
@@ -103,6 +105,7 @@ export async function loadSettings(): Promise<Partial<PersistedSettings>> {
     targetLanguage,
     ocrPictureDefaultView,
     acrylicEffect,
+    smoothTransitions,
     dictSources,
   };
 }

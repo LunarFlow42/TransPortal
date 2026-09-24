@@ -94,6 +94,7 @@ interface AppState {
   autoHideOnBlur: boolean;
   targetLanguage: string;
   acrylicEffect: boolean;
+  smoothTransitions: boolean;
 
   // Config actions
   setProvider: (provider: ProviderType) => void;
@@ -119,6 +120,7 @@ interface AppState {
   setTheme: (theme: ThemeMode) => void;
   setOverlayOpacity: (opacity: number) => void;
   setAcrylicEffect: (enabled: boolean) => void;
+  setSmoothTransitions: (enabled: boolean) => void;
   togglePinned: () => void;
   hydrate: (settings: Partial<PersistedSettings>) => void;
 
@@ -214,6 +216,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   autoHideOnBlur: true,
   targetLanguage: 'zh-CN',
   acrylicEffect: false,
+  smoothTransitions: true,
 
   setOcrPictureOriginal: (ocrPictureOriginal) => set({ ocrPictureOriginal }),
   toggleOcrPictureOriginal: () => set((state) => ({ ocrPictureOriginal: !state.ocrPictureOriginal })),
@@ -362,6 +365,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setTheme: (theme) => set({ theme }),
   setOverlayOpacity: (overlayOpacity) => set({ overlayOpacity }),
   setAcrylicEffect: (acrylicEffect) => set({ acrylicEffect }),
+  setSmoothTransitions: (smoothTransitions) => set({ smoothTransitions }),
   togglePinned: () =>
     set((state) => {
       const nextPinned = !state.pinned;
@@ -397,6 +401,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       ocrTarget: settings.targetLanguage ?? state.ocrTarget,
       ocrPictureDefaultView: settings.ocrPictureDefaultView ?? state.ocrPictureDefaultView,
       acrylicEffect: settings.acrylicEffect ?? state.acrylicEffect,
+      smoothTransitions: settings.smoothTransitions ?? state.smoothTransitions,
     })),
 
   applyCapture: (outcome) => {

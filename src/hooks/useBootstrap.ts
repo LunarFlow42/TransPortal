@@ -229,6 +229,9 @@ export function useBootstrap(persist: boolean) {
         if (state.acrylicEffect !== previous.acrylicEffect) {
           patch.acrylicEffect = state.acrylicEffect;
         }
+        if (state.smoothTransitions !== previous.smoothTransitions) {
+          patch.smoothTransitions = state.smoothTransitions;
+        }
 
         if (Object.keys(patch).length === 0) return;
 

@@ -15,6 +15,7 @@ import { useSmartDismiss } from '../hooks/useSmartDismiss';
 import { useMemoryManager } from '../hooks/useMemoryManager';
 import { useOcrEvents, useOcrStatus } from '../hooks/useOcr';
 import { useAutoOcrEvents } from '../hooks/useAutoOcr';
+import { useWindowAnimation } from '../hooks/useWindowAnimation';
 import { invoke } from '@tauri-apps/api/core';
 import { useShortcutStatus } from '../hooks/useShortcutStatus';
 import { useAppStore } from '../store/useAppStore';
@@ -85,6 +86,8 @@ export const ShellView: React.FC = () => {
 
   useHideOnBlur();
   const smartDismiss = useSmartDismiss();
+  const { stage, dismiss } = useWindowAnimation();
+  const smoothTransitions = useAppStore((state) => state.smoothTransitions);
   useMemoryManager();
   useBootstrap(false);
   useOcrEvents();
@@ -318,7 +321,7 @@ export const ShellView: React.FC = () => {
             void invoke('stop_auto_ocr', { discard: false });
           } else {
             void invoke('stop_auto_ocr', { discard: true });
-            void getCurrentWindow().hide();
+            void dismiss({ force: true });
           }
           return;
         }
@@ -329,18 +332,18 @@ export const ShellView: React.FC = () => {
             store.clearLookup();
             stopPronunciation();
             if (!store.ocr) {
-              void getCurrentWindow().hide();
+              void dismiss({ force: true });
             }
           }
           return;
         }
         if (store.ocr) {
           store.cancelOcr();
-          void getCurrentWindow().hide();
+          void dismiss({ force: true });
           return;
         }
         stopPronunciation();
-        void getCurrentWindow().hide();
+        void dismiss({ force: true });
         return;
       }
 
@@ -400,11 +403,36 @@ export const ShellView: React.FC = () => {
     }
   };
 
+  const isResizing = isManualResizingRef.current;
+  const showTransition = smoothTransitions && !isResizing;
+
+  const animationStyle: React.CSSProperties = showTransition
+    ? stage === 'entering' || stage === 'entered'
+      ? {
+          opacity: 1,
+          transform: 'scale(1) translateY(0px)',
+          transition:
+            'opacity 120ms cubic-bezier(0.16, 1, 0.3, 1), transform 120ms cubic-bezier(0.16, 1, 0.3, 1)',
+        }
+      : {
+          opacity: 0,
+          transform: 'scale(0.97) translateY(4px)',
+          transition:
+            'opacity 100ms cubic-bezier(0.4, 0, 1, 1), transform 100ms cubic-bezier(0.4, 0, 1, 1)',
+          pointerEvents: 'none',
+        }
+    : {
+        opacity: 1,
+        transform: 'none',
+        transition: 'none',
+      };
+
   return (
     <div
       onMouseEnter={smartDismiss.onMouseEnter}
       onMouseLeave={smartDismiss.onMouseLeave}
       onMouseDown={smartDismiss.onMouseDown}
+      style={animationStyle}
       className={cn(
         'relative flex h-full w-full select-none flex-col items-center bg-transparent overflow-hidden',
         hasContent ? 'justify-start' : 'justify-center',

@@ -47,4 +47,13 @@ describe('persistent OCR configuration', () => {
     expect(Object.fromEntries(data)).toEqual({ acrylicEffect: false });
     expect(store.save).toHaveBeenCalledOnce();
   });
+
+  it('loads and saves smoothTransitions correctly', async () => {
+    const { data, store } = settingsFile({ smoothTransitions: true });
+    const { loadSettings, saveSettings } = await import('./persistence');
+    expect(await loadSettings()).toMatchObject({ smoothTransitions: true });
+    await saveSettings({ smoothTransitions: false });
+    expect(Object.fromEntries(data)).toEqual({ smoothTransitions: false });
+    expect(store.save).toHaveBeenCalledOnce();
+  });
 });
