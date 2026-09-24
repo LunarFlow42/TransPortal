@@ -14,7 +14,7 @@ pub fn detect_language(text: &str) -> DetectedLang {
     for c in text.chars() {
         match c as u32 {
             // Japanese Hiragana & Katakana
-            0x3040..=0x309F | 0x30A0..=0x30FF => return DetectedLang::Japanese,
+            0x3040..=0x30FF => return DetectedLang::Japanese,
             // Korean Hangul Syllables & Jamo
             0xAC00..=0xD7AF | 0x1100..=0x11FF | 0x3130..=0x318F => return DetectedLang::Korean,
             // CJK Unified Ideographs & Extension A
@@ -42,9 +42,8 @@ pub fn resolve_target_lang(text: &str, preferred_target: Option<&str>) -> String
         || target.starts_with("zh_")
         || target.eq_ignore_ascii_case("zh-chs")
         || target.eq_ignore_ascii_case("zh-cht");
-    let target_is_en = target.eq_ignore_ascii_case("en")
-        || target.starts_with("en-")
-        || target.starts_with("en_");
+    let target_is_en =
+        target.eq_ignore_ascii_case("en") || target.starts_with("en-") || target.starts_with("en_");
     let target_is_ja = target.eq_ignore_ascii_case("ja")
         || target.eq_ignore_ascii_case("jp")
         || target.starts_with("ja-");

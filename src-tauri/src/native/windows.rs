@@ -7,19 +7,20 @@
 
 use super::{CaptureMethod, SelectionReader};
 use std::time::{Duration, Instant};
-use windows::core::BSTR;
 use windows::Win32::System::Com::{
-    CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED,
+    CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED, CoCreateInstance, CoInitializeEx,
+    CoUninitialize,
 };
 use windows::Win32::System::DataExchange::GetClipboardSequenceNumber;
 use windows::Win32::UI::Accessibility::{
     CUIAutomation, IUIAutomation, IUIAutomationTextPattern, UIA_TextPatternId,
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    GetAsyncKeyState, MapVirtualKeyW, SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT,
-    KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP, MAPVK_VK_TO_VSC, VIRTUAL_KEY, VK_C, VK_CONTROL, VK_LWIN,
-    VK_MENU, VK_RWIN, VK_SHIFT,
+    GetAsyncKeyState, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBD_EVENT_FLAGS, KEYBDINPUT,
+    KEYEVENTF_KEYUP, MAPVK_VK_TO_VSC, MapVirtualKeyW, SendInput, VIRTUAL_KEY, VK_C, VK_CONTROL,
+    VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT,
 };
+use windows::core::BSTR;
 
 /// Ask the foreground window to copy its selection (Ctrl+C) and wait until the
 /// clipboard actually changes.
@@ -143,7 +144,15 @@ pub(super) fn key_input(key: VIRTUAL_KEY, key_up: bool) -> INPUT {
 pub struct WindowsSelectionReader;
 
 struct ComApartment(bool);
-impl Drop for ComApartment { fn drop(&mut self) { if self.0 { unsafe { CoUninitialize(); } } } }
+impl Drop for ComApartment {
+    fn drop(&mut self) {
+        if self.0 {
+            unsafe {
+                CoUninitialize();
+            }
+        }
+    }
+}
 
 impl WindowsSelectionReader {
     pub fn new() -> Self {
@@ -192,13 +201,15 @@ impl WindowsSelectionReader {
                     .map_err(|e| format!("TextRange::GetText failed: {e}"))?;
                 captured.push_str(&text.to_string());
 
-                if let Ok(sa) = range.GetBoundingRectangles() {
-                    if let Some(bounds) = extract_bounds_from_safearray(sa) {
-                        combined_bounds = match combined_bounds {
-                            Some(existing) => Some(existing.union(&bounds)),
-                            None => Some(bounds),
-                        };
-                    }
+                if let Some(bounds) = range
+                    .GetBoundingRectangles()
+                    .ok()
+                    .and_then(extract_bounds_from_safearray)
+                {
+                    combined_bounds = match combined_bounds {
+                        Some(existing) => Some(existing.union(&bounds)),
+                        None => Some(bounds),
+                    };
                 }
             }
 
@@ -246,7 +257,7 @@ fn extract_bounds_from_safearray(
         let mut max_bottom = i32::MIN;
         let mut valid_rect_count = 0;
 
-        for chunk in doubles.chunks_exact(4) {
+        for chunk in doubles.as_chunks::<4>().0 {
             let left = chunk[0].round() as i32;
             let top = chunk[1].round() as i32;
             let width = chunk[2].round() as i32;
@@ -299,8 +310,8 @@ impl SelectionReader for WindowsSelectionReader {
 pub fn configure_transparent_window<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
     use windows::Win32::Foundation::HWND;
     use windows::Win32::Graphics::Dwm::{
-        DwmSetWindowAttribute, DWMWA_BORDER_COLOR, DWMWA_COLOR_NONE,
-        DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND,
+        DWMWA_BORDER_COLOR, DWMWA_COLOR_NONE, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND,
+        DwmSetWindowAttribute,
     };
 
     if let Ok(handle) = window.hwnd() {
@@ -342,10 +353,10 @@ pub fn resize_and_clamp_window<R: tauri::Runtime>(
 ) -> Result<(), String> {
     use windows::Win32::Foundation::{HWND, RECT};
     use windows::Win32::Graphics::Gdi::{
-        GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+        GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromWindow,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
-        GetWindowRect, SetWindowPos, SWP_NOACTIVATE, SWP_NOZORDER,
+        GetWindowRect, SWP_NOACTIVATE, SWP_NOZORDER, SetWindowPos,
     };
 
     let scale_factor = window.scale_factor().map_err(|e| e.to_string())?;
@@ -399,7 +410,7 @@ pub fn resize_and_clamp_window<R: tauri::Runtime>(
 /// DWMSBT_NONE (1) disables the backdrop for transparent rendering.
 pub fn set_window_acrylic<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>, enabled: bool) {
     use windows::Win32::Foundation::HWND;
-    use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWINDOWATTRIBUTE};
+    use windows::Win32::Graphics::Dwm::{DWMWINDOWATTRIBUTE, DwmSetWindowAttribute};
 
     if let Ok(handle) = window.hwnd() {
         unsafe {
@@ -421,7 +432,7 @@ pub fn set_window_acrylic<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>, e
 /// tint appropriately according to the active theme.
 pub fn set_window_theme<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>, dark: bool) {
     use windows::Win32::Foundation::HWND;
-    use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWINDOWATTRIBUTE};
+    use windows::Win32::Graphics::Dwm::{DWMWINDOWATTRIBUTE, DwmSetWindowAttribute};
 
     if let Ok(handle) = window.hwnd() {
         unsafe {
@@ -463,11 +474,11 @@ pub fn place_window_smartly<R: tauri::Runtime>(
 ) -> Result<(), String> {
     use windows::Win32::Foundation::{HWND, POINT, RECT};
     use windows::Win32::Graphics::Gdi::{
-        GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+        GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromPoint,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
-        GetWindowRect, SetWindowPos, ShowWindow, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOSIZE,
-        SWP_SHOWWINDOW, SW_SHOWNOACTIVATE,
+        GetWindowRect, HWND_TOPMOST, SW_SHOWNOACTIVATE, SWP_NOACTIVATE, SWP_NOSIZE, SWP_SHOWWINDOW,
+        SetWindowPos, ShowWindow,
     };
 
     let handle = window.hwnd().map_err(|e| e.to_string())?;
@@ -477,11 +488,17 @@ pub fn place_window_smartly<R: tauri::Runtime>(
     let mut window_rect = RECT::default();
     let has_rect = unsafe { GetWindowRect(hwnd, &mut window_rect) }.is_ok();
     let (win_w, win_h) = if has_rect && (window_rect.right - window_rect.left) > 0 {
-        (window_rect.right - window_rect.left, window_rect.bottom - window_rect.top)
+        (
+            window_rect.right - window_rect.left,
+            window_rect.bottom - window_rect.top,
+        )
     } else if let Ok(size) = window.outer_size() {
         (size.width as i32, size.height as i32)
     } else {
-        ((420.0 * scale_factor).round() as i32, (360.0 * scale_factor).round() as i32)
+        (
+            (420.0 * scale_factor).round() as i32,
+            (360.0 * scale_factor).round() as i32,
+        )
     };
 
     let cursor_pos = get_global_cursor_pos();
@@ -489,7 +506,10 @@ pub fn place_window_smartly<R: tauri::Runtime>(
     let ref_pt = if center {
         cursor_pos
             .map(|(cx, cy)| POINT { x: cx, y: cy })
-            .unwrap_or(POINT { x: window_rect.left, y: window_rect.top })
+            .unwrap_or(POINT {
+                x: window_rect.left,
+                y: window_rect.top,
+            })
     } else if let Some(bounds) = anchor_bounds {
         POINT {
             x: bounds.left + (bounds.width / 2),
@@ -498,7 +518,10 @@ pub fn place_window_smartly<R: tauri::Runtime>(
     } else {
         cursor_pos
             .map(|(cx, cy)| POINT { x: cx, y: cy })
-            .unwrap_or(POINT { x: window_rect.left, y: window_rect.top })
+            .unwrap_or(POINT {
+                x: window_rect.left,
+                y: window_rect.top,
+            })
     };
 
     let hmonitor = unsafe { MonitorFromPoint(ref_pt, MONITOR_DEFAULTTONEAREST) };

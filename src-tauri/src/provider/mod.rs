@@ -139,7 +139,9 @@ pub fn registry() -> &'static [(&'static str, ProviderFactory)] {
     &[
         ("google_free", |_config| Arc::new(GoogleFreeProvider::new())),
         ("youdao_free", |_config| Arc::new(YoudaoFreeProvider::new())),
-        ("tencent_free", |_config| Arc::new(TencentFreeProvider::new())),
+        ("tencent_free", |_config| {
+            Arc::new(TencentFreeProvider::new())
+        }),
         ("openai", |config| {
             Arc::new(OpenAiCompatibleProvider::new(config.unwrap_or_default()))
         }),

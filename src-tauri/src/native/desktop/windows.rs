@@ -4,8 +4,8 @@ use windows::Win32::Foundation::{HWND, POINT};
 use windows::Win32::Graphics::Gdi::{
     BI_RGB, BITMAPINFO, BITMAPINFOHEADER, BitBlt, CAPTUREBLT, CreateCompatibleBitmap,
     CreateCompatibleDC, DIB_RGB_COLORS, DeleteDC, DeleteObject, GetDC, GetDIBits, GetMonitorInfoW,
-    HBITMAP, HDC, HGDIOBJ, MONITORINFO, MonitorFromPoint, ReleaseDC, SRCCOPY, SelectObject,
-    MONITOR_DEFAULTTONEAREST,
+    HBITMAP, HDC, HGDIOBJ, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromPoint, ReleaseDC,
+    SRCCOPY, SelectObject,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     GetCursorPos, GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN,
@@ -49,7 +49,6 @@ impl Drop for CaptureDc {
         }
     }
 }
-
 
 impl WindowsDesktop {
     fn active_monitor_bounds() -> Result<ScreenRect, String> {
@@ -212,10 +211,10 @@ impl DesktopCapture for WindowsDesktop {
             _ => false,
         };
 
-        if let Some(Ok(image)) = dxgi_capture {
-            if !is_all_black(&image) {
-                return Ok(image);
-            }
+        if let Some(Ok(image)) = dxgi_capture
+            && !is_all_black(&image)
+        {
+            return Ok(image);
         }
 
         if gdi_was_black || dxgi_was_black {

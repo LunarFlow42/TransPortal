@@ -13,11 +13,11 @@ use serde::Serialize;
 use tauri::AppHandle;
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
-pub mod ocr;
-pub mod integrity;
 pub mod desktop;
-pub mod selection;
+pub mod integrity;
 pub mod memory;
+pub mod ocr;
+pub mod selection;
 
 /// Mark only our synthesized input, leaving accessibility/remapped keys usable.
 pub(crate) const INPUT_MARKER: usize = 0x54524e53;
@@ -28,19 +28,19 @@ mod fallback;
 mod windows;
 
 #[cfg(not(target_os = "windows"))]
-pub use fallback::{
-    configure_transparent_window, get_global_cursor_pos, place_window_smartly,
-    resize_and_clamp_window, set_window_acrylic, set_window_theme,
-};
-#[cfg(not(target_os = "windows"))]
 use fallback::FallbackSelectionReader;
-#[cfg(target_os = "windows")]
-pub use windows::{
+#[cfg(not(target_os = "windows"))]
+pub use fallback::{
     configure_transparent_window, get_global_cursor_pos, place_window_smartly,
     resize_and_clamp_window, set_window_acrylic, set_window_theme,
 };
 #[cfg(target_os = "windows")]
 use windows::WindowsSelectionReader;
+#[cfg(target_os = "windows")]
+pub use windows::{
+    configure_transparent_window, get_global_cursor_pos, place_window_smartly,
+    resize_and_clamp_window, set_window_acrylic, set_window_theme,
+};
 
 /// Screen bounding box of selected text in physical pixels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -171,7 +171,10 @@ pub fn capture_selected_text(app: &AppHandle) -> CaptureOutcome {
 
     let preferred_error = match reader.read_selection() {
         Ok(content) if !content.text.trim().is_empty() => {
-            eprintln!("[capture] UI Automation returned {} chars", content.text.trim().len());
+            eprintln!(
+                "[capture] UI Automation returned {} chars",
+                content.text.trim().len()
+            );
             return CaptureOutcome {
                 text: normalize(&content.text),
                 method: reader.method(),
@@ -208,7 +211,10 @@ pub fn capture_selected_text(app: &AppHandle) -> CaptureOutcome {
     );
 
     // Report why the preferred path was skipped, for diagnostics.
-    let diagnostics: Vec<String> = [preferred_error, copy_error].into_iter().flatten().collect();
+    let diagnostics: Vec<String> = [preferred_error, copy_error]
+        .into_iter()
+        .flatten()
+        .collect();
     if diagnostics.is_empty() {
         return outcome;
     }

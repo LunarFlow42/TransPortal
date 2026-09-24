@@ -265,7 +265,9 @@ fn dict_entry_from_ecdict(record: &StringRecord) -> DictEntry {
     let examples = examples_from_detail(record.get(11).unwrap_or_default());
 
     let audio_url = non_empty(record.get(12).map(str::to_string)).or_else(|| {
-        Some(format!("https://dict.youdao.com/dictvoice?audio={word}&type=2"))
+        Some(format!(
+            "https://dict.youdao.com/dictvoice?audio={word}&type=2"
+        ))
     });
 
     DictEntry {
@@ -407,7 +409,9 @@ fn entry(
     DictEntry {
         word: word.to_string(),
         phonetic: Some(phonetic.to_string()),
-        audio_url: Some(format!("https://dict.youdao.com/dictvoice?audio={word}&type=2")),
+        audio_url: Some(format!(
+            "https://dict.youdao.com/dictvoice?audio={word}&type=2"
+        )),
         definitions,
         english_definitions: Vec::new(),
         exchange: exchange.map(str::to_string),
@@ -482,10 +486,7 @@ fn builtin_entries() -> Vec<(&'static str, DictEntry)> {
             entry(
                 "transparent",
                 "/trænsˈpærənt/",
-                vec![pos(
-                    "adj.",
-                    &["透明的，清澈的", "显然的，易懂的，坦率的"],
-                )],
+                vec![pos("adj.", &["透明的，清澈的", "显然的，易懂的，坦率的"])],
                 None,
                 &["CET4", "CET6", "IELTS"],
                 vec![
@@ -571,7 +572,10 @@ mod tests {
             "SEED_ENTRY_COUNT is out of sync with builtin_entries()"
         );
         let store = temp_store();
-        let entry = store.lookup("portal").unwrap().expect("portal should exist");
+        let entry = store
+            .lookup("portal")
+            .unwrap()
+            .expect("portal should exist");
         assert_eq!(entry.word, "portal");
         assert!(entry.phonetic.is_some());
         assert!(!entry.definitions.is_empty());

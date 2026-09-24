@@ -6,7 +6,7 @@
 //! `{ "result": ..., "error": null | "..." }`.
 
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::time::Duration;
 
 /// Parameters for adding a single note, sent from the frontend.

@@ -6,7 +6,7 @@
 use super::{ProviderError, TranslateQuery, TranslateResult, Translator};
 use async_trait::async_trait;
 use reqwest::Client;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::time::Duration;
 
 const ENDPOINT: &str = "https://transmart.qq.com/api/imt";
@@ -40,7 +40,11 @@ fn tencent_lang(tag: Option<&str>, target: bool) -> String {
         return fallback.to_string();
     };
 
-    let base = tag.split(['-', '_']).next().unwrap_or(tag).to_ascii_lowercase();
+    let base = tag
+        .split(['-', '_'])
+        .next()
+        .unwrap_or(tag)
+        .to_ascii_lowercase();
     match (base.as_str(), tag.to_ascii_lowercase().as_str()) {
         ("auto", _) => "auto".to_string(),
         ("zh", "zh-tw") | ("zh", "zh-hant") => "zh-TW".to_string(),
@@ -69,12 +73,7 @@ impl Translator for TencentFreeProvider {
             "target": { "lang": target_lang }
         });
 
-        let response = self
-            .client
-            .post(ENDPOINT)
-            .json(&payload)
-            .send()
-            .await?;
+        let response = self.client.post(ENDPOINT).json(&payload).send().await?;
 
         if !response.status().is_success() {
             let status = response.status();

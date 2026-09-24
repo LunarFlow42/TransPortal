@@ -32,13 +32,13 @@ pub struct TrimResult {
 mod win_impl {
     use super::{MemoryReport, TrimResult};
     use std::collections::HashSet;
-    use windows::core::s;
     use windows::Win32::Foundation::{CloseHandle, HANDLE, HMODULE};
     use windows::Win32::System::LibraryLoader::{GetModuleHandleA, GetProcAddress};
     use windows::Win32::System::Threading::{
-        GetCurrentProcess, GetCurrentProcessId, OpenProcess, SetProcessWorkingSetSize,
-        PROCESS_QUERY_INFORMATION, PROCESS_SET_QUOTA,
+        GetCurrentProcess, GetCurrentProcessId, OpenProcess, PROCESS_QUERY_INFORMATION,
+        PROCESS_SET_QUOTA, SetProcessWorkingSetSize,
     };
+    use windows::core::s;
 
     #[repr(C)]
     struct PROCESSENTRY32W {
@@ -85,6 +85,7 @@ mod win_impl {
     }
 
     impl Kernel32MemoryApi {
+        #[allow(clippy::missing_transmute_annotations)]
         fn load() -> Option<Self> {
             unsafe {
                 let h_kernel32: HMODULE = GetModuleHandleA(s!("kernel32.dll")).ok()?;
@@ -161,10 +162,7 @@ mod win_impl {
         result
     }
 
-    fn read_process_memory(
-        api: &Kernel32MemoryApi,
-        handle: HANDLE,
-    ) -> Option<(usize, usize)> {
+    fn read_process_memory(api: &Kernel32MemoryApi, handle: HANDLE) -> Option<(usize, usize)> {
         let mut counters = PROCESS_MEMORY_COUNTERS {
             cb: std::mem::size_of::<PROCESS_MEMORY_COUNTERS>() as u32,
             ..Default::default()
@@ -202,14 +200,14 @@ mod win_impl {
                 }
             } else {
                 let handle = unsafe { OpenProcess(PROCESS_QUERY_INFORMATION, false, pid) };
-                if let Ok(h) = handle {
-                    if !h.is_invalid() {
-                        if let Some((ws, pf)) = read_process_memory(&api, h) {
-                            total_working_set += ws as u64;
-                            total_private += pf as u64;
-                        }
-                        let _ = unsafe { CloseHandle(h) };
+                if let Ok(h) = handle
+                    && !h.is_invalid()
+                {
+                    if let Some((ws, pf)) = read_process_memory(&api, h) {
+                        total_working_set += ws as u64;
+                        total_private += pf as u64;
                     }
+                    let _ = unsafe { CloseHandle(h) };
                 }
             }
         }
@@ -240,21 +238,17 @@ mod win_impl {
             } else {
                 // Open child process with PROCESS_SET_QUOTA | PROCESS_QUERY_INFORMATION
                 let handle = unsafe {
-                    OpenProcess(
-                        PROCESS_SET_QUOTA | PROCESS_QUERY_INFORMATION,
-                        false,
-                        pid,
-                    )
+                    OpenProcess(PROCESS_SET_QUOTA | PROCESS_QUERY_INFORMATION, false, pid)
                 };
-                if let Ok(h) = handle {
-                    if !h.is_invalid() {
-                        unsafe {
-                            let _ = SetProcessWorkingSetSize(h, usize::MAX, usize::MAX);
-                            if let Some(empty_fn) = api.k32_empty_working_set {
-                                let _ = (empty_fn)(h);
-                            }
-                            let _ = CloseHandle(h);
+                if let Ok(h) = handle
+                    && !h.is_invalid()
+                {
+                    unsafe {
+                        let _ = SetProcessWorkingSetSize(h, usize::MAX, usize::MAX);
+                        if let Some(empty_fn) = api.k32_empty_working_set {
+                            let _ = (empty_fn)(h);
                         }
+                        let _ = CloseHandle(h);
                     }
                 }
             }
@@ -264,7 +258,9 @@ mod win_impl {
         std::thread::sleep(std::time::Duration::from_millis(30));
 
         let after = get_memory_usage().unwrap_or_else(|_| before.clone());
-        let trimmed = before.total_working_set_bytes.saturating_sub(after.total_working_set_bytes);
+        let trimmed = before
+            .total_working_set_bytes
+            .saturating_sub(after.total_working_set_bytes);
 
         Ok(TrimResult {
             before_bytes: before.total_working_set_bytes,

@@ -58,9 +58,13 @@ fn fields(data: &[u8]) -> Result<Vec<(u64, Value<'_>)>, String> {
 }
 
 fn count_tensor(bytes: &[u8], types: &mut BTreeMap<u64, usize>) -> Result<(), String> {
-    let datatype = fields(bytes)?.into_iter().find_map(|(id, value)| match (id, value) {
-        (2, Value::Integer(datatype)) => Some(datatype), _ => None,
-    }).ok_or("tensor has no datatype")?;
+    let datatype = fields(bytes)?
+        .into_iter()
+        .find_map(|(id, value)| match (id, value) {
+            (2, Value::Integer(datatype)) => Some(datatype),
+            _ => None,
+        })
+        .ok_or("tensor has no datatype")?;
     *types.entry(datatype).or_default() += 1;
     Ok(())
 }
@@ -94,7 +98,8 @@ fn main() -> Result<(), String> {
                         if let Value::Bytes(value) = value {
                             if id == 4 {
                                 let operation = String::from_utf8_lossy(value);
-                                if operation.contains("Quantiz") || operation.starts_with("QLinear") {
+                                if operation.contains("Quantiz") || operation.starts_with("QLinear")
+                                {
                                     quantized_nodes += 1;
                                 }
                             } else if id == 5 {

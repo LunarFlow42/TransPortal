@@ -6,8 +6,8 @@ pub mod integrity;
 pub mod native;
 pub mod ocr;
 pub mod provider;
-pub mod shortcut;
 pub mod selection;
+pub mod shortcut;
 mod shortcut_sequence;
 
 use tauri::{
@@ -27,7 +27,9 @@ fn focus_shell<R: tauri::Runtime>(app: &AppHandle<R>) {
 }
 
 /// Dynamically create or focus the settings window on demand.
-pub fn open_or_focus_settings<R: tauri::Runtime>(app: &AppHandle<R>) -> Result<tauri::WebviewWindow<R>, String> {
+pub fn open_or_focus_settings<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+) -> Result<tauri::WebviewWindow<R>, String> {
     if let Some(window) = app.get_webview_window("settings") {
         let _ = window.unminimize();
         let _ = window.show();
@@ -73,7 +75,16 @@ fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>>
     let settings_item = MenuItem::with_id(app, "settings", "Settings...", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
     let quit_item = MenuItem::with_id(app, "quit", "Quit TransPortal", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show_item, &hide_item, &settings_item, &separator, &quit_item])?;
+    let menu = Menu::with_items(
+        app,
+        &[
+            &show_item,
+            &hide_item,
+            &settings_item,
+            &separator,
+            &quit_item,
+        ],
+    )?;
 
     if let Some(icon) = app.default_window_icon() {
         let _tray = TrayIconBuilder::new()
@@ -137,7 +148,8 @@ fn setup_dictionary(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> 
 pub fn run() {
     let report = integrity::startup_report();
     if report.blocks_startup() {
-        native::integrity::platform().show_failure(report.error.as_deref().unwrap_or("程序完整性检查失败。"));
+        native::integrity::platform()
+            .show_failure(report.error.as_deref().unwrap_or("程序完整性检查失败。"));
         std::process::exit(2);
     }
     tauri::Builder::default()

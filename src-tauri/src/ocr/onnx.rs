@@ -1,8 +1,8 @@
 //! RapidOCR's PaddleOCR FP32 models executed by ONNX Runtime's CPU provider.
 
 use super::assets::{OnnxAssets, manifest};
-use super::{OcrEngine, OcrEngineInfo, OcrImage, OcrLanguage, RecognizedText};
 use super::picture::OcrBlock;
+use super::{OcrEngine, OcrEngineInfo, OcrImage, OcrLanguage, RecognizedText};
 use ort::execution_providers::CPUExecutionProvider;
 use ort::session::builder::{GraphOptimizationLevel, SessionBuilder};
 use paddle_ocr_rs::ocr_lite::OcrLite;
@@ -297,9 +297,14 @@ fn ordered_result(blocks: Vec<TextBlock>) -> (String, Vec<OcrBlock>) {
                 let left = block.box_points.iter().map(|p| p.x).min().unwrap_or(0);
                 let right = block.box_points.iter().map(|p| p.x).max().unwrap_or(left);
                 let (top, bottom) = bounds(block);
-                regions.push(OcrBlock { id: regions.len() as u32, text: block.text.trim().into(),
-                    x: left as f32, y: top as f32, width: right.saturating_sub(left) as f32,
-                    height: bottom.saturating_sub(top) as f32 });
+                regions.push(OcrBlock {
+                    id: regions.len() as u32,
+                    text: block.text.trim().into(),
+                    x: left as f32,
+                    y: top as f32,
+                    width: right.saturating_sub(left) as f32,
+                    height: bottom.saturating_sub(top) as f32,
+                });
             }
             line.blocks
                 .iter()
@@ -363,7 +368,8 @@ mod tests {
                 block("world", 90, 12, 0.99),
                 block("Hello", 10, 10, 0.99),
                 block("noise", 10, 90, 0.1),
-            ]).0,
+            ])
+            .0,
             "Hello world\nSecond row."
         );
     }

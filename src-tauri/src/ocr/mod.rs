@@ -1,11 +1,11 @@
 //! Local OCR contracts and screenshot workflow. Platform APIs live in `native`.
 
 pub mod assets;
-pub mod onnx;
-pub mod registry;
-pub mod picture;
 pub mod monitor;
+pub mod onnx;
+pub mod picture;
 pub mod region;
+pub mod registry;
 mod workflow;
 
 use serde::{Deserialize, Serialize};
@@ -23,7 +23,6 @@ pub enum OcrMode {
     Card,
     Silent,
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -117,8 +116,13 @@ pub enum ScreenEvent {
     Snip {
         clipboard_revision: u32,
     },
-    DoubleCopy { clipboard_revision: u32, window: usize },
-    InkTranslate { window: usize },
+    DoubleCopy {
+        clipboard_revision: u32,
+        window: usize,
+    },
+    InkTranslate {
+        window: usize,
+    },
     Cancel,
 }
 

@@ -55,13 +55,24 @@ impl OpenAiCompatibleProvider {
     }
 
     fn build_system_prompt(&self, target_lang: &str) -> String {
-        if let Some(prompt) = self.config.system_prompt.as_deref().filter(|s| !s.trim().is_empty()) {
+        if let Some(prompt) = self
+            .config
+            .system_prompt
+            .as_deref()
+            .filter(|s| !s.trim().is_empty())
+        {
             return prompt.to_string();
         }
         match self.config.prompt_template.as_deref() {
-            Some("academic") => format!("You are a professional academic translator and editor. Translate or polish the following text into formal, natural academic {target_lang} with scholarly vocabulary. Provide only the translation, with no conversational remarks."),
-            Some("code") => format!("You are an expert developer translator. Translate the following text into concise, technical {target_lang} suitable for code comments, commit messages, or variable naming conventions. Provide only the pure translation, with no explanation."),
-            Some("casual") => format!("You are a native conversational translator. Translate the following text into casual, everyday colloquial {target_lang}. Provide only the translation, with no conversational remarks."),
+            Some("academic") => format!(
+                "You are a professional academic translator and editor. Translate or polish the following text into formal, natural academic {target_lang} with scholarly vocabulary. Provide only the translation, with no conversational remarks."
+            ),
+            Some("code") => format!(
+                "You are an expert developer translator. Translate the following text into concise, technical {target_lang} suitable for code comments, commit messages, or variable naming conventions. Provide only the pure translation, with no explanation."
+            ),
+            Some("casual") => format!(
+                "You are a native conversational translator. Translate the following text into casual, everyday colloquial {target_lang}. Provide only the translation, with no conversational remarks."
+            ),
             _ => format!(
                 "You are a high-speed professional translator and dictionary assistant. Translate the following user input accurately and naturally into {target_lang}. Provide only the pure translation or explanation, with no preamble or conversational remarks."
             ),
@@ -151,10 +162,14 @@ impl Translator for OpenAiCompatibleProvider {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
             if status.as_u16() == 401 {
-                return Err(ProviderError::Auth(format!("Invalid OpenAI API Key: {body}")));
+                return Err(ProviderError::Auth(format!(
+                    "Invalid OpenAI API Key: {body}"
+                )));
             }
             if status.as_u16() == 429 {
-                return Err(ProviderError::RateLimit(format!("OpenAI Rate Limit reached: {body}")));
+                return Err(ProviderError::RateLimit(format!(
+                    "OpenAI Rate Limit reached: {body}"
+                )));
             }
             return Err(ProviderError::Execution(format!(
                 "OpenAI request failed ({status}): {body}"
@@ -173,7 +188,9 @@ impl Translator for OpenAiCompatibleProvider {
             .to_string();
 
         if translated.is_empty() {
-            return Err(ProviderError::Parse("Received empty translation from OpenAI".into()));
+            return Err(ProviderError::Parse(
+                "Received empty translation from OpenAI".into(),
+            ));
         }
 
         Ok(TranslateResult {
@@ -255,7 +272,9 @@ impl Translator for OpenAiCompatibleProvider {
                         is_done: true,
                         error: Some(message.clone()),
                     });
-                    return Err(ProviderError::Execution(format!("SSE stream error: {message}")));
+                    return Err(ProviderError::Execution(format!(
+                        "SSE stream error: {message}"
+                    )));
                 }
             }
         }

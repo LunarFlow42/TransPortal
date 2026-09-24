@@ -125,9 +125,12 @@ impl MonitorService {
         let capture_app = app.clone();
         let token = cancel.clone();
         let result = tauri::async_runtime::spawn_blocking(move || {
-            capture_app
-                .state::<RegionService>()
-                .freeze(&capture_app, RegionPurpose::Monitor, id, token)
+            capture_app.state::<RegionService>().freeze(
+                &capture_app,
+                RegionPurpose::Monitor,
+                id,
+                token,
+            )
         })
         .await
         .map_err(|error| error.to_string())
@@ -151,7 +154,8 @@ impl MonitorService {
             }
         };
         if cancel.is_cancelled() || self.state.lock().unwrap().update.id != id {
-            app.state::<RegionService>().dismiss(app, |_, pending| pending == selection);
+            app.state::<RegionService>()
+                .dismiss(app, |_, pending| pending == selection);
             return Err("已取消区域选择。".into());
         }
         let window_app = app.clone();
@@ -314,6 +318,7 @@ impl MonitorService {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn tick(
         &self,
         app: &AppHandle,

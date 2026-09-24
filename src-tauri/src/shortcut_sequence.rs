@@ -40,6 +40,7 @@ pub struct DoubleCopyDetector {
 }
 
 impl DoubleCopyDetector {
+    #[allow(clippy::too_many_arguments)]
     pub fn observe(
         &mut self,
         key: u32,

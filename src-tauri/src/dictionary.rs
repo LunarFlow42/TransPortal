@@ -70,6 +70,8 @@ struct SourceEntry {
     stats: Arc<Mutex<SourceStats>>,
 }
 
+type PipelineItem = (Arc<dyn DictSource>, Arc<Mutex<SourceStats>>);
+
 /// Online dictionary source backed by Youdao's JSON endpoint.
 pub struct YoudaoSource {
     client: Client,
@@ -446,7 +448,7 @@ impl LookupService {
         }
 
         // Snapshot (source, stats) so no lock guard is held across `.await`.
-        let pipeline: Vec<(Arc<dyn DictSource>, Arc<Mutex<SourceStats>>)> = {
+        let pipeline: Vec<PipelineItem> = {
             let entries = self.entries.read().expect("source list lock");
             entries
                 .iter()

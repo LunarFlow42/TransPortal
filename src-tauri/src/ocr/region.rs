@@ -4,12 +4,12 @@
 //! user drags a rectangle over a still image. Snips crop that frozen image,
 //! which needs no clipboard, no system screenshot tool and no compositor delay.
 
-use super::picture::Cancellation;
 use super::OcrMode;
+use super::picture::Cancellation;
 use crate::native::desktop::{DesktopCapture, ScreenRect};
-use base64::{engine::general_purpose::STANDARD, Engine};
-use image::codecs::jpeg::JpegEncoder;
+use base64::{Engine, engine::general_purpose::STANDARD};
 use image::ImageEncoder;
+use image::codecs::jpeg::JpegEncoder;
 use serde::Serialize;
 use std::sync::{Arc, Mutex};
 use tauri::{
@@ -32,7 +32,10 @@ pub enum RegionPurpose {
 
 impl RegionPurpose {
     pub fn is_snip(self) -> bool {
-        matches!(self, Self::Text | Self::Translate | Self::Picture | Self::Card | Self::Silent)
+        matches!(
+            self,
+            Self::Text | Self::Translate | Self::Picture | Self::Card | Self::Silent
+        )
     }
 }
 
@@ -46,7 +49,6 @@ impl From<OcrMode> for RegionPurpose {
         }
     }
 }
-
 
 #[derive(Clone, Serialize)]
 pub struct RegionSelection {
@@ -344,11 +346,17 @@ impl RegionService {
 pub fn confirm(app: &AppHandle, id: u64, region: ScreenRect) -> Result<(), String> {
     let confirmed = app.state::<RegionService>().take(app, id, region)?;
     match confirmed.purpose {
-        RegionPurpose::Monitor => app
-            .state::<super::monitor::MonitorService>()
-            .confirm(app, confirmed.owner, region),
-        RegionPurpose::Text | RegionPurpose::Translate | RegionPurpose::Picture | RegionPurpose::Card | RegionPurpose::Silent => {
-            app.state::<super::OcrService>().finish_capture(app, confirmed);
+        RegionPurpose::Monitor => {
+            app.state::<super::monitor::MonitorService>()
+                .confirm(app, confirmed.owner, region)
+        }
+        RegionPurpose::Text
+        | RegionPurpose::Translate
+        | RegionPurpose::Picture
+        | RegionPurpose::Card
+        | RegionPurpose::Silent => {
+            app.state::<super::OcrService>()
+                .finish_capture(app, confirmed);
             Ok(())
         }
     }
@@ -361,9 +369,17 @@ pub fn cancel(app: &AppHandle, id: Option<u64>) {
         .dismiss(app, |_, pending| id.is_none_or(|id| id == pending));
     match dropped {
         Some((RegionPurpose::Monitor, _)) => {
-            app.state::<super::monitor::MonitorService>().stop(app, true);
+            app.state::<super::monitor::MonitorService>()
+                .stop(app, true);
         }
-        Some((RegionPurpose::Text | RegionPurpose::Translate | RegionPurpose::Picture | RegionPurpose::Card | RegionPurpose::Silent, _)) => {
+        Some((
+            RegionPurpose::Text
+            | RegionPurpose::Translate
+            | RegionPurpose::Picture
+            | RegionPurpose::Card
+            | RegionPurpose::Silent,
+            _,
+        )) => {
             app.state::<super::OcrService>().cancel(app);
         }
         None => {}
@@ -376,10 +392,20 @@ mod tests {
 
     #[test]
     fn crop_uses_offsets_relative_to_a_negative_desktop_origin() {
-        let bounds = ScreenRect { x: -100, y: -50, width: 300, height: 200 };
+        let bounds = ScreenRect {
+            x: -100,
+            y: -50,
+            width: 300,
+            height: 200,
+        };
         let mut frozen = image::RgbaImage::new(300, 200);
         frozen.put_pixel(120, 60, image::Rgba([1, 2, 3, 255]));
-        let region = ScreenRect { x: 20, y: 10, width: 4, height: 4 };
+        let region = ScreenRect {
+            x: 20,
+            y: 10,
+            width: 4,
+            height: 4,
+        };
         let cropped = crop(&frozen, bounds, region).unwrap();
         assert_eq!((cropped.width(), cropped.height()), (4, 4));
         assert_eq!(cropped.get_pixel(0, 0), &image::Rgba([1, 2, 3, 255]));
@@ -387,18 +413,67 @@ mod tests {
 
     #[test]
     fn crop_rejects_regions_outside_or_mismatched_with_the_frozen_image() {
-        let bounds = ScreenRect { x: 0, y: 0, width: 100, height: 100 };
+        let bounds = ScreenRect {
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 100,
+        };
         let frozen = image::RgbaImage::new(100, 100);
-        assert!(crop(&frozen, bounds, ScreenRect { x: 90, y: 0, width: 20, height: 20 }).is_err());
-        assert!(crop(&frozen, bounds, ScreenRect { x: 0, y: 0, width: 1, height: 1 }).is_err());
-        let stale = ScreenRect { x: 0, y: 0, width: 200, height: 100 };
-        assert!(crop(&frozen, stale, ScreenRect { x: 0, y: 0, width: 20, height: 20 }).is_err());
+        assert!(
+            crop(
+                &frozen,
+                bounds,
+                ScreenRect {
+                    x: 90,
+                    y: 0,
+                    width: 20,
+                    height: 20
+                }
+            )
+            .is_err()
+        );
+        assert!(
+            crop(
+                &frozen,
+                bounds,
+                ScreenRect {
+                    x: 0,
+                    y: 0,
+                    width: 1,
+                    height: 1
+                }
+            )
+            .is_err()
+        );
+        let stale = ScreenRect {
+            x: 0,
+            y: 0,
+            width: 200,
+            height: 100,
+        };
+        assert!(
+            crop(
+                &frozen,
+                stale,
+                ScreenRect {
+                    x: 0,
+                    y: 0,
+                    width: 20,
+                    height: 20
+                }
+            )
+            .is_err()
+        );
     }
 
     #[test]
     fn snip_purposes_follow_the_ocr_mode() {
         assert_eq!(RegionPurpose::from(OcrMode::Text), RegionPurpose::Text);
-        assert_eq!(RegionPurpose::from(OcrMode::Picture), RegionPurpose::Picture);
+        assert_eq!(
+            RegionPurpose::from(OcrMode::Picture),
+            RegionPurpose::Picture
+        );
         assert_eq!(RegionPurpose::from(OcrMode::Card), RegionPurpose::Card);
         assert_eq!(RegionPurpose::from(OcrMode::Silent), RegionPurpose::Silent);
         assert!(RegionPurpose::Picture.is_snip());
@@ -422,7 +497,12 @@ mod tests {
         let mut state = service.state.lock().unwrap();
         let mut image = image::RgbaImage::new(10, 10);
         image.put_pixel(0, 0, image::Rgba([12, 34, 56, 255]));
-        let bounds = ScreenRect { x: 0, y: 0, width: 10, height: 10 };
+        let bounds = ScreenRect {
+            x: 0,
+            y: 0,
+            width: 10,
+            height: 10,
+        };
         state.pending = Some(Pending {
             selection: RegionSelection {
                 id: 42,
@@ -441,4 +521,3 @@ mod tests {
         assert_eq!(&pixels[0..4], &[12, 34, 56, 255]);
     }
 }
-

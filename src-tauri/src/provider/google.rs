@@ -54,10 +54,9 @@ impl Translator for GoogleFreeProvider {
             )));
         }
 
-        let json: Value = response
-            .json()
-            .await
-            .map_err(|e| ProviderError::Parse(format!("Failed to parse Google response JSON: {e}")))?;
+        let json: Value = response.json().await.map_err(|e| {
+            ProviderError::Parse(format!("Failed to parse Google response JSON: {e}"))
+        })?;
 
         // Structure of Google GTX JSON:
         // [
@@ -109,7 +108,11 @@ impl Translator for GoogleFreeProvider {
             translated_text: full_translated,
             detected_source_lang: detected_lang,
             target_lang: tl.to_string(),
-            details: if details.is_empty() { None } else { Some(details) },
+            details: if details.is_empty() {
+                None
+            } else {
+                Some(details)
+            },
             provider_name: "GoogleFree".to_string(),
         })
     }

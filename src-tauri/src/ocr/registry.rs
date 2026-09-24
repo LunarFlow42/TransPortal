@@ -95,39 +95,69 @@ pub fn match_language_tag<'a>(
     let lower = clean.to_ascii_lowercase();
 
     // 1. Exact match (case-insensitive)
-    if let Some(lang) = languages.iter().find(|l| l.tag.eq_ignore_ascii_case(&clean)) {
+    if let Some(lang) = languages
+        .iter()
+        .find(|l| l.tag.eq_ignore_ascii_case(&clean))
+    {
         return Some(lang);
     }
 
     // 2. Chinese alias matching
     if lower == "zh" || lower == "zh-cn" || lower == "zh-hans" || lower == "zh-hans-cn" {
-        if let Some(lang) = languages.iter().find(|l| l.tag.eq_ignore_ascii_case("zh-Hans-CN")) {
+        if let Some(lang) = languages
+            .iter()
+            .find(|l| l.tag.eq_ignore_ascii_case("zh-Hans-CN"))
+        {
             return Some(lang);
         }
-        if let Some(lang) = languages.iter().find(|l| l.tag.to_ascii_lowercase().starts_with("zh-hans")) {
+        if let Some(lang) = languages
+            .iter()
+            .find(|l| l.tag.to_ascii_lowercase().starts_with("zh-hans"))
+        {
             return Some(lang);
         }
-        if let Some(lang) = languages.iter().find(|l| l.tag.to_ascii_lowercase().starts_with("zh")) {
+        if let Some(lang) = languages
+            .iter()
+            .find(|l| l.tag.to_ascii_lowercase().starts_with("zh"))
+        {
             return Some(lang);
         }
     } else if lower == "zh-tw" || lower == "zh-hant" || lower == "zh-hant-tw" {
-        if let Some(lang) = languages.iter().find(|l| l.tag.eq_ignore_ascii_case("zh-Hant-TW")) {
+        if let Some(lang) = languages
+            .iter()
+            .find(|l| l.tag.eq_ignore_ascii_case("zh-Hant-TW"))
+        {
             return Some(lang);
         }
-        if let Some(lang) = languages.iter().find(|l| l.tag.to_ascii_lowercase().starts_with("zh-hant")) {
+        if let Some(lang) = languages
+            .iter()
+            .find(|l| l.tag.to_ascii_lowercase().starts_with("zh-hant"))
+        {
             return Some(lang);
         }
-        if let Some(lang) = languages.iter().find(|l| l.tag.to_ascii_lowercase().starts_with("zh")) {
+        if let Some(lang) = languages
+            .iter()
+            .find(|l| l.tag.to_ascii_lowercase().starts_with("zh"))
+        {
             return Some(lang);
         }
     } else if lower == "zh-hk" || lower == "zh-hant-hk" {
-        if let Some(lang) = languages.iter().find(|l| l.tag.eq_ignore_ascii_case("zh-Hant-HK")) {
+        if let Some(lang) = languages
+            .iter()
+            .find(|l| l.tag.eq_ignore_ascii_case("zh-Hant-HK"))
+        {
             return Some(lang);
         }
-        if let Some(lang) = languages.iter().find(|l| l.tag.to_ascii_lowercase().starts_with("zh-hant")) {
+        if let Some(lang) = languages
+            .iter()
+            .find(|l| l.tag.to_ascii_lowercase().starts_with("zh-hant"))
+        {
             return Some(lang);
         }
-        if let Some(lang) = languages.iter().find(|l| l.tag.to_ascii_lowercase().starts_with("zh")) {
+        if let Some(lang) = languages
+            .iter()
+            .find(|l| l.tag.to_ascii_lowercase().starts_with("zh"))
+        {
             return Some(lang);
         }
     }
@@ -240,16 +270,37 @@ mod tests {
         ];
 
         // Chinese aliases
-        assert_eq!(match_language_tag(&languages, "zh-CN").unwrap().tag, "zh-Hans-CN");
-        assert_eq!(match_language_tag(&languages, "zh").unwrap().tag, "zh-Hans-CN");
-        assert_eq!(match_language_tag(&languages, "zh_cn").unwrap().tag, "zh-Hans-CN");
-        assert_eq!(match_language_tag(&languages, "zh-hans").unwrap().tag, "zh-Hans-CN");
-        assert_eq!(match_language_tag(&languages, "zh-hans-cn").unwrap().tag, "zh-Hans-CN");
+        assert_eq!(
+            match_language_tag(&languages, "zh-CN").unwrap().tag,
+            "zh-Hans-CN"
+        );
+        assert_eq!(
+            match_language_tag(&languages, "zh").unwrap().tag,
+            "zh-Hans-CN"
+        );
+        assert_eq!(
+            match_language_tag(&languages, "zh_cn").unwrap().tag,
+            "zh-Hans-CN"
+        );
+        assert_eq!(
+            match_language_tag(&languages, "zh-hans").unwrap().tag,
+            "zh-Hans-CN"
+        );
+        assert_eq!(
+            match_language_tag(&languages, "zh-hans-cn").unwrap().tag,
+            "zh-Hans-CN"
+        );
 
         // English prefix and case
         assert_eq!(match_language_tag(&languages, "en").unwrap().tag, "en-US");
-        assert_eq!(match_language_tag(&languages, "en-us").unwrap().tag, "en-US");
-        assert_eq!(match_language_tag(&languages, "EN-US").unwrap().tag, "en-US");
+        assert_eq!(
+            match_language_tag(&languages, "en-us").unwrap().tag,
+            "en-US"
+        );
+        assert_eq!(
+            match_language_tag(&languages, "EN-US").unwrap().tag,
+            "en-US"
+        );
 
         // Unsupported
         assert!(match_language_tag(&languages, "ja").is_none());
@@ -263,38 +314,65 @@ mod tests {
             label: "Chinese + English".into(),
         }];
 
-        assert_eq!(match_language_tag(&languages, "zh-CN").unwrap().tag, "zh-Hans-en");
-        assert_eq!(match_language_tag(&languages, "zh").unwrap().tag, "zh-Hans-en");
-        assert_eq!(match_language_tag(&languages, "en").unwrap().tag, "zh-Hans-en");
+        assert_eq!(
+            match_language_tag(&languages, "zh-CN").unwrap().tag,
+            "zh-Hans-en"
+        );
+        assert_eq!(
+            match_language_tag(&languages, "zh").unwrap().tag,
+            "zh-Hans-en"
+        );
+        assert_eq!(
+            match_language_tag(&languages, "en").unwrap().tag,
+            "zh-Hans-en"
+        );
     }
 
     #[test]
     fn configure_normalizes_language_tag() {
         struct LangEngine;
         impl OcrEngine for LangEngine {
-            fn id(&self) -> &'static str { "lang" }
+            fn id(&self) -> &'static str {
+                "lang"
+            }
             fn info(&self) -> Result<OcrEngineInfo, String> {
                 Ok(OcrEngineInfo {
                     id: "lang".into(),
                     label: "Lang Engine".into(),
                     languages: vec![
-                        crate::ocr::OcrLanguage { tag: "en-US".into(), label: "English".into() },
-                        crate::ocr::OcrLanguage { tag: "zh-Hans-CN".into(), label: "Chinese".into() },
+                        crate::ocr::OcrLanguage {
+                            tag: "en-US".into(),
+                            label: "English".into(),
+                        },
+                        crate::ocr::OcrLanguage {
+                            tag: "zh-Hans-CN".into(),
+                            label: "Chinese".into(),
+                        },
                     ],
                     available: true,
                     error: None,
                 })
             }
-            fn prepare(&self) -> Result<(), String> { Ok(()) }
+            fn prepare(&self) -> Result<(), String> {
+                Ok(())
+            }
             fn release(&self) {}
-            fn recognize(&self, _: OcrImage<'_>, _: Option<&str>) -> Result<RecognizedText, String> { unreachable!() }
+            fn recognize(
+                &self,
+                _: OcrImage<'_>,
+                _: Option<&str>,
+            ) -> Result<RecognizedText, String> {
+                unreachable!()
+            }
         }
 
         let registry = OcrRegistry::new(vec![Arc::new(LangEngine)], "lang");
-        let result = registry.configure(OcrConfig {
-            engine: "lang".into(),
-            language: Some("zh-CN".into()),
-        }).unwrap();
+        let result = registry
+            .configure(OcrConfig {
+                engine: "lang".into(),
+                language: Some("zh-CN".into()),
+            })
+            .unwrap();
         assert_eq!(result.language, Some("zh-Hans-CN".into()));
         assert_eq!(registry.config().language, Some("zh-Hans-CN".into()));
     }

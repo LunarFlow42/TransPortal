@@ -52,7 +52,8 @@ pub fn resize_and_clamp_window<R: tauri::Runtime>(
             let min_x = work_pos.x + margin;
             let min_y = work_pos.y + margin;
             let max_x = (work_pos.x + work_size.width as i32 - target_w as i32 - margin).max(min_x);
-            let max_y = (work_pos.y + work_size.height as i32 - target_h as i32 - margin).max(min_y);
+            let max_y =
+                (work_pos.y + work_size.height as i32 - target_h as i32 - margin).max(min_y);
             let new_x = pos.x.clamp(min_x, max_x);
             let new_y = pos.y.clamp(min_y, max_y);
             let _ = window.set_position(tauri::PhysicalPosition::new(new_x, new_y));

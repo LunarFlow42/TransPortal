@@ -1,5 +1,5 @@
-use crate::ocr::{OcrEngine, OcrEngineInfo, OcrImage, OcrLanguage, RecognizedText, fit_dimensions};
 use crate::ocr::picture::OcrBlock;
+use crate::ocr::{OcrEngine, OcrEngineInfo, OcrImage, OcrLanguage, RecognizedText, fit_dimensions};
 use windows::Globalization::Language;
 use windows::Graphics::Imaging::{
     BitmapAlphaMode, BitmapBufferAccessMode, BitmapPixelFormat, SoftwareBitmap,
@@ -90,14 +90,27 @@ fn find_matching_language(
 
     // 2. Chinese alias match against available languages
     if let Some(target) = normalize_chinese_alias(&lower) {
-        if let Some((_, lang)) = items.iter().find(|(tag, _)| tag.eq_ignore_ascii_case(target)) {
+        if let Some((_, lang)) = items
+            .iter()
+            .find(|(tag, _)| tag.eq_ignore_ascii_case(target))
+        {
             return Some(lang.clone());
         }
-        let prefix = if target.contains("Hans") { "zh-hans" } else { "zh-hant" };
-        if let Some((_, lang)) = items.iter().find(|(tag, _)| tag.to_ascii_lowercase().starts_with(prefix)) {
+        let prefix = if target.contains("Hans") {
+            "zh-hans"
+        } else {
+            "zh-hant"
+        };
+        if let Some((_, lang)) = items
+            .iter()
+            .find(|(tag, _)| tag.to_ascii_lowercase().starts_with(prefix))
+        {
             return Some(lang.clone());
         }
-        if let Some((_, lang)) = items.iter().find(|(tag, _)| tag.to_ascii_lowercase().starts_with("zh")) {
+        if let Some((_, lang)) = items
+            .iter()
+            .find(|(tag, _)| tag.to_ascii_lowercase().starts_with("zh"))
+        {
             return Some(lang.clone());
         }
     }
@@ -105,7 +118,9 @@ fn find_matching_language(
     // 3. Prefix match: e.g. "en" matches "en-US", or "en-us" matches "en"
     for (tag, lang) in &items {
         let tag_lower = tag.to_ascii_lowercase();
-        if tag_lower.starts_with(&format!("{lower}-")) || lower.starts_with(&format!("{tag_lower}-")) {
+        if tag_lower.starts_with(&format!("{lower}-"))
+            || lower.starts_with(&format!("{tag_lower}-"))
+        {
             return Some(lang.clone());
         }
     }
@@ -145,8 +160,16 @@ fn create_engine(language: Option<&str>) -> Result<NativeOcrEngine, String> {
         let chinese_candidate = items
             .iter()
             .find(|(tag, _)| tag.eq_ignore_ascii_case("zh-Hans-CN"))
-            .or_else(|| items.iter().find(|(tag, _)| tag.to_ascii_lowercase().starts_with("zh-hans")))
-            .or_else(|| items.iter().find(|(tag, _)| tag.to_ascii_lowercase().starts_with("zh")));
+            .or_else(|| {
+                items
+                    .iter()
+                    .find(|(tag, _)| tag.to_ascii_lowercase().starts_with("zh-hans"))
+            })
+            .or_else(|| {
+                items
+                    .iter()
+                    .find(|(tag, _)| tag.to_ascii_lowercase().starts_with("zh"))
+            });
 
         if let Some((_, lang)) = chinese_candidate
             && let Ok(engine) = NativeOcrEngine::TryCreateFromLanguage(lang)
@@ -248,9 +271,14 @@ impl OcrEngine for WindowsOcrEngine {
                     right = right.max(rect.X + rect.Width);
                     bottom = bottom.max(rect.Y + rect.Height);
                 }
-                blocks.push(OcrBlock { id: blocks.len() as u32, text: content.trim().into(),
-                    x: left * scale_x, y: top * scale_y,
-                    width: (right - left) * scale_x, height: (bottom - top) * scale_y });
+                blocks.push(OcrBlock {
+                    id: blocks.len() as u32,
+                    text: content.trim().into(),
+                    x: left * scale_x,
+                    y: top * scale_y,
+                    width: (right - left) * scale_x,
+                    height: (bottom - top) * scale_y,
+                });
                 text.push(content.trim().to_string());
             }
         }
@@ -327,19 +355,40 @@ mod tests {
     fn test_windows_ocr_auto_prefers_chinese_when_installed() {
         let _apartment = Apartment::new().unwrap();
         let engine = create_engine(None);
-        assert!(engine.is_ok(), "create_engine(None) should succeed: {:?}", engine.err());
+        assert!(
+            engine.is_ok(),
+            "create_engine(None) should succeed: {:?}",
+            engine.err()
+        );
         let engine = engine.unwrap();
-        let lang = engine.RecognizerLanguage().unwrap().LanguageTag().unwrap().to_string();
-        assert!(lang.to_ascii_lowercase().starts_with("zh"), "Expected Chinese recognizer, got: {lang}");
+        let lang = engine
+            .RecognizerLanguage()
+            .unwrap()
+            .LanguageTag()
+            .unwrap()
+            .to_string();
+        assert!(
+            lang.to_ascii_lowercase().starts_with("zh"),
+            "Expected Chinese recognizer, got: {lang}"
+        );
     }
 
     #[test]
     fn test_windows_ocr_normalizes_zh_cn() {
         let _apartment = Apartment::new().unwrap();
         let engine = create_engine(Some("zh-CN"));
-        assert!(engine.is_ok(), "create_engine(Some(\"zh-CN\")) should succeed: {:?}", engine.err());
+        assert!(
+            engine.is_ok(),
+            "create_engine(Some(\"zh-CN\")) should succeed: {:?}",
+            engine.err()
+        );
         let engine = engine.unwrap();
-        let lang = engine.RecognizerLanguage().unwrap().LanguageTag().unwrap().to_string();
+        let lang = engine
+            .RecognizerLanguage()
+            .unwrap()
+            .LanguageTag()
+            .unwrap()
+            .to_string();
         assert_eq!(lang, "zh-Hans-CN");
     }
 
@@ -347,9 +396,18 @@ mod tests {
     fn test_windows_ocr_normalizes_zh() {
         let _apartment = Apartment::new().unwrap();
         let engine = create_engine(Some("zh"));
-        assert!(engine.is_ok(), "create_engine(Some(\"zh\")) should succeed: {:?}", engine.err());
+        assert!(
+            engine.is_ok(),
+            "create_engine(Some(\"zh\")) should succeed: {:?}",
+            engine.err()
+        );
         let engine = engine.unwrap();
-        let lang = engine.RecognizerLanguage().unwrap().LanguageTag().unwrap().to_string();
+        let lang = engine
+            .RecognizerLanguage()
+            .unwrap()
+            .LanguageTag()
+            .unwrap()
+            .to_string();
         assert_eq!(lang, "zh-Hans-CN");
     }
 
@@ -357,10 +415,18 @@ mod tests {
     fn test_windows_ocr_en_us() {
         let _apartment = Apartment::new().unwrap();
         let engine = create_engine(Some("en-US"));
-        assert!(engine.is_ok(), "create_engine(Some(\"en-US\")) should succeed: {:?}", engine.err());
+        assert!(
+            engine.is_ok(),
+            "create_engine(Some(\"en-US\")) should succeed: {:?}",
+            engine.err()
+        );
         let engine = engine.unwrap();
-        let lang = engine.RecognizerLanguage().unwrap().LanguageTag().unwrap().to_string();
+        let lang = engine
+            .RecognizerLanguage()
+            .unwrap()
+            .LanguageTag()
+            .unwrap()
+            .to_string();
         assert_eq!(lang, "en-US");
     }
 }
-

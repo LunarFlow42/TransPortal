@@ -1,18 +1,17 @@
 use super::ScreenRect;
-use windows::core::Interface;
+use windows::Win32::Foundation::POINT;
 use windows::Win32::Graphics::Direct3D::D3D_FEATURE_LEVEL_11_0;
 use windows::Win32::Graphics::Direct3D11::{
+    D3D11_CPU_ACCESS_READ, D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_MAP_READ,
+    D3D11_MAPPED_SUBRESOURCE, D3D11_SDK_VERSION, D3D11_TEXTURE2D_DESC, D3D11_USAGE_STAGING,
     D3D11CreateDevice, ID3D11Device, ID3D11DeviceContext, ID3D11Texture2D,
-    D3D11_CPU_ACCESS_READ, D3D11_CREATE_DEVICE_BGRA_SUPPORT,
-    D3D11_MAPPED_SUBRESOURCE, D3D11_MAP_READ,
-    D3D11_SDK_VERSION, D3D11_TEXTURE2D_DESC, D3D11_USAGE_STAGING,
 };
-use windows::Win32::Foundation::POINT;
 use windows::Win32::Graphics::Dxgi::{
-    CreateDXGIFactory1, IDXGIAdapter1, IDXGIFactory1, IDXGIOutput1,
-    IDXGIOutputDuplication, IDXGIResource, DXGI_ERROR_WAIT_TIMEOUT, DXGI_OUTDUPL_FRAME_INFO,
+    CreateDXGIFactory1, DXGI_ERROR_WAIT_TIMEOUT, DXGI_OUTDUPL_FRAME_INFO, IDXGIAdapter1,
+    IDXGIFactory1, IDXGIOutput1, IDXGIOutputDuplication, IDXGIResource,
 };
 use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
+use windows::core::Interface;
 
 struct DuplFrameGuard<'a> {
     dupl: &'a IDXGIOutputDuplication,
@@ -73,8 +72,10 @@ impl DxgiDesktop {
                         let rect = ScreenRect {
                             x: desc.DesktopCoordinates.left,
                             y: desc.DesktopCoordinates.top,
-                            width: (desc.DesktopCoordinates.right - desc.DesktopCoordinates.left).max(0) as u32,
-                            height: (desc.DesktopCoordinates.bottom - desc.DesktopCoordinates.top).max(0) as u32,
+                            width: (desc.DesktopCoordinates.right - desc.DesktopCoordinates.left)
+                                .max(0) as u32,
+                            height: (desc.DesktopCoordinates.bottom - desc.DesktopCoordinates.top)
+                                .max(0) as u32,
                         };
 
                         let contains_cursor = has_cursor
@@ -195,15 +196,22 @@ impl DxgiDesktop {
             let width = tex_desc.Width as usize;
             let height = tex_desc.Height as usize;
             let row_pitch = mapped.RowPitch as usize;
-            let src_slice = std::slice::from_raw_parts(mapped.pData as *const u8, row_pitch * height);
+            let src_slice =
+                std::slice::from_raw_parts(mapped.pData as *const u8, row_pitch * height);
 
             // Read BGRA/RGBA and convert to RGBA
             let mut rgba_bytes = vec![0u8; width * height * 4];
-            let is_bgra = tex_desc.Format == windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_B8G8R8A8_UNORM;
+            let is_bgra = tex_desc.Format
+                == windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_B8G8R8A8_UNORM;
             for row in 0..height {
                 let src_row = &src_slice[row * row_pitch..row * row_pitch + width * 4];
                 let dst_row = &mut rgba_bytes[row * width * 4..(row + 1) * width * 4];
-                for (src_px, dst_px) in src_row.as_chunks::<4>().0.iter().zip(dst_row.as_chunks_mut::<4>().0.iter_mut()) {
+                for (src_px, dst_px) in src_row
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .zip(dst_row.as_chunks_mut::<4>().0.iter_mut())
+                {
                     if is_bgra {
                         dst_px[0] = src_px[2]; // R
                         dst_px[1] = src_px[1]; // G
@@ -213,7 +221,7 @@ impl DxgiDesktop {
                         dst_px[1] = src_px[1];
                         dst_px[2] = src_px[2];
                     }
-                    dst_px[3] = 255;       // A
+                    dst_px[3] = 255; // A
                 }
             }
 
@@ -222,7 +230,10 @@ impl DxgiDesktop {
             let monitor_image = image::RgbaImage::from_raw(width as u32, height as u32, rgba_bytes)
                 .ok_or_else(|| "DXGI 帧尺寸无效".to_string())?;
 
-            if !monitor_image.pixels().any(|p| p[0] > 0 || p[1] > 0 || p[2] > 0) {
+            if !monitor_image
+                .pixels()
+                .any(|p| p[0] > 0 || p[1] > 0 || p[2] > 0)
+            {
                 return Err("DXGI 截图像素全为空白。".into());
             }
 
@@ -238,8 +249,10 @@ pub(crate) fn crop_monitor_frame(
 ) -> Result<image::RgbaImage, String> {
     let inter_left = region.x.max(monitor_rect.x);
     let inter_top = region.y.max(monitor_rect.y);
-    let inter_right = (region.x + region.width as i32).min(monitor_rect.x + monitor_rect.width as i32);
-    let inter_bottom = (region.y + region.height as i32).min(monitor_rect.y + monitor_rect.height as i32);
+    let inter_right =
+        (region.x + region.width as i32).min(monitor_rect.x + monitor_rect.width as i32);
+    let inter_bottom =
+        (region.y + region.height as i32).min(monitor_rect.y + monitor_rect.height as i32);
 
     if inter_right <= inter_left || inter_bottom <= inter_top {
         return Err("选区不在显示器有效范围内".into());
@@ -251,10 +264,14 @@ pub(crate) fn crop_monitor_frame(
     let src_y = (inter_top - monitor_rect.y) as u32;
 
     if inter_w == region.width && inter_h == region.height {
-        Ok(image::imageops::crop_imm(monitor_image, src_x, src_y, region.width, region.height).to_image())
+        Ok(
+            image::imageops::crop_imm(monitor_image, src_x, src_y, region.width, region.height)
+                .to_image(),
+        )
     } else {
         let mut canvas = image::RgbaImage::new(region.width, region.height);
-        let cropped = image::imageops::crop_imm(monitor_image, src_x, src_y, inter_w, inter_h).to_image();
+        let cropped =
+            image::imageops::crop_imm(monitor_image, src_x, src_y, inter_w, inter_h).to_image();
         let dst_x = (inter_left - region.x) as i64;
         let dst_y = (inter_top - region.y) as i64;
         image::imageops::overlay(&mut canvas, &cropped, dst_x, dst_y);

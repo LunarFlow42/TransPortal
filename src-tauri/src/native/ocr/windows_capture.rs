@@ -14,9 +14,9 @@ use windows::Win32::System::Threading::{
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VIRTUAL_KEY, VK_ESCAPE, VK_S};
 use windows::Win32::UI::WindowsAndMessaging::{
-    CallNextHookEx, DispatchMessageW, GetMessageW, GetWindowThreadProcessId, GetForegroundWindow, KBDLLHOOKSTRUCT, MSG,
-    PostThreadMessageW, SetWindowsHookExW, TranslateMessage, UnhookWindowsHookEx,
-    WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP, WM_QUIT, WM_SYSKEYDOWN, WM_SYSKEYUP,
+    CallNextHookEx, DispatchMessageW, GetForegroundWindow, GetMessageW, GetWindowThreadProcessId,
+    KBDLLHOOKSTRUCT, MSG, PostThreadMessageW, SetWindowsHookExW, TranslateMessage,
+    UnhookWindowsHookEx, WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP, WM_QUIT, WM_SYSKEYDOWN, WM_SYSKEYUP,
 };
 use windows::core::PWSTR;
 
@@ -43,20 +43,31 @@ unsafe extern "system" fn keyboard_hook(code: i32, wparam: WPARAM, lparam: LPARA
         let down = message == WM_KEYDOWN || message == WM_SYSKEYDOWN;
         let up = message == WM_KEYUP || message == WM_SYSKEYUP;
         let own_input = key.dwExtraInfo == crate::native::INPUT_MARKER;
-        if !own_input && (down || up) { MODIFIERS.with_borrow_mut(|keys| keys.update(key.vkCode, down)); }
+        if !own_input && (down || up) {
+            MODIFIERS.with_borrow_mut(|keys| keys.update(key.vkCode, down));
+        }
         if down || up {
             let window = unsafe { GetForegroundWindow() }.0 as usize;
             let (control, other) = MODIFIERS.with_borrow(|keys| (keys.control(), keys.other()));
-            let double_copy = DOUBLE_COPY.with_borrow_mut(|detector| detector.observe(key.vkCode, down,
-                control, other, own_input, key.time, window));
+            let double_copy = DOUBLE_COPY.with_borrow_mut(|detector| {
+                detector.observe(
+                    key.vkCode, down, control, other, own_input, key.time, window,
+                )
+            });
             if double_copy {
                 let revision = unsafe { GetClipboardSequenceNumber() };
-                EVENTS.with_borrow(|sender| { if let Some(sender) = sender {
-                    let _ = sender.try_send(ScreenEvent::DoubleCopy { clipboard_revision: revision, window });
-                } });
+                EVENTS.with_borrow(|sender| {
+                    if let Some(sender) = sender {
+                        let _ = sender.try_send(ScreenEvent::DoubleCopy {
+                            clipboard_revision: revision,
+                            window,
+                        });
+                    }
+                });
             }
 
-            let ink_vk = crate::shortcut::INK_TRANSLATE_KEY.load(std::sync::atomic::Ordering::Relaxed);
+            let ink_vk =
+                crate::shortcut::INK_TRANSLATE_KEY.load(std::sync::atomic::Ordering::Relaxed);
             if ink_vk != 0 && key.vkCode == ink_vk {
                 if down {
                     INK_KEY_DOWN.set(true);
@@ -75,10 +86,7 @@ unsafe extern "system" fn keyboard_hook(code: i32, wparam: WPARAM, lparam: LPARA
             if up {
                 SNIP_KEY_DOWN.set(false);
             }
-            if down
-                && !SNIP_KEY_DOWN.replace(true)
-                && MODIFIERS.with_borrow(|keys| keys.snip())
-            {
+            if down && !SNIP_KEY_DOWN.replace(true) && MODIFIERS.with_borrow(|keys| keys.snip()) {
                 // Sample BEFORE Windows handles the shortcut, so even a very
                 // fast snip cannot make an old image look like a new one.
                 let revision = unsafe { GetClipboardSequenceNumber() };
