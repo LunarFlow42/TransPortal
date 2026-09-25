@@ -1,6 +1,8 @@
 //! Release-file integrity, not publisher authentication or a malware scanner.
 //! The manifest is generated from the final executable while NSIS packages it.
 
+use crate::platform::PlatformSystem;
+use crate::platform::system::SystemOps;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs::{self, File};
@@ -187,10 +189,18 @@ pub fn check_current_executable() -> IntegrityReport {
     }
 }
 
+/// Tell the user why the app is about to exit.
+pub fn show_failure(report: &IntegrityReport) {
+    PlatformSystem::show_fatal_error(
+        "TransPortal 完整性检查失败",
+        report.error.as_deref().unwrap_or("程序完整性检查失败。"),
+    );
+}
+
 pub fn startup_report() -> IntegrityReport {
     if cfg!(debug_assertions) {
         IntegrityReport::new(IntegrityStatus::Development)
-    } else if crate::platform::system::platform().enforce_release_hash() {
+    } else if PlatformSystem::enforce_release_hash() {
         check_current_executable()
     } else {
         IntegrityReport::new(IntegrityStatus::Unsupported)

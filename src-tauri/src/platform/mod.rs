@@ -10,6 +10,7 @@
 //! leaks into the rest of the crate and cross-platform builds stay green.
 
 use serde::Serialize;
+use system::SystemOps;
 use tauri::AppHandle;
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use window::WindowOps;
@@ -74,10 +75,12 @@ impl Capabilities {
 /// contract, so a backend that falls behind the contracts fails to compile.
 pub trait Backend {
     type Window: WindowOps;
+    type System: SystemOps;
     const CAPABILITIES: Capabilities;
 }
 
 pub type PlatformWindow = <ActiveBackend as Backend>::Window;
+pub type PlatformSystem = <ActiveBackend as Backend>::System;
 
 /// Capabilities of the backend compiled for this target.
 pub const CAPABILITIES: Capabilities = <ActiveBackend as Backend>::CAPABILITIES;

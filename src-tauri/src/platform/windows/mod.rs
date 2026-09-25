@@ -21,16 +21,16 @@ use tauri::{Runtime, WebviewWindow};
 pub use desktop::WindowsDesktop;
 pub use input::copy_selection_to_clipboard;
 pub use keyboard_hook::WindowsScreenCapture;
-pub use memory::{get_memory_usage, trim_memory};
 pub use ocr::WindowsOcrEngine;
 pub use selection::WindowsSelection;
-pub use system::WindowsIntegrity;
+pub use system::WindowsSystem;
 pub use uia::WindowsSelectionReader;
 
 pub struct WindowsBackend;
 
 impl Backend for WindowsBackend {
     type Window = WindowsWindow;
+    type System = WindowsSystem;
     const CAPABILITIES: Capabilities = Capabilities::ALL;
 }
 

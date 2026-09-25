@@ -5,7 +5,7 @@ mod window;
 
 use super::desktop::{DesktopCapture, ScreenRect};
 use super::selection::{SelectionPlatform, SelectionTarget};
-use super::system::{IntegrityPlatform, MemoryReport, TrimResult};
+use super::system::{MemoryReport, SystemOps, TrimResult};
 use super::window::{SizeMove, WindowOps};
 use super::{Backend, Capabilities, SelectionBounds};
 use super::{CaptureMethod, SelectionContent, SelectionReader};
@@ -23,6 +23,7 @@ pub struct UnsupportedBackend;
 
 impl Backend for UnsupportedBackend {
     type Window = UnsupportedWindow;
+    type System = UnsupportedSystem;
     const CAPABILITIES: Capabilities = Capabilities::NONE;
 }
 
@@ -176,18 +177,25 @@ impl DesktopCapture for UnsupportedDesktop {
     }
 }
 
-pub struct UnsupportedIntegrity;
+/// Placeholder statistics, no integrity enforcement, errors on stderr.
+pub struct UnsupportedSystem;
 
-impl IntegrityPlatform for UnsupportedIntegrity {
-    fn enforce_release_hash(&self) -> bool {
+impl SystemOps for UnsupportedSystem {
+    fn memory_usage() -> Result<MemoryReport, String> {
+        get_memory_usage()
+    }
+    fn trim_memory() -> Result<TrimResult, String> {
+        trim_memory()
+    }
+    fn enforce_release_hash() -> bool {
         false
     }
-    fn show_failure(&self, message: &str) {
+    fn show_fatal_error(_title: &str, message: &str) {
         eprintln!("{message}");
     }
 }
 
-pub fn get_memory_usage() -> Result<MemoryReport, String> {
+fn get_memory_usage() -> Result<MemoryReport, String> {
     Ok(MemoryReport {
         total_working_set_bytes: 40 * 1024 * 1024,
         total_private_bytes: 30 * 1024 * 1024,
@@ -196,7 +204,7 @@ pub fn get_memory_usage() -> Result<MemoryReport, String> {
     })
 }
 
-pub fn trim_memory() -> Result<TrimResult, String> {
+fn trim_memory() -> Result<TrimResult, String> {
     Ok(TrimResult {
         before_bytes: 40 * 1024 * 1024,
         after_bytes: 35 * 1024 * 1024,

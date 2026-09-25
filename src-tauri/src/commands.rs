@@ -6,8 +6,9 @@ use crate::core::translation::{
     StreamChunk, TranslateQuery, TranslateResult, Translator, openai::OpenAiConfig,
 };
 use crate::platform::CaptureOutcome;
-use crate::platform::PlatformWindow;
+use crate::platform::system::SystemOps;
 use crate::platform::window::WindowOps;
+use crate::platform::{PlatformSystem, PlatformWindow};
 use serde::Serialize;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -150,8 +151,7 @@ pub async fn verify_integrity(
             .lock()
             .unwrap() = report.clone();
         if report.blocks_startup() {
-            crate::platform::system::platform()
-                .show_failure(report.error.as_deref().unwrap_or("程序完整性检查失败。"));
+            crate::core::integrity::show_failure(&report);
             app.exit(2);
         }
         report
@@ -515,10 +515,10 @@ pub fn set_window_theme(window: tauri::WebviewWindow, dark: bool) -> Result<(), 
 
 #[tauri::command]
 pub fn get_memory_usage() -> Result<crate::platform::system::MemoryReport, String> {
-    crate::platform::system::get_memory_usage()
+    PlatformSystem::memory_usage()
 }
 
 #[tauri::command]
 pub fn trim_memory() -> Result<crate::platform::system::TrimResult, String> {
-    crate::platform::system::trim_memory()
+    PlatformSystem::trim_memory()
 }
