@@ -205,3 +205,31 @@ fn trim_memory() -> Result<TrimResult, String> {
         process_count: 1,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::platform::system::SystemOps;
+
+    #[test]
+    fn every_native_feature_reports_unavailable() {
+        assert_eq!(UnsupportedBackend::CAPABILITIES, Capabilities::NONE);
+        assert!(UnsupportedBackend::native_ocr().is_none());
+
+        let selection = UnsupportedSelection;
+        assert!(selection.read_selection().is_err());
+        assert!(selection.copy_to_clipboard().is_ok());
+        assert!(selection.foreground().is_none());
+
+        let clipboard = UnsupportedClipboard;
+        assert_eq!(clipboard.revision(), 0);
+        assert_eq!(clipboard.origin(), ClipboardOrigin::Unavailable);
+
+        let (events, _receiver) = std::sync::mpsc::sync_channel(1);
+        assert!(UnsupportedGestures.observe(events).is_err());
+        assert!(UnsupportedDesktop.bounds().is_err());
+        assert!(UnsupportedWindow::get_global_cursor_pos().is_none());
+        assert!(!UnsupportedSystem::enforce_release_hash());
+        assert!(UnsupportedSystem::memory_usage().is_ok());
+    }
+}

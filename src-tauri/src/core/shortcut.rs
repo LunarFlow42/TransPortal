@@ -4,7 +4,7 @@ use crate::core::ocr::{OcrMode, OcrService};
 use crate::platform::PlatformWindow;
 use crate::platform::gestures::{GestureSource, InkKey};
 use crate::platform::window::WindowOps;
-use crate::platform::{CAPABILITIES, PlatformGestures};
+use crate::platform::{CAPABILITIES, Capabilities, PlatformGestures};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::sync::Mutex;
@@ -15,6 +15,8 @@ use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut,
 pub const STATUS_EVENT: &str = "transportal://shortcut-status";
 pub const RECORD_EVENT: &str = "transportal://shortcut-recorded";
 pub const SELECTION_EVENT: &str = "transportal://selection";
+
+const UNSUPPORTED: &str = "当前平台不支持此快捷键功能。";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -227,17 +229,22 @@ fn parse_binding(action: ShortcutAction, accelerator: &str) -> Result<Option<Bin
     Ok(Some(BindingKey::Chord(shortcut)))
 }
 
-fn supported(app: &AppHandle, action: ShortcutAction) -> bool {
+/// Whether `action` can work with the given platform capabilities.
+/// Unsupported actions are hidden from the status report and rejected.
+fn supported_with(capabilities: Capabilities, action: ShortcutAction) -> bool {
     match action {
-        ShortcutAction::Selection
-        | ShortcutAction::DoubleCopy
-        | ShortcutAction::ReplaceSelection
-        | ShortcutAction::InputTranslate => true,
+        ShortcutAction::Selection | ShortcutAction::InputTranslate => true,
+        ShortcutAction::DoubleCopy => capabilities.keyboard_gestures,
+        ShortcutAction::ReplaceSelection => capabilities.selection_replace,
         ShortcutAction::OcrText
         | ShortcutAction::OcrPicture
         | ShortcutAction::OcrCard
-        | ShortcutAction::SilentOcr => app.state::<OcrService>().supported(),
+        | ShortcutAction::SilentOcr => capabilities.screen_capture,
     }
+}
+
+fn supported(action: ShortcutAction) -> bool {
+    supported_with(CAPABILITIES, action)
 }
 
 fn validate_conflict(
@@ -274,6 +281,9 @@ fn apply_locked(
     let result = (|| {
         let key = parse_binding(action, value)?;
         validate_conflict(state, action, key)?;
+        if key == Some(BindingKey::SystemSnip) && !CAPABILITIES.system_snip {
+            return Err(UNSUPPORTED.into());
+        }
         if matches!(key, Some(BindingKey::SystemSnip | BindingKey::DoubleCopy))
             && !app.state::<OcrService>().observer_status().0
         {
@@ -324,8 +334,8 @@ pub fn set_shortcut(
     action: ShortcutAction,
     accelerator: &str,
 ) -> Result<(), String> {
-    if !supported(app, action) {
-        return Err("当前平台不支持此快捷键功能。".into());
+    if !supported(action) {
+        return Err(UNSUPPORTED.into());
     }
     let bindings = app.state::<ShortcutBindings>();
     let result = apply_locked(
@@ -369,7 +379,7 @@ pub fn restore(app: &AppHandle, config: ShortcutConfig) -> Result<ShortcutConfig
         binding.status.requested = config.get(action).trim().into();
     }
     for action in ACTIONS {
-        if supported(app, action) {
+        if supported(action) {
             let _ = apply_locked(app, &mut state, action, config.get(action));
         }
     }
@@ -404,7 +414,7 @@ pub fn status(app: &AppHandle) -> ShortcutReport {
         ready: state.ready,
         shortcuts: ACTIONS
             .into_iter()
-            .filter(|action| supported(app, *action))
+            .filter(|action| supported(*action))
             .map(|action| state.bindings[&action].status.clone())
             .collect(),
     }
@@ -439,7 +449,7 @@ pub fn retry(app: &AppHandle) -> ShortcutReport {
     let bindings = app.state::<ShortcutBindings>();
     let mut state = bindings.state.lock().unwrap();
     for action in ACTIONS {
-        if supported(app, action) {
+        if supported(action) {
             let value = state.bindings[&action].status.requested.clone();
             let _ = apply_locked(app, &mut state, action, &value);
         }
@@ -767,6 +777,30 @@ mod tests {
         assert!(parse_binding(ShortcutAction::Selection, "Alt+Q").is_ok());
         assert!(parse_binding(ShortcutAction::Selection, "Ctrl+C").is_err());
         assert!(parse_binding(ShortcutAction::Selection, "Ctrl+Shift+D").is_ok());
+    }
+
+    #[test]
+    fn capabilities_decide_which_shortcuts_exist() {
+        for action in ACTIONS {
+            assert!(supported_with(Capabilities::ALL, action), "{action:?}");
+        }
+        let available: Vec<_> = ACTIONS
+            .into_iter()
+            .filter(|action| supported_with(Capabilities::NONE, *action))
+            .collect();
+        assert_eq!(
+            available,
+            [ShortcutAction::Selection, ShortcutAction::InputTranslate]
+        );
+        let gestures_only = Capabilities {
+            keyboard_gestures: true,
+            ..Capabilities::NONE
+        };
+        assert!(supported_with(gestures_only, ShortcutAction::DoubleCopy));
+        assert!(!supported_with(
+            gestures_only,
+            ShortcutAction::ReplaceSelection
+        ));
     }
 
     #[test]
