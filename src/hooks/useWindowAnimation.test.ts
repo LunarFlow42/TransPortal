@@ -4,17 +4,33 @@ import { useAppStore } from '../store/useAppStore';
 import * as audioModule from '../utils/audio';
 
 const mockHide = vi.fn();
-let shellShownCallback: (() => void) | null = null;
+type ShownCallback = (event: { payload: { no_activate: boolean; generation?: number } }) => void;
+let shellShownCallback: ShownCallback | null = null;
+let focusCallback: ((event: { payload: boolean }) => void) | null = null;
 const mockUnlisten = vi.fn();
+const hideShell = vi.hoisted(() => ({ result: true }));
+
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: vi.fn(async (command: string, args: { generation: number | null }) => {
+    if (command !== 'hide_shell') throw new Error(`unexpected command ${command}`);
+    if (!hideShell.result) return false;
+    mockHide(args);
+    return true;
+  }),
+}));
 
 vi.mock('@tauri-apps/api/window', () => ({
   getCurrentWindow: () => ({
     hide: mockHide,
+    onFocusChanged: (cb: (event: { payload: boolean }) => void) => {
+      focusCallback = cb;
+      return Promise.resolve(mockUnlisten);
+    },
   }),
 }));
 
 vi.mock('@tauri-apps/api/event', () => ({
-  listen: (eventName: string, cb: () => void) => {
+  listen: (eventName: string, cb: ShownCallback) => {
     if (eventName === 'transportal://shell-shown') {
       shellShownCallback = cb;
     }
@@ -39,6 +55,8 @@ describe('useWindowAnimation & dismissShell', () => {
     vi.useFakeTimers();
     vi.clearAllMocks();
     shellShownCallback = null;
+    focusCallback = null;
+    hideShell.result = true;
     lifecycle.effects.length = 0;
     useAppStore.setState({
       smoothTransitions: true,
@@ -62,7 +80,7 @@ describe('useWindowAnimation & dismissShell', () => {
     }
 
     expect(shellShownCallback).toBeTypeOf('function');
-    shellShownCallback!();
+    shellShownCallback!({ payload: { no_activate: false } });
 
     expect(getAnimationStage()).toBe('entering');
 
@@ -78,7 +96,7 @@ describe('useWindowAnimation & dismissShell', () => {
       effect();
     }
 
-    shellShownCallback!();
+    shellShownCallback!({ payload: { no_activate: false } });
     expect(getAnimationStage()).toBe('entered');
   });
 
@@ -87,7 +105,7 @@ describe('useWindowAnimation & dismissShell', () => {
     for (const effect of lifecycle.effects) {
       effect();
     }
-    shellShownCallback!();
+    shellShownCallback!({ payload: { no_activate: false } });
     vi.advanceTimersByTime(120);
     expect(getAnimationStage()).toBe('entered');
 
@@ -96,7 +114,7 @@ describe('useWindowAnimation & dismissShell', () => {
     expect(mockHide).not.toHaveBeenCalled();
 
     // Advance 100ms exit animation
-    vi.advanceTimersByTime(100);
+    await vi.advanceTimersByTimeAsync(100);
     await promise;
 
     expect(mockHide).toHaveBeenCalledTimes(1);
@@ -130,7 +148,7 @@ describe('useWindowAnimation & dismissShell', () => {
 
     // Force dismiss bypasses all exemptions
     const forced = dismissShell({ force: true });
-    vi.advanceTimersByTime(100);
+    await vi.advanceTimersByTimeAsync(100);
     await forced;
     expect(mockHide).toHaveBeenCalledTimes(1);
   });
@@ -140,7 +158,7 @@ describe('useWindowAnimation & dismissShell', () => {
     for (const effect of lifecycle.effects) {
       effect();
     }
-    shellShownCallback!();
+    shellShownCallback!({ payload: { no_activate: false } });
     vi.advanceTimersByTime(120);
 
     // Start dismissing
@@ -149,7 +167,7 @@ describe('useWindowAnimation & dismissShell', () => {
 
     // 50ms in, user presses hotkey again!
     vi.advanceTimersByTime(50);
-    shellShownCallback!();
+    shellShownCallback!({ payload: { no_activate: false } });
 
     // Should immediately abort exit and switch to entering
     expect(getAnimationStage()).toBe('entering');
@@ -161,5 +179,57 @@ describe('useWindowAnimation & dismissShell', () => {
     // After remaining 20ms (total 120ms entrance duration), should become entered
     vi.advanceTimersByTime(20);
     expect(getAnimationStage()).toBe('entered');
+  });
+
+  function mount() {
+    useWindowAnimation();
+    for (const effect of lifecycle.effects) {
+      effect();
+    }
+  }
+
+  it('passes the last shown generation so Rust can reject stale hides', async () => {
+    useAppStore.setState({ smoothTransitions: false });
+    mount();
+    shellShownCallback!({ payload: { no_activate: true, generation: 42 } });
+
+    await dismissShell();
+    expect(mockHide).toHaveBeenCalledWith({ generation: 42 });
+  });
+
+  it('keeps the content visible when Rust rejects a hide superseded by a newer show', async () => {
+    useAppStore.setState({ smoothTransitions: false });
+    hideShell.result = false;
+
+    const hidden = await dismissShell();
+    expect(hidden).toBe(false);
+    expect(getAnimationStage()).toBe('entered');
+  });
+
+  it('does not overwrite an entrance that arrived while the hide was in flight', async () => {
+    mount();
+    const promise = dismissShell();
+    await vi.advanceTimersByTimeAsync(99);
+    // The exit timer fires and the hide IPC starts; a show lands before it settles.
+    vi.advanceTimersByTime(1);
+    shellShownCallback!({ payload: { no_activate: false, generation: 2 } });
+    await promise;
+
+    expect(getAnimationStage()).toBe('entering');
+  });
+
+  it('reveals the content when the window gains focus after an unannounced show', async () => {
+    useAppStore.setState({ smoothTransitions: false });
+    mount();
+    await dismissShell();
+    expect(getAnimationStage()).toBe('idle');
+
+    focusCallback!({ payload: true });
+    expect(getAnimationStage()).toBe('entered');
+  });
+
+  it('only blocks on auto-OCR while it is actively observing', async () => {
+    useAppStore.setState({ smoothTransitions: false, autoOcr: { active: false } as any });
+    expect(await dismissShell()).toBe(true);
   });
 });

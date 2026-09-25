@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { getCurrentWindow } from '@tauri-apps/api/window';
+import { dismissShell } from '../hooks/useWindowAnimation';
 import { Button, IconButton, Pill } from './ui';
 import {
   ArrowLeftRight,
@@ -211,7 +211,7 @@ export const LookupCard: React.FC<LookupCardProps> = ({
       clearLookup();
       stopPronunciation();
       if (!ocr) {
-        void getCurrentWindow().hide();
+        void dismissShell({ force: true, immediate: true });
       }
     }
   };
@@ -219,7 +219,7 @@ export const LookupCard: React.FC<LookupCardProps> = ({
   const handleClose = () => {
     clearLookup();
     stopPronunciation();
-    void getCurrentWindow().hide();
+    void dismissShell({ force: true, immediate: true });
   };
 
   const handleCopy = async () => {

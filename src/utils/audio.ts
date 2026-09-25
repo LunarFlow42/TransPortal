@@ -1,9 +1,20 @@
 let currentAudio: HTMLAudioElement | null = null;
 let isSpeaking = false;
 
-/** Whether audio pronunciation is actively playing. */
+/**
+ * Whether audio pronunciation is actively playing.
+ *
+ * Checks the live media/speech state instead of trusting our flags alone: a
+ * failed audio element never fires `ended`, and WebView2 sometimes skips an
+ * utterance's `end` event, which would otherwise block auto-dismiss forever.
+ */
 export function isAudioPlaying(): boolean {
-  return (currentAudio !== null && !currentAudio.paused) || isSpeaking;
+  const audioBusy =
+    currentAudio !== null && !currentAudio.paused && !currentAudio.ended && currentAudio.error === null;
+  const speechBusy =
+    isSpeaking && typeof window !== 'undefined' && 'speechSynthesis' in window &&
+    (window.speechSynthesis.speaking || window.speechSynthesis.pending);
+  return audioBusy || speechBusy;
 }
 
 /** Stop any pronunciation currently playing (audio element or speech synthesis). */
@@ -41,9 +52,15 @@ export function playPronunciation(
       if (currentAudio === audio) currentAudio = null;
       onEnd();
     };
+    // `onerror` and the rejected `play()` can both report one failure.
+    const fallBack = () => {
+      if (currentAudio !== audio) return;
+      currentAudio = null;
+      speak(word, onEnd);
+    };
     audio.onended = finish;
-    audio.onerror = () => speak(word, onEnd);
-    void audio.play().catch(() => speak(word, onEnd));
+    audio.onerror = fallBack;
+    void audio.play().catch(fallBack);
     return;
   }
 

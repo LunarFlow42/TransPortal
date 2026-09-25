@@ -70,6 +70,33 @@ pub fn get_global_cursor_pos() -> Option<(i32, i32)> {
     None
 }
 
+/// Other platforms only show windows through tao, so its own hide suffices.
+pub fn force_hide_window<R: tauri::Runtime>(_window: &tauri::WebviewWindow<R>) {}
+
+/// Global pointer sampling is Windows-only; the overlay relies on blur here.
+pub struct PointerProbe;
+
+impl PointerProbe {
+    pub fn new<R: tauri::Runtime>(_window: &tauri::WebviewWindow<R>) -> Option<Self> {
+        None
+    }
+
+    pub fn window_visible(&self) -> bool {
+        false
+    }
+
+    pub fn pressed_outside(&self) -> Option<bool> {
+        None
+    }
+}
+
+pub fn observe_size_move<R: tauri::Runtime>(
+    _window: &tauri::WebviewWindow<R>,
+    _on_phase: impl Fn(super::SizeMove) + Send + 'static,
+) -> Result<(), String> {
+    Err("move/resize observation is only implemented on Windows".to_string())
+}
+
 pub fn place_window_smartly<R: tauri::Runtime>(
     window: &tauri::WebviewWindow<R>,
     _anchor_bounds: Option<&super::SelectionBounds>,

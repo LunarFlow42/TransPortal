@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { getCurrentWindow } from '@tauri-apps/api/window';
+import { dismissShell } from '../hooks/useWindowAnimation';
 import { ArrowRightLeft, LoaderCircle } from 'lucide-react';
 import { Button } from './ui';
 import { useAppStore } from '../store/useAppStore';
@@ -28,7 +28,7 @@ export function ReplaceSelectionButton({ node }: { node: LookupNode }) {
       await invoke('replace_captured_selection', { token, text });
       if (useAppStore.getState().capture?.replace_token === token) {
         useAppStore.setState({ capture: { ...capture, replace_token: null } });
-        void getCurrentWindow().hide();
+        void dismissShell({ force: true, immediate: true });
       }
     } catch (error) { setError(String(error)); }
     finally { setBusy(false); }

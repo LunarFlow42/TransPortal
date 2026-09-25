@@ -392,9 +392,7 @@ impl OcrService {
         event: &OcrEvent,
         cancel: Cancellation,
     ) -> Result<(), String> {
-        if let Some(window) = app.get_webview_window("shell") {
-            let _ = window.hide();
-        }
+        crate::shell::hide_now(app);
         let region = app.state::<RegionService>();
         let selection = region.freeze(app, event.mode.into(), event.id, cancel)?;
         if !self.is_current(event.id) {
@@ -582,9 +580,7 @@ impl OcrService {
                 return;
             }
             if stage == OcrStage::Cancelled {
-                if let Some(window) = window_app.get_webview_window("shell") {
-                    let _ = window.hide();
-                }
+                crate::shell::hide_now(&window_app);
             } else {
                 crate::shortcut::show_shell(&window_app);
             }
@@ -610,9 +606,7 @@ impl OcrService {
         if !self.is_current(event.id) {
             return Ok(());
         }
-        if let Some(window) = app.get_webview_window("shell") {
-            let _ = window.hide();
-        }
+        crate::shell::hide_now(app);
         if baseline == 0 {
             return Err("无法读取剪贴板版本，已停止截图识别以避免读取旧图片。".into());
         }

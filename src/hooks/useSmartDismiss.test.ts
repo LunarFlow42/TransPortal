@@ -2,10 +2,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSmartDismiss } from './useSmartDismiss';
 import { useAppStore } from '../store/useAppStore';
 import * as audioModule from '../utils/audio';
+import { resumeAutoHide } from '../utils/autoHide';
 
 const mockHide = vi.fn();
 let shellShownCallback: ((event: { payload: { no_activate: boolean } }) => void) | null = null;
+let sizeMoveCallback: ((event: { payload: boolean }) => void) | null = null;
 const mockUnlisten = vi.fn();
+
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: vi.fn(async (command: string) => {
+    if (command !== 'hide_shell') throw new Error(`unexpected command ${command}`);
+    mockHide();
+    return true;
+  }),
+}));
 
 vi.mock('@tauri-apps/api/window', () => ({
   getCurrentWindow: () => ({
@@ -14,9 +24,12 @@ vi.mock('@tauri-apps/api/window', () => ({
 }));
 
 vi.mock('@tauri-apps/api/event', () => ({
-  listen: (eventName: string, cb: (event: { payload: { no_activate: boolean } }) => void) => {
+  listen: (eventName: string, cb: (event: { payload: any }) => void) => {
     if (eventName === 'transportal://shell-shown') {
       shellShownCallback = cb;
+    }
+    if (eventName === 'transportal://shell-size-move') {
+      sizeMoveCallback = cb;
     }
     return Promise.resolve(mockUnlisten);
   },
@@ -39,6 +52,7 @@ describe('useSmartDismiss', () => {
     vi.clearAllMocks();
     shellShownCallback = null;
     lifecycle.effects.length = 0;
+    resumeAutoHide(0);
     useAppStore.setState({
       autoHideOnBlur: true,
       pinned: false,
@@ -52,7 +66,7 @@ describe('useSmartDismiss', () => {
     vi.restoreAllMocks();
   });
 
-  it('starts 6s idle timer when shown with no_activate: true and hides when untouched', () => {
+  it('starts 6s idle timer when shown with no_activate: true and hides when untouched', async () => {
     useSmartDismiss(true);
     const effect = lifecycle.effects[0];
     effect();
@@ -63,7 +77,7 @@ describe('useSmartDismiss', () => {
     vi.advanceTimersByTime(5900);
     expect(mockHide).not.toHaveBeenCalled();
 
-    vi.advanceTimersByTime(200);
+    await vi.advanceTimersByTimeAsync(200);
     expect(mockHide).toHaveBeenCalledTimes(1);
   });
 
@@ -78,7 +92,7 @@ describe('useSmartDismiss', () => {
     expect(mockHide).not.toHaveBeenCalled();
   });
 
-  it('freezes 6s timer when mouse enters, and restarts 1.5s grace timer when mouse leaves', () => {
+  it('freezes 6s timer when mouse enters, and restarts 1.5s grace timer when mouse leaves', async () => {
     const { onMouseEnter, onMouseLeave } = useSmartDismiss(true);
     const effect = lifecycle.effects[0];
     effect();
@@ -99,7 +113,7 @@ describe('useSmartDismiss', () => {
     vi.advanceTimersByTime(1400);
     expect(mockHide).not.toHaveBeenCalled();
 
-    vi.advanceTimersByTime(200);
+    await vi.advanceTimersByTimeAsync(200);
     expect(mockHide).toHaveBeenCalledTimes(1);
   });
 
@@ -137,6 +151,41 @@ describe('useSmartDismiss', () => {
     onMouseDown();
 
     vi.advanceTimersByTime(10000);
+    expect(mockHide).not.toHaveBeenCalled();
+  });
+
+  it('does not auto-dismiss when auto-hide is disabled in settings', async () => {
+    useAppStore.setState({ autoHideOnBlur: false });
+    useSmartDismiss(true);
+    lifecycle.effects[0]();
+
+    shellShownCallback!({ payload: { no_activate: true } });
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(mockHide).not.toHaveBeenCalled();
+  });
+
+  it('postpones instead of abandoning the dismiss while audio plays', async () => {
+    const playing = vi.spyOn(audioModule, 'isAudioPlaying').mockReturnValue(true);
+    useSmartDismiss(true);
+    lifecycle.effects[0]();
+
+    shellShownCallback!({ payload: { no_activate: true } });
+    await vi.advanceTimersByTimeAsync(6100);
+    expect(mockHide).not.toHaveBeenCalled();
+
+    playing.mockReturnValue(false);
+    await vi.advanceTimersByTimeAsync(1100);
+    expect(mockHide).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats grabbing the window to move or resize it like a click inside', async () => {
+    useSmartDismiss(true);
+    lifecycle.effects[0]();
+
+    shellShownCallback!({ payload: { no_activate: true } });
+    sizeMoveCallback!({ payload: true });
+
+    await vi.advanceTimersByTimeAsync(10000);
     expect(mockHide).not.toHaveBeenCalled();
   });
 });

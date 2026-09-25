@@ -645,6 +645,12 @@ pub fn resize_and_clamp_window(
     crate::native::resize_and_clamp_window(&window, width, height)
 }
 
+/// Hide the overlay unless a newer show superseded the frontend's dismiss.
+#[tauri::command]
+pub async fn hide_shell(app: AppHandle, generation: Option<u64>) -> Result<bool, String> {
+    crate::shell::hide(&app, generation).await
+}
+
 #[tauri::command]
 pub fn set_window_acrylic(window: tauri::WebviewWindow, enabled: bool) -> Result<(), String> {
     crate::native::set_window_acrylic(&window, enabled);

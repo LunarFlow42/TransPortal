@@ -464,6 +464,144 @@ pub fn get_global_cursor_pos() -> Option<(i32, i32)> {
     }
 }
 
+/// Hide `window` with Win32 directly.
+///
+/// tao only calls `ShowWindow` when its cached visibility flag changes, and the
+/// no-activate show path bypasses tao. After such a show tao still believes
+/// the window is hidden, so `window.hide()` alone silently does nothing.
+pub fn force_hide_window<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::{SW_HIDE, ShowWindow};
+
+    if let Ok(handle) = window.hwnd() {
+        unsafe {
+            let _ = ShowWindow(HWND(handle.0), SW_HIDE);
+        }
+    }
+}
+
+/// Samples global mouse presses relative to one of our windows.
+///
+/// The overlay is often shown without activation, so it never receives a blur
+/// event; polling the global button state is the only way to notice a click
+/// elsewhere on the desktop.
+pub struct PointerProbe {
+    hwnd: isize,
+}
+
+impl PointerProbe {
+    pub fn new<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) -> Option<Self> {
+        let handle = window.hwnd().ok()?;
+        Some(Self {
+            hwnd: handle.0 as isize,
+        })
+    }
+
+    /// Whether the probed window is currently shown.
+    pub fn window_visible(&self) -> bool {
+        use windows::Win32::Foundation::HWND;
+        use windows::Win32::UI::WindowsAndMessaging::IsWindowVisible;
+
+        unsafe { IsWindowVisible(HWND(self.hwnd as *mut _)).as_bool() }
+    }
+
+    /// `None` while no mouse button is held; otherwise whether the cursor is
+    /// outside every window owned by this process.
+    pub fn pressed_outside(&self) -> Option<bool> {
+        use windows::Win32::Foundation::POINT;
+        use windows::Win32::System::Threading::GetCurrentProcessId;
+        use windows::Win32::UI::Input::KeyboardAndMouse::{VK_LBUTTON, VK_MBUTTON, VK_RBUTTON};
+        use windows::Win32::UI::WindowsAndMessaging::{
+            GA_ROOT, GetAncestor, GetCursorPos, GetWindowThreadProcessId, WindowFromPoint,
+        };
+
+        unsafe {
+            let pressed = [VK_LBUTTON, VK_RBUTTON, VK_MBUTTON]
+                .iter()
+                .any(|key| GetAsyncKeyState(key.0 as i32) < 0);
+            if !pressed {
+                return None;
+            }
+            let mut pt = POINT::default();
+            if GetCursorPos(&mut pt).is_err() {
+                return Some(false);
+            }
+            let root = GetAncestor(WindowFromPoint(pt), GA_ROOT);
+            let mut pid = 0u32;
+            GetWindowThreadProcessId(root, Some(&mut pid));
+            Some(pid != GetCurrentProcessId())
+        }
+    }
+}
+
+struct SizeMoveObserver {
+    on_phase: Box<dyn Fn(super::SizeMove)>,
+    resized: std::cell::Cell<bool>,
+}
+
+unsafe extern "system" fn size_move_subclass_proc(
+    hwnd: windows::Win32::Foundation::HWND,
+    msg: u32,
+    wparam: windows::Win32::Foundation::WPARAM,
+    lparam: windows::Win32::Foundation::LPARAM,
+    _id: usize,
+    data: usize,
+) -> windows::Win32::Foundation::LRESULT {
+    use super::SizeMove;
+    use windows::Win32::UI::Shell::DefSubclassProc;
+    use windows::Win32::UI::WindowsAndMessaging::{WM_ENTERSIZEMOVE, WM_EXITSIZEMOVE, WM_SIZING};
+
+    // SAFETY: `data` is the leaked `SizeMoveObserver` installed by `observe_size_move`.
+    let observer = unsafe { &*(data as *const SizeMoveObserver) };
+    match msg {
+        WM_ENTERSIZEMOVE => {
+            observer.resized.set(false);
+            (observer.on_phase)(SizeMove::Start);
+        }
+        WM_SIZING if !observer.resized.replace(true) => (observer.on_phase)(SizeMove::Resize),
+        WM_EXITSIZEMOVE => (observer.on_phase)(SizeMove::End {
+            resized: observer.resized.replace(false),
+        }),
+        _ => {}
+    }
+    unsafe { DefSubclassProc(hwnd, msg, wparam, lparam) }
+}
+
+/// Reports interactive (modal) moves and resizes of `window`, whether started
+/// from our own grip via `startResizeDragging`, Tauri's native edge handles or
+/// a caption drag.
+///
+/// The frontend cannot see these itself: `startResizeDragging` resolves as
+/// soon as the OS loop starts, and edge presses never reach the webview.
+pub fn observe_size_move<R: tauri::Runtime>(
+    window: &tauri::WebviewWindow<R>,
+    on_phase: impl Fn(super::SizeMove) + Send + 'static,
+) -> Result<(), String> {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::Shell::SetWindowSubclass;
+
+    let hwnd = window.hwnd().map_err(|e| e.to_string())?.0 as isize;
+    // Subclassing must happen on the thread that owns the window.
+    window
+        .run_on_main_thread(move || {
+            let observer = Box::new(SizeMoveObserver {
+                on_phase: Box::new(on_phase),
+                resized: std::cell::Cell::new(false),
+            });
+            // The overlay lives as long as the app, so the observer is leaked.
+            let data = Box::into_raw(observer) as usize;
+            unsafe {
+                let _ = SetWindowSubclass(
+                    HWND(hwnd as *mut _),
+                    Some(size_move_subclass_proc),
+                    0x5452_5A31,
+                    data,
+                );
+            }
+        })
+        .map_err(|e| e.to_string())
+}
+
 /// Intelligently places the window near the given anchor bounds or cursor,
 /// with multi-monitor awareness, collision detection, and smart flip-to-top.
 pub fn place_window_smartly<R: tauri::Runtime>(

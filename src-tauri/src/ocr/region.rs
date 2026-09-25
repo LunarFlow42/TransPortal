@@ -185,9 +185,7 @@ impl RegionService {
         owner: u64,
         cancel: Cancellation,
     ) -> Result<u64, String> {
-        if let Some(window) = app.get_webview_window("shell") {
-            let _ = window.hide();
-        }
+        crate::shell::hide_now(app);
         // A one-shot snip only needs the overlay hidden; continuous monitoring
         // must keep its own output out of every later capture.
         if let Err(error) = self.exclude_windows(app, true)

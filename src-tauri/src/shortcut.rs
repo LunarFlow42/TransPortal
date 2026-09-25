@@ -13,12 +13,6 @@ use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut,
 pub const STATUS_EVENT: &str = "transportal://shortcut-status";
 pub const RECORD_EVENT: &str = "transportal://shortcut-recorded";
 pub const SELECTION_EVENT: &str = "transportal://selection";
-pub const SHELL_SHOWN_EVENT: &str = "transportal://shell-shown";
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct ShellShownPayload {
-    pub no_activate: bool,
-}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -702,14 +696,11 @@ pub fn on_input_translate(app: &AppHandle) {
         if !is_pinned() || !window.is_visible().unwrap_or(false) {
             let _ = crate::native::place_window_smartly(&window, None, true, false);
         }
-        let _ = window.unminimize();
-        let _ = window.show();
-        let _ = window.set_focus();
-        let _ = app.emit_to(
-            "shell",
-            SHELL_SHOWN_EVENT,
-            ShellShownPayload { no_activate: false },
-        );
+        crate::shell::present(app, false, |window| {
+            let _ = window.unminimize();
+            let _ = window.show();
+            let _ = window.set_focus();
+        });
         let _ = app.emit_to("shell", "transportal://focus-input", ());
     }
 }
@@ -853,19 +844,21 @@ pub fn show_shell_with_anchor(
         let _ = settings.hide();
     }
     if let Some(window) = app.get_webview_window("shell") {
-        if !is_pinned() || !window.is_visible().unwrap_or(false) {
-            let _ = crate::native::place_window_smartly(&window, anchor_bounds, false, no_activate);
-        }
-        if !no_activate {
-            let _ = window.unminimize();
-            let _ = window.show();
-            let _ = window.set_focus();
-        }
-        let _ = app.emit_to(
-            "shell",
-            SHELL_SHOWN_EVENT,
-            ShellShownPayload { no_activate },
-        );
+        let reposition = !is_pinned() || !window.is_visible().unwrap_or(false);
+        crate::shell::present(app, no_activate, |window| {
+            // In no-activate mode the placement call is what shows the window.
+            if reposition {
+                let _ =
+                    crate::native::place_window_smartly(window, anchor_bounds, false, no_activate);
+            }
+            if !no_activate || !window.is_visible().unwrap_or(false) {
+                let _ = window.unminimize();
+                let _ = window.show();
+                if !no_activate {
+                    let _ = window.set_focus();
+                }
+            }
+        });
     }
 }
 

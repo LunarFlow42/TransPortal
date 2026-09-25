@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { getCurrentWindow } from '@tauri-apps/api/window';
+import { dismissShell } from '../hooks/useWindowAnimation';
 import { Check, Copy, Languages, LoaderCircle, Pin, ScanText, Settings, X } from 'lucide-react';
 import { Button, IconButton, Surface } from './ui';
 import { useAppStore } from '../store/useAppStore';
@@ -32,7 +32,7 @@ export const OcrPanel: React.FC<{ event: OcrEvent }> = ({ event }) => {
   const close = () => {
     useAppStore.getState().cancelOcr();
     useAppStore.getState().clearLookup();
-    void getCurrentWindow().hide();
+    void dismissShell({ force: true, immediate: true });
   };
 
   const copy = async () => {

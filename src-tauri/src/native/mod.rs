@@ -31,16 +31,29 @@ mod windows;
 use fallback::FallbackSelectionReader;
 #[cfg(not(target_os = "windows"))]
 pub use fallback::{
-    configure_transparent_window, get_global_cursor_pos, place_window_smartly,
-    resize_and_clamp_window, set_window_acrylic, set_window_theme,
+    PointerProbe, configure_transparent_window, force_hide_window, get_global_cursor_pos,
+    observe_size_move, place_window_smartly, resize_and_clamp_window, set_window_acrylic,
+    set_window_theme,
 };
 #[cfg(target_os = "windows")]
 use windows::WindowsSelectionReader;
 #[cfg(target_os = "windows")]
 pub use windows::{
-    configure_transparent_window, get_global_cursor_pos, place_window_smartly,
-    resize_and_clamp_window, set_window_acrylic, set_window_theme,
+    PointerProbe, configure_transparent_window, force_hide_window, get_global_cursor_pos,
+    observe_size_move, place_window_smartly, resize_and_clamp_window, set_window_acrylic,
+    set_window_theme,
 };
+
+/// Phases of an interactive (modal) move or resize of a window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SizeMove {
+    /// The user grabbed an edge, the resize grip or a drag handle.
+    Start,
+    /// The first size change of the current interaction.
+    Resize,
+    /// The interaction ended; `resized` tells whether the size changed.
+    End { resized: bool },
+}
 
 /// Screen bounding box of selected text in physical pixels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

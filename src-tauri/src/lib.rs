@@ -7,6 +7,7 @@ pub mod native;
 pub mod ocr;
 pub mod provider;
 pub mod selection;
+pub mod shell;
 pub mod shortcut;
 mod shortcut_sequence;
 
@@ -18,12 +19,12 @@ use tauri::{
 
 /// Bring the shell bubble to the foreground.
 fn focus_shell<R: tauri::Runtime>(app: &AppHandle<R>) {
-    if let Some(window) = app.get_webview_window("shell") {
-        native::configure_transparent_window(&window);
+    shell::present(app, false, |window| {
+        native::configure_transparent_window(window);
         let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();
-    }
+    });
 }
 
 /// Dynamically create or focus the settings window on demand.
@@ -93,11 +94,7 @@ fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>>
             .show_menu_on_left_click(false)
             .on_menu_event(|app, event| match event.id.as_ref() {
                 "show" => focus_shell(app),
-                "hide" => {
-                    if let Some(window) = app.get_webview_window("shell") {
-                        let _ = window.hide();
-                    }
-                }
+                "hide" => shell::hide_now(app),
                 "settings" => {
                     let _ = open_or_focus_settings(app);
                 }
@@ -117,10 +114,9 @@ fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>>
                     if let Some(window) = app.get_webview_window("shell") {
                         let is_visible = window.is_visible().unwrap_or(false);
                         if is_visible {
-                            let _ = window.hide();
+                            shell::hide_now(app);
                         } else {
-                            let _ = window.show();
-                            let _ = window.set_focus();
+                            focus_shell(app);
                         }
                     }
                 }
@@ -198,6 +194,7 @@ pub fn run() {
             }
             shortcut::register(app.handle());
             shortcut::start_clipboard_monitor(app.handle());
+            shell::observe_size_move(app.handle());
             focus_shell(app.handle());
             Ok(())
         })
@@ -252,6 +249,7 @@ pub fn run() {
             commands::generate_examples,
             commands::open_settings_window,
             commands::resize_and_clamp_window,
+            commands::hide_shell,
             commands::set_window_acrylic,
             commands::set_window_theme,
             commands::get_memory_usage,

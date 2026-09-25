@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { getCurrentWindow } from '@tauri-apps/api/window';
+import { dismissShell } from '../hooks/useWindowAnimation';
 import { LoaderCircle, Pause, Play, ScanText, Square, X } from 'lucide-react';
 import { Button, IconButton, Surface } from './ui';
 import { PictureView } from './PictureView';
@@ -24,7 +24,7 @@ export function AutoOcrPanel({ event }: { event: MonitorUpdate }) {
   };
   const close = async () => {
     await command('stop_auto_ocr', { discard: true });
-    void getCurrentWindow().hide();
+    void dismissShell({ force: true, immediate: true });
   };
   return <Surface className="w-full p-4 text-[var(--text)]">
     <div onMouseDown={startWindowDrag} className="flex cursor-move items-center justify-between border-b border-[var(--stroke)] pb-2">

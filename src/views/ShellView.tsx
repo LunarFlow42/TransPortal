@@ -75,7 +75,6 @@ export const ShellView: React.FC = () => {
     return null;
   });
   const isManualResizingRef = React.useRef(false);
-  const hasResizedDuringDragRef = React.useRef(false);
   const scaleFactorRef = React.useRef(1);
   const contentRef = React.useRef<HTMLDivElement>(null);
   const [measuredContentHeight, setMeasuredContentHeight] = useState<number | null>(null);
@@ -110,37 +109,18 @@ export const ShellView: React.FC = () => {
     };
   }, []);
 
-  const handleResizeMouseDown = async (e: React.MouseEvent) => {
+  const handleResizeMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
-    suppressAutoHide(15000);
-    isManualResizingRef.current = true;
-    hasResizedDuringDragRef.current = false;
-    try {
-      scaleFactorRef.current = await getCurrentWindow().scaleFactor().catch(() => 1);
-      await getCurrentWindow().startResizeDragging('SouthEast');
-    } catch (err) {
-      console.error('startResizeDragging failed:', err);
-    } finally {
-      isManualResizingRef.current = false;
-      suppressAutoHide(1000);
-      if (hasResizedDuringDragRef.current) {
-        try {
-          const size = await getCurrentWindow().innerSize();
-          const factor = await getCurrentWindow().scaleFactor();
-          const logicalWidth = Math.round(size.width / factor);
-          const logicalHeight = Math.round(size.height / factor);
-          if (logicalWidth >= 320 && logicalHeight >= 120) {
-            const newSize = { width: logicalWidth, height: logicalHeight };
-            setCustomSize(newSize);
-            try {
-              localStorage.setItem('transportal_custom_shell_size', JSON.stringify(newSize));
-            } catch {}
-          }
-        } catch {}
-      }
-    }
+    // Starting the drag blurs the webview before Rust can report the sizing
+    // loop, so hold auto-hide from the press itself. The promise resolves
+    // once the OS loop starts, not when it ends; Rust reports the real
+    // start/end via `transportal://shell-size-move` / `shell-resizing`.
+    suppressAutoHide();
+    void getCurrentWindow()
+      .startResizeDragging('SouthEast')
+      .catch((err) => console.error('startResizeDragging failed:', err));
   };
 
   const handleResizeDoubleClick = (e: React.MouseEvent) => {
@@ -170,22 +150,45 @@ export const ShellView: React.FC = () => {
   }, [hasContent, topDensity, topNode?.id, topNode?.status, topNode?.translation]);
 
   useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    void getCurrentWindow().onResized(({ payload: size }) => {
-      if (!isManualResizingRef.current) return;
-      hasResizedDuringDragRef.current = true;
-      const factor = scaleFactorRef.current || 1;
-      const logicalWidth = Math.round(size.width / factor);
-      const logicalHeight = Math.round(size.height / factor);
-      if (logicalWidth >= 320 && logicalHeight >= 120) {
-        setCustomSize({ width: logicalWidth, height: logicalHeight });
+    const window = getCurrentWindow();
+    const toLogical = (size: { width: number; height: number }, factor: number) => {
+      const logical = { width: Math.round(size.width / factor), height: Math.round(size.height / factor) };
+      return logical.width >= 320 && logical.height >= 120 ? logical : null;
+    };
+
+    // Covers the corner grip and native edge resizing alike. While the user
+    // drags, auto-fit must not fight the OS; the final size becomes sticky.
+    // (Auto-hide is held for the whole interaction by useHideOnBlur.)
+    const unlistenResizing = listen<boolean>('transportal://shell-resizing', async ({ payload: resizing }) => {
+      if (resizing) {
+        isManualResizingRef.current = true;
+        scaleFactorRef.current = await window.scaleFactor().catch(() => 1);
+        return;
       }
-    }).then((fn) => {
-      unlisten = fn;
+      try {
+        const [size, factor] = await Promise.all([window.innerSize(), window.scaleFactor()]);
+        const next = toLogical(size, factor);
+        if (next) {
+          setCustomSize(next);
+          try {
+            localStorage.setItem('transportal_custom_shell_size', JSON.stringify(next));
+          } catch {}
+        }
+      } catch {
+      } finally {
+        isManualResizingRef.current = false;
+      }
+    });
+
+    const unlistenResized = window.onResized(({ payload: size }) => {
+      if (!isManualResizingRef.current) return;
+      const next = toLogical(size, scaleFactorRef.current || 1);
+      if (next) setCustomSize(next);
     });
 
     return () => {
-      unlisten?.();
+      void unlistenResizing.then((dispose) => dispose());
+      void unlistenResized.then((dispose) => dispose());
     };
   }, []);
 
