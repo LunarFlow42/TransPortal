@@ -398,7 +398,7 @@ pub fn set_double_copy_enabled(enabled: bool, app: AppHandle) {
 
 #[tauri::command]
 pub fn set_clipboard_monitor_enabled(enabled: bool) {
-    crate::core::shortcut::set_clipboard_monitor_enabled(enabled);
+    crate::core::clipboard_monitor::set_enabled(enabled);
 }
 
 #[tauri::command]

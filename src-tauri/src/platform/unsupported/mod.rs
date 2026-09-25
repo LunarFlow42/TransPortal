@@ -147,6 +147,13 @@ impl ClipboardOps for UnsupportedClipboard {
     fn origin(&self) -> ClipboardOrigin {
         ClipboardOrigin::Unavailable
     }
+    /// Polls every 500 ms; the caller skips unchanged content.
+    fn listen(&self, on_change: &mut dyn FnMut()) -> Result<(), String> {
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            on_change();
+        }
+    }
 }
 
 #[derive(Default)]

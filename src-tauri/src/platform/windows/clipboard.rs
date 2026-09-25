@@ -58,4 +58,83 @@ impl ClipboardOps for WindowsClipboard {
             ClipboardOrigin::Other
         }
     }
+
+    fn listen(&self, on_change: &mut dyn FnMut()) -> Result<(), String> {
+        use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
+        use windows::Win32::System::DataExchange::{
+            AddClipboardFormatListener, RemoveClipboardFormatListener,
+        };
+        use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+        use windows::Win32::UI::WindowsAndMessaging::{
+            CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW,
+            HWND_MESSAGE, MSG, PostQuitMessage, RegisterClassExW, TranslateMessage,
+            WINDOW_EX_STYLE, WM_CLIPBOARDUPDATE, WM_DESTROY, WNDCLASSEXW, WS_OVERLAPPED,
+        };
+        use windows::core::PCWSTR;
+
+        unsafe extern "system" fn wndproc(
+            hwnd: HWND,
+            msg: u32,
+            wparam: WPARAM,
+            lparam: LPARAM,
+        ) -> LRESULT {
+            unsafe {
+                if msg == WM_DESTROY {
+                    PostQuitMessage(0);
+                    return LRESULT(0);
+                }
+                DefWindowProcW(hwnd, msg, wparam, lparam)
+            }
+        }
+
+        let class_name = windows::core::w!("TransPortalClipboardListener");
+        let hinstance = unsafe { GetModuleHandleW(None).unwrap_or_default() };
+
+        let wc = WNDCLASSEXW {
+            cbSize: std::mem::size_of::<WNDCLASSEXW>() as u32,
+            lpfnWndProc: Some(wndproc),
+            hInstance: hinstance.into(),
+            lpszClassName: PCWSTR(class_name.as_ptr()),
+            ..Default::default()
+        };
+
+        unsafe {
+            let _ = RegisterClassExW(&wc);
+            let hwnd = CreateWindowExW(
+                WINDOW_EX_STYLE::default(),
+                PCWSTR(class_name.as_ptr()),
+                windows::core::w!(""),
+                WS_OVERLAPPED,
+                0,
+                0,
+                0,
+                0,
+                HWND_MESSAGE,
+                None,
+                hinstance,
+                None,
+            );
+
+            if let Ok(hwnd) = hwnd
+                && !hwnd.is_invalid()
+            {
+                let _ = AddClipboardFormatListener(hwnd);
+
+                let mut msg = MSG::default();
+                while GetMessageW(&mut msg, None, 0, 0).as_bool() {
+                    if msg.message == WM_CLIPBOARDUPDATE {
+                        on_change();
+                    }
+                    let _ = TranslateMessage(&msg);
+                    let _ = DispatchMessageW(&msg);
+                }
+
+                let _ = RemoveClipboardFormatListener(hwnd);
+                let _ = DestroyWindow(hwnd);
+                Ok(())
+            } else {
+                Err("无法创建剪贴板监听窗口。".into())
+            }
+        }
+    }
 }

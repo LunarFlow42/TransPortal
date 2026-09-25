@@ -16,4 +16,10 @@ pub trait ClipboardOps: Send + Sync {
 
     /// Which program published the current content.
     fn origin(&self) -> ClipboardOrigin;
+
+    /// Block the calling thread and call `on_change` for every clipboard
+    /// update. Without change notifications (see
+    /// [`Capabilities::clipboard_events`](super::Capabilities)) it is called
+    /// on every poll instead. Returns only if listening fails.
+    fn listen(&self, on_change: &mut dyn FnMut()) -> Result<(), String>;
 }

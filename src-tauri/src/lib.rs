@@ -2,7 +2,7 @@ pub mod commands;
 pub mod core;
 pub mod platform;
 
-use crate::core::{dictionary, integrity, ocr, selection, shell, shortcut};
+use crate::core::{clipboard_monitor, dictionary, integrity, ocr, selection, shell, shortcut};
 use crate::platform::PlatformWindow;
 use crate::platform::window::WindowOps;
 
@@ -188,7 +188,7 @@ pub fn run() {
                 PlatformWindow::configure_transparent_window(&window);
             }
             shortcut::register(app.handle());
-            shortcut::start_clipboard_monitor(app.handle());
+            clipboard_monitor::start(app.handle());
             shell::observe_size_move(app.handle());
             focus_shell(app.handle());
             Ok(())

@@ -2,6 +2,7 @@
 //! only through the contracts in [`crate::platform`].
 
 pub mod anki;
+pub mod clipboard_monitor;
 pub mod dictionary;
 pub mod integrity;
 pub mod intent;

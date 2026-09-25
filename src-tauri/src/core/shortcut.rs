@@ -1,4 +1,4 @@
-//! Configurable global shortcuts and non-consuming Windows copy/snip gestures.
+//! Configurable global shortcuts and non-consuming copy/snip gestures.
 
 use crate::core::ocr::{OcrMode, OcrService};
 use crate::platform::PlatformWindow;
@@ -9,8 +9,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
-#[cfg(not(target_os = "windows"))]
-use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
@@ -391,148 +389,8 @@ pub fn set_double_copy_enabled(app: &AppHandle, enabled: bool) {
     );
 }
 
-pub static CLIPBOARD_MONITOR_ENABLED: AtomicBool = AtomicBool::new(false);
-
-pub fn set_clipboard_monitor_enabled(enabled: bool) {
-    CLIPBOARD_MONITOR_ENABLED.store(enabled, Ordering::Relaxed);
-}
-
 pub fn set_ink_translate_key(key: &str) {
     PlatformGestures::set_ink_key(InkKey::parse(key));
-}
-
-#[cfg(target_os = "windows")]
-pub fn start_clipboard_monitor(app: &AppHandle) {
-    let app = app.clone();
-    let _ = std::thread::Builder::new()
-        .name("clipboard-monitor".into())
-        .spawn(move || {
-            use tauri_plugin_clipboard_manager::ClipboardExt;
-            use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
-            use windows::Win32::System::DataExchange::{
-                AddClipboardFormatListener, RemoveClipboardFormatListener,
-            };
-            use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-            use windows::Win32::UI::WindowsAndMessaging::{
-                CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW,
-                GetForegroundWindow, GetMessageW, HWND_MESSAGE, MSG, PostQuitMessage,
-                RegisterClassExW, TranslateMessage, WINDOW_EX_STYLE, WM_CLIPBOARDUPDATE,
-                WM_DESTROY, WNDCLASSEXW, WS_OVERLAPPED,
-            };
-            use windows::core::PCWSTR;
-
-            unsafe extern "system" fn wndproc(
-                hwnd: HWND,
-                msg: u32,
-                wparam: WPARAM,
-                lparam: LPARAM,
-            ) -> LRESULT {
-                unsafe {
-                    if msg == WM_DESTROY {
-                        PostQuitMessage(0);
-                        return LRESULT(0);
-                    }
-                    DefWindowProcW(hwnd, msg, wparam, lparam)
-                }
-            }
-
-            let class_name = windows::core::w!("TransPortalClipboardListener");
-            let hinstance = unsafe { GetModuleHandleW(None).unwrap_or_default() };
-
-            let wc = WNDCLASSEXW {
-                cbSize: std::mem::size_of::<WNDCLASSEXW>() as u32,
-                lpfnWndProc: Some(wndproc),
-                hInstance: hinstance.into(),
-                lpszClassName: PCWSTR(class_name.as_ptr()),
-                ..Default::default()
-            };
-
-            unsafe {
-                let _ = RegisterClassExW(&wc);
-                let hwnd = CreateWindowExW(
-                    WINDOW_EX_STYLE::default(),
-                    PCWSTR(class_name.as_ptr()),
-                    windows::core::w!(""),
-                    WS_OVERLAPPED,
-                    0,
-                    0,
-                    0,
-                    0,
-                    HWND_MESSAGE,
-                    None,
-                    hinstance,
-                    None,
-                );
-
-                if let Ok(hwnd) = hwnd
-                    && !hwnd.is_invalid()
-                {
-                    let _ = AddClipboardFormatListener(hwnd);
-
-                    let mut msg = MSG::default();
-                    while GetMessageW(&mut msg, None, 0, 0).as_bool() {
-                        if msg.message == WM_CLIPBOARDUPDATE
-                            && CLIPBOARD_MONITOR_ENABLED.load(Ordering::Relaxed)
-                        {
-                            let fg = GetForegroundWindow().0 as usize;
-                            let is_self = app
-                                .get_webview_window("shell")
-                                .and_then(|w| w.hwnd().ok())
-                                .map(|h| h.0 as usize)
-                                .is_some_and(|h| h == fg)
-                                || app
-                                    .get_webview_window("settings")
-                                    .and_then(|w| w.hwnd().ok())
-                                    .map(|h| h.0 as usize)
-                                    .is_some_and(|h| h == fg);
-
-                            if !is_self && let Ok(text) = app.clipboard().read_text() {
-                                let trimmed = text.trim();
-                                if !trimmed.is_empty() && trimmed.chars().count() <= 2000 {
-                                    let _ = app.emit_to(
-                                        "shell",
-                                        "transportal://clipboard-text",
-                                        trimmed,
-                                    );
-                                }
-                            }
-                        }
-                        let _ = TranslateMessage(&msg);
-                        let _ = DispatchMessageW(&msg);
-                    }
-
-                    let _ = RemoveClipboardFormatListener(hwnd);
-                    let _ = DestroyWindow(hwnd);
-                }
-            }
-        });
-}
-
-#[cfg(not(target_os = "windows"))]
-pub fn start_clipboard_monitor(app: &AppHandle) {
-    let app = app.clone();
-    let _ = std::thread::Builder::new()
-        .name("clipboard-monitor".into())
-        .spawn(move || {
-            let mut last_text = String::new();
-            loop {
-                std::thread::sleep(Duration::from_millis(500));
-                if !CLIPBOARD_MONITOR_ENABLED.load(Ordering::Relaxed) {
-                    continue;
-                }
-                use tauri_plugin_clipboard_manager::ClipboardExt;
-                if let Ok(text) = app.clipboard().read_text() {
-                    let trimmed = text.trim();
-                    if !trimmed.is_empty()
-                        && trimmed != last_text
-                        && trimmed.chars().count() <= 2000
-                    {
-                        last_text = trimmed.to_string();
-                        let _ = app.emit_to("shell", "transportal://clipboard-text", trimmed);
-                    }
-                }
-            }
-        });
 }
 
 pub fn register(app: &AppHandle) {
