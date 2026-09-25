@@ -14,6 +14,8 @@ mod system;
 mod uia;
 mod window;
 
+use super::{Backend, Capabilities};
+
 pub use desktop::WindowsDesktop;
 pub use input::copy_selection_to_clipboard;
 pub use keyboard_hook::WindowsScreenCapture;
@@ -28,3 +30,9 @@ pub use window::{
     configure_transparent_window, force_hide_window, get_global_cursor_pos, place_window_smartly,
     resize_and_clamp_window, set_window_acrylic, set_window_theme,
 };
+
+pub struct WindowsBackend;
+
+impl Backend for WindowsBackend {
+    const CAPABILITIES: Capabilities = Capabilities::ALL;
+}

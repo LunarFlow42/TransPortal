@@ -12,6 +12,7 @@ pub use window::{
 use super::desktop::{DesktopCapture, ScreenRect};
 use super::selection::{SelectionPlatform, SelectionTarget};
 use super::system::{IntegrityPlatform, MemoryReport, TrimResult};
+use super::{Backend, Capabilities};
 use super::{CaptureMethod, SelectionContent, SelectionReader};
 use crate::core::ocr::{
     ClipboardOrigin, OcrEngine, OcrEngineInfo, OcrImage, RecognizedText, ScreenCapture,
@@ -19,6 +20,14 @@ use crate::core::ocr::{
 };
 use std::sync::mpsc::SyncSender;
 use tauri::AppHandle;
+
+/// Backend for targets without native integration; also the base that
+/// partially implemented backends delegate to.
+pub struct UnsupportedBackend;
+
+impl Backend for UnsupportedBackend {
+    const CAPABILITIES: Capabilities = Capabilities::NONE;
+}
 
 pub struct UnavailableOcr;
 const UNAVAILABLE: &str = "当前平台尚未提供本地 OCR；Windows 10/11 可使用系统 OCR。";
