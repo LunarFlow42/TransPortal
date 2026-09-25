@@ -44,11 +44,6 @@ jobs:
 
       - name: Rust tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
-        env:
-          # The repo's .cargo/config.toml points rustc-wrapper at a local sccache.
-          CARGO_BUILD_RUSTC_WRAPPER: ""
 
       - name: ONNX FP32 inference smoke test
         run: ./scripts/ocr/smoke-onnx.ps1
-        env:
-          CARGO_BUILD_RUSTC_WRAPPER: ""

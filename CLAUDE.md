@@ -13,7 +13,7 @@ The imported `AGENTS.md` is the source of truth for commands, conventions, and p
 - ONNX OCR assets: `pnpm ocr:prepare` downloads, verifies, and stages the model and runtime into `src-tauri/resources/ocr`. Debug builds read that directory directly. Release builds read the bundled resource dir.
 - Release build: `pnpm build:release` (NSIS + `SHA256SUMS` + `integrity.json`)
 - CI (`.github/workflows/ci.yml`, windows-latest) runs `pnpm build`, `pnpm test`, `pnpm test:integrity`, `cargo test`, then `scripts/ocr/smoke-onnx.ps1`.
-- `.cargo/config.toml` (and `src-tauri/.cargo/config.toml`) sets `rustc-wrapper` to a local sccache at `D:/RUST/...` and the linker to `rust-lld.exe`. If sccache isn't at that path, set `CARGO_BUILD_RUSTC_WRAPPER=""` as CI does.
+- `.cargo/config.toml` (and `src-tauri/.cargo/config.toml`) only sets the Windows linker to `rust-lld.exe`. Use sccache via the `RUSTC_WRAPPER` environment variable (or your user-level `~/.cargo/config.toml`), not the repo config.
 
 ## Architecture
 
