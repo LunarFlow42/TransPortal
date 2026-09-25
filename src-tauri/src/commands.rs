@@ -148,7 +148,7 @@ pub async fn verify_integrity(
             .lock()
             .unwrap() = report.clone();
         if report.blocks_startup() {
-            crate::platform::integrity::platform()
+            crate::platform::system::platform()
                 .show_failure(report.error.as_deref().unwrap_or("程序完整性检查失败。"));
             app.exit(2);
         }
@@ -512,11 +512,11 @@ pub fn set_window_theme(window: tauri::WebviewWindow, dark: bool) -> Result<(), 
 }
 
 #[tauri::command]
-pub fn get_memory_usage() -> Result<crate::platform::memory::MemoryReport, String> {
-    crate::platform::memory::get_memory_usage()
+pub fn get_memory_usage() -> Result<crate::platform::system::MemoryReport, String> {
+    crate::platform::system::get_memory_usage()
 }
 
 #[tauri::command]
-pub fn trim_memory() -> Result<crate::platform::memory::TrimResult, String> {
-    crate::platform::memory::trim_memory()
+pub fn trim_memory() -> Result<crate::platform::system::TrimResult, String> {
+    crate::platform::system::trim_memory()
 }

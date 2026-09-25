@@ -1,8 +1,8 @@
-use super::IntegrityPlatform;
+use crate::platform::system::IntegrityPlatform;
 use windows::Win32::UI::WindowsAndMessaging::{MB_ICONERROR, MB_OK, MB_SETFOREGROUND, MessageBoxW};
 use windows::core::HSTRING;
 
-pub(super) struct WindowsIntegrity;
+pub struct WindowsIntegrity;
 
 impl IntegrityPlatform for WindowsIntegrity {
     fn enforce_release_hash(&self) -> bool {

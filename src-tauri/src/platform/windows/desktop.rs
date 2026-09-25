@@ -1,4 +1,5 @@
-use super::{DesktopCapture, ScreenRect};
+use crate::platform::desktop::{DesktopCapture, ScreenRect};
+use crate::platform::imaging::is_all_black;
 use std::sync::Mutex;
 use windows::Win32::Foundation::{HWND, POINT};
 use windows::Win32::Graphics::Gdi::{
@@ -170,10 +171,6 @@ impl WindowsDesktop {
                 .ok_or_else(|| "截图尺寸无效。".into())
         }
     }
-}
-
-fn is_all_black(image: &image::RgbaImage) -> bool {
-    !image.pixels().any(|p| p[0] > 0 || p[1] > 0 || p[2] > 0)
 }
 
 impl DesktopCapture for WindowsDesktop {

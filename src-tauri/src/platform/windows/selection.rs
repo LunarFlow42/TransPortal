@@ -1,9 +1,8 @@
-use super::clipboard::ClipboardRestore;
-use super::{SelectionPlatform, SelectionTarget};
-use crate::platform::{
-    SelectionReader,
-    windows::{WindowsSelectionReader, copy_selection_to_clipboard, key_input},
-};
+use super::clipboard_restore::ClipboardRestore;
+use super::input::{copy_selection_to_clipboard, key_input};
+use super::uia::WindowsSelectionReader;
+use crate::platform::SelectionReader;
+use crate::platform::selection::{SelectionPlatform, SelectionTarget};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager};
 use tauri_plugin_clipboard_manager::ClipboardExt;

@@ -42,7 +42,7 @@ unsafe extern "system" fn keyboard_hook(code: i32, wparam: WPARAM, lparam: LPARA
         let message = wparam.0 as u32;
         let down = message == WM_KEYDOWN || message == WM_SYSKEYDOWN;
         let up = message == WM_KEYUP || message == WM_SYSKEYUP;
-        let own_input = key.dwExtraInfo == crate::platform::INPUT_MARKER;
+        let own_input = key.dwExtraInfo == super::input::INPUT_MARKER;
         if !own_input && (down || up) {
             MODIFIERS.with_borrow_mut(|keys| keys.update(key.vkCode, down));
         }

@@ -3,11 +3,6 @@
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-#[cfg(target_os = "windows")]
-pub(crate) mod dxgi;
-#[cfg(target_os = "windows")]
-mod windows;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ScreenRect {
     pub x: i32,
@@ -48,26 +43,11 @@ pub trait DesktopCapture: Send + Sync {
 pub fn platform() -> Arc<dyn DesktopCapture> {
     #[cfg(target_os = "windows")]
     {
-        Arc::new(windows::WindowsDesktop::default())
+        Arc::new(super::windows::WindowsDesktop::default())
     }
     #[cfg(not(target_os = "windows"))]
     {
-        Arc::new(UnsupportedDesktop)
-    }
-}
-
-#[cfg(not(target_os = "windows"))]
-struct UnsupportedDesktop;
-#[cfg(not(target_os = "windows"))]
-impl DesktopCapture for UnsupportedDesktop {
-    fn bounds(&self) -> Result<ScreenRect, String> {
-        Err("当前平台尚未支持屏幕区域自动翻译。".into())
-    }
-    fn capture(&self, _: ScreenRect) -> Result<image::RgbaImage, String> {
-        self.bounds().map(|_| unreachable!())
-    }
-    fn exclude(&self, _: &tauri::WebviewWindow, _: bool) -> Result<(), String> {
-        self.bounds().map(|_| ())
+        Arc::new(super::unsupported::UnsupportedDesktop)
     }
 }
 

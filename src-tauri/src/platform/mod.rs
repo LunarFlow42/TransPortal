@@ -14,24 +14,22 @@ use tauri::AppHandle;
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
 pub mod desktop;
-pub mod integrity;
+pub mod imaging;
 pub mod key_sequence;
-pub mod memory;
 pub mod ocr;
+pub mod placement;
 pub mod selection;
-
-/// Mark only our synthesized input, leaving accessibility/remapped keys usable.
-pub(crate) const INPUT_MARKER: usize = 0x54524e53;
+pub mod system;
 
 #[cfg(not(target_os = "windows"))]
-mod fallback;
+mod unsupported;
 #[cfg(target_os = "windows")]
 mod windows;
 
 #[cfg(not(target_os = "windows"))]
-use fallback::FallbackSelectionReader;
+use unsupported::FallbackSelectionReader;
 #[cfg(not(target_os = "windows"))]
-pub use fallback::{
+pub use unsupported::{
     PointerProbe, configure_transparent_window, force_hide_window, get_global_cursor_pos,
     observe_size_move, place_window_smartly, resize_and_clamp_window, set_window_acrylic,
     set_window_theme,
@@ -246,4 +244,30 @@ pub fn capture_selected_text(app: &AppHandle) -> CaptureOutcome {
 /// Collapse surrounding whitespace without touching interior formatting.
 fn normalize(text: &str) -> String {
     text.trim().to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_selection_bounds_union() {
+        let b1 = SelectionBounds {
+            left: 100,
+            top: 200,
+            width: 50,
+            height: 20,
+        };
+        let b2 = SelectionBounds {
+            left: 120,
+            top: 220,
+            width: 80,
+            height: 30,
+        };
+        let union = b1.union(&b2);
+        assert_eq!(union.left, 100);
+        assert_eq!(union.top, 200);
+        assert_eq!(union.width, 100); // right = 200, left = 100 -> 100
+        assert_eq!(union.height, 50); // bottom = 250, top = 200 -> 50
+    }
 }

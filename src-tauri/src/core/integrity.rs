@@ -190,7 +190,7 @@ pub fn check_current_executable() -> IntegrityReport {
 pub fn startup_report() -> IntegrityReport {
     if cfg!(debug_assertions) {
         IntegrityReport::new(IntegrityStatus::Development)
-    } else if crate::platform::integrity::platform().enforce_release_hash() {
+    } else if crate::platform::system::platform().enforce_release_hash() {
         check_current_executable()
     } else {
         IntegrityReport::new(IntegrityStatus::Unsupported)

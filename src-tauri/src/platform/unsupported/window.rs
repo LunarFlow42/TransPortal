@@ -1,35 +1,4 @@
-//! Non-Windows fallback for [`SelectionReader`].
-//!
-//! The deep native selection API is only implemented for Windows. On every
-//! other platform this reader reports that UI Automation is unavailable so the
-//! caller degrades to the clipboard.
-
-use super::{CaptureMethod, SelectionReader};
-
-/// Placeholder reader used on non-Windows targets.
-pub struct FallbackSelectionReader;
-
-impl FallbackSelectionReader {
-    pub fn new() -> Self {
-        Self
-    }
-}
-
-impl Default for FallbackSelectionReader {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl SelectionReader for FallbackSelectionReader {
-    fn method(&self) -> CaptureMethod {
-        CaptureMethod::UiAutomation
-    }
-
-    fn read_selection(&self) -> Result<super::SelectionContent, String> {
-        Err("native selection capture is only implemented on Windows".to_string())
-    }
-}
+//! Window operations through tao/Tauri alone, without native window APIs.
 
 pub fn configure_transparent_window<R: tauri::Runtime>(_window: &tauri::WebviewWindow<R>) {}
 
@@ -92,14 +61,14 @@ impl PointerProbe {
 
 pub fn observe_size_move<R: tauri::Runtime>(
     _window: &tauri::WebviewWindow<R>,
-    _on_phase: impl Fn(super::SizeMove) + Send + 'static,
+    _on_phase: impl Fn(crate::platform::SizeMove) + Send + 'static,
 ) -> Result<(), String> {
     Err("move/resize observation is only implemented on Windows".to_string())
 }
 
 pub fn place_window_smartly<R: tauri::Runtime>(
     window: &tauri::WebviewWindow<R>,
-    _anchor_bounds: Option<&super::SelectionBounds>,
+    _anchor_bounds: Option<&crate::platform::SelectionBounds>,
     center: bool,
     _no_activate: bool,
 ) -> Result<(), String> {

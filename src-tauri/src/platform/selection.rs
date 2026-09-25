@@ -3,11 +3,6 @@
 use std::sync::Arc;
 use tauri::AppHandle;
 
-#[cfg(target_os = "windows")]
-mod clipboard;
-#[cfg(target_os = "windows")]
-mod windows;
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SelectionTarget {
     pub window: usize,
@@ -30,25 +25,10 @@ pub trait SelectionPlatform: Send + Sync {
 pub fn platform() -> Arc<dyn SelectionPlatform> {
     #[cfg(target_os = "windows")]
     {
-        Arc::new(windows::WindowsSelection)
+        Arc::new(super::windows::WindowsSelection)
     }
     #[cfg(not(target_os = "windows"))]
     {
-        Arc::new(UnsupportedSelection)
-    }
-}
-
-#[cfg(not(target_os = "windows"))]
-struct UnsupportedSelection;
-#[cfg(not(target_os = "windows"))]
-impl SelectionPlatform for UnsupportedSelection {
-    fn foreground(&self) -> Option<SelectionTarget> {
-        None
-    }
-    fn clipboard_revision(&self) -> u32 {
-        0
-    }
-    fn replace(&self, _: &AppHandle, _: &SelectionTarget, _: &str, _: &str) -> Result<(), String> {
-        Err("当前平台不支持选中文本替换。".into())
+        Arc::new(super::unsupported::UnsupportedSelection)
     }
 }

@@ -138,7 +138,7 @@ fn setup_dictionary(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> 
 pub fn run() {
     let report = integrity::startup_report();
     if report.blocks_startup() {
-        platform::integrity::platform()
+        platform::system::platform()
             .show_failure(report.error.as_deref().unwrap_or("程序完整性检查失败。"));
         std::process::exit(2);
     }
