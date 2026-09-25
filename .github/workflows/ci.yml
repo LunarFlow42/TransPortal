@@ -7,9 +7,90 @@ on:
 
 jobs:
   check:
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libssl-dev libdbus-1-dev libgtk-3-dev \
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev
+
+      - name: Setup pnpm
+        if: runner.os == 'Windows'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        if: runner.os == 'Windows'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install frontend deps
+        if: runner.os == 'Windows'
+        run: pnpm install --frozen-lockfile
+
+      - name: Build frontend
+        if: runner.os == 'Windows'
+        run: pnpm build
+
+      - name: Frontend tests
+        if: runner.os == 'Windows'
+        run: pnpm test
+
+      - name: Release integrity tooling tests
+        if: runner.os == 'Windows'
+        run: pnpm test:integrity
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Rust format
+        if: runner.os == 'Linux'
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+
+      - name: Architecture rules (core/ + platform/)
+        if: runner.os == 'Linux'
+        run: bash scripts/check-architecture.sh
+
+      - name: Clippy
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+
+      - name: Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: ONNX FP32 inference smoke test
+        if: runner.os == 'Windows'
+        run: ./scripts/ocr/smoke-onnx.ps1
+
+  bundle-linux:
+    needs: check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libssl-dev libdbus-1-dev libgtk-3-dev \
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev \
+            patchelf xdg-utils
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -25,15 +106,6 @@ jobs:
       - name: Install frontend deps
         run: pnpm install --frozen-lockfile
 
-      - name: Build frontend
-        run: pnpm build
-
-      - name: Frontend tests
-        run: pnpm test
-
-      - name: Release integrity tooling tests
-        run: pnpm test:integrity
-
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
@@ -42,8 +114,17 @@ jobs:
         with:
           workspaces: src-tauri
 
-      - name: Rust tests
-        run: cargo test --manifest-path src-tauri/Cargo.toml
+      # Stages the Linux ONNX runtime and models, builds the frontend, then
+      # bundles .deb, .rpm and .AppImage.
+      - name: Build Linux packages
+        run: pnpm tauri build
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: 1
 
-      - name: ONNX FP32 inference smoke test
-        run: ./scripts/ocr/smoke-onnx.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: transportal-linux-x86_64
+          path: |
+            src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/rpm/*.rpm
+            src-tauri/target/release/bundle/appimage/*.AppImage

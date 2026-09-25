@@ -43,17 +43,17 @@ Win+Shift+S（仅在用户显式绑定时） → ScreenCapture 观察系统截�
     → 像素变化检查 → 同一 OcrService 推理锁 → 文字块翻译缓存 → transportal://auto-ocr
 ```
 
-- `src-tauri/src/ocr/mod.rs`：与平台无关的 `OcrEngine`、`OcrImage`、`ScreenCapture` 接口和事件类型。
-- `src-tauri/src/ocr/registry.rs`：引擎注册、配置验证和加载。成功加载后才更新配置，切回 Windows OCR 会释放 ONNX 模型会话；进程级运行库保留到退出。
-- `src-tauri/src/ocr/onnx.rs`：CPU 推理、透明像素合成、深色背景预处理、方向识别，以及按行和横向位置排序文字块。
-- `src-tauri/src/ocr/picture.rs`：原图坐标、PNG 内存编码、可取消的逐块翻译与会话缓存；单轮最多 3 个 provider 请求，单请求最多等待 30 秒。
-- `src-tauri/src/ocr/monitor.rs`：持续区域监控；同一轮完成后才启动下一轮，相同像素跳过 OCR，已译文字块可复用，空白帧清除旧译文。停止或暂停会取消网络请求并丢弃迟到的识别结果。
-- `src-tauri/src/ocr/region.rs`：截图与自动翻译共用的原生框选器。冻结整个虚拟桌面为一张图片，`#/ocr-region` 窗口按整个预览的相对坐标换算物理像素，支持负坐标屏幕；确认后按用途分发：截图会话直接裁切冻结图像识别，自动翻译则启动持续监控。图片解码完成后才显示窗口，避免黑屏闪烁。
-- `src-tauri/src/native/desktop/`：Windows GDI 屏幕捕获与窗口排除。
+- `src-tauri/src/core/ocr/mod.rs`：与平台无关的 `OcrEngine`、`OcrImage` 接口和事件类型。系统 OCR 引擎由平台后端的 `Backend::native_ocr()` 提供，没有时只注册 ONNX。
+- `src-tauri/src/core/ocr/registry.rs`：引擎注册、配置验证和加载。成功加载后才更新配置，切回 Windows OCR 会释放 ONNX 模型会话；进程级运行库保留到退出。
+- `src-tauri/src/core/ocr/onnx.rs`：CPU 推理、透明像素合成、深色背景预处理、方向识别，以及按行和横向位置排序文字块。
+- `src-tauri/src/core/ocr/picture.rs`：原图坐标、PNG 内存编码、可取消的逐块翻译与会话缓存；单轮最多 3 个 provider 请求，单请求最多等待 30 秒。
+- `src-tauri/src/core/ocr/monitor.rs`：持续区域监控；同一轮完成后才启动下一轮，相同像素跳过 OCR，已译文字块可复用，空白帧清除旧译文。停止或暂停会取消网络请求并丢弃迟到的识别结果。
+- `src-tauri/src/core/ocr/region.rs`：截图与自动翻译共用的原生框选器。冻结整个虚拟桌面为一张图片，`#/ocr-region` 窗口按整个预览的相对坐标换算物理像素，支持负坐标屏幕；确认后按用途分发：截图会话直接裁切冻结图像识别，自动翻译则启动持续监控。图片解码完成后才显示窗口，避免黑屏闪烁。
+- `src-tauri/src/platform/desktop.rs`：屏幕捕获接口 `DesktopCapture`；Windows 实现在 `platform/windows/desktop.rs`（GDI）与 `dxgi.rs`（DXGI 回退），裁切与纯黑检测在可移植的 `platform/imaging.rs`。
 - `src/utils/picture.ts`：按文字块周围颜色覆盖原字、选择对比色、缩放换行，在原图大小的 Canvas 上绘制。复杂纹理或小字区域的效果受检测框与背景采样影响，不做纹理重建；完整译文仍可在文字列表中读取。
-- `src-tauri/src/ocr/assets.rs`：固定版本资源清单、SHA-256 校验、Rust 下载、白名单解压和安装进度。
-- `src-tauri/src/ocr/workflow.rs`：一次只接受一个显式截图请求，空闲时不轮询图片或保存剪贴板历史。默认经内置框选器取图；仅当用户把 `Win+Shift+S` 绑定给 OCR 时才检查截图前后的剪贴板版本，并仅接收 Windows 截图工具进程发布的图片。
-- `src-tauri/src/native/ocr/`：WinRT 初始化、OCR 语言、像素转换与系统截图键观察。平台条件只存在于原生工厂层。
+- `src-tauri/src/core/ocr/assets.rs`：固定版本资源清单、SHA-256 校验、Rust 下载、白名单解压和安装进度。
+- `src-tauri/src/core/ocr/workflow.rs`：一次只接受一个显式截图请求，空闲时不轮询图片或保存剪贴板历史。默认经内置框选器取图；仅当用户把 `Win+Shift+S` 绑定给 OCR 时才检查截图前后的剪贴板版本，并仅接收 Windows 截图工具进程发布的图片。
+- `src-tauri/src/platform/windows/ocr.rs`：WinRT 初始化、OCR 语言与像素转换；`platform/windows/keyboard_hook.rs` 通过 `GestureSource` 观察系统截图键、双按 C、划词键与 `Esc`；`platform/windows/clipboard.rs` 提供剪贴板版本与来源。平台条件只存在于 `platform/mod.rs` 与各平台后端，业务代码通过 `platform::CAPABILITIES` 判断功能是否可用。
 - 原生识别无法强制中断时，取消会立即使会话失效；下一次识别等待上一轮结束，避免积累并发引擎实例。前端也按会话 ID 与阶段过滤重复、乱序事件。
 - `SettingsView` 写入 `ocrEngine` 与 `ocrLanguage`，`ShellView` 只读取和接收设置同步。初始化完成前禁用 OCR 设置，避免启动恢复覆盖用户选择；选择失败保留原配置并显示错误。旧设置文件没有引擎字段时沿用本平台默认值。
 

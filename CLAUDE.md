@@ -12,17 +12,18 @@ The imported `AGENTS.md` is the source of truth for commands, conventions, and p
 - Release integrity tooling tests: `pnpm test:integrity` (Node `--test` over `scripts/integrity/*.node.mjs`)
 - ONNX OCR assets: `pnpm ocr:prepare` downloads, verifies, and stages the model and runtime into `src-tauri/resources/ocr`. Debug builds read that directory directly. Release builds read the bundled resource dir.
 - Release build: `pnpm build:release` (NSIS + `SHA256SUMS` + `integrity.json`)
-- CI (`.github/workflows/ci.yml`, windows-latest) runs `pnpm build`, `pnpm test`, `pnpm test:integrity`, `cargo test`, then `scripts/ocr/smoke-onnx.ps1`.
+- Linux packages: `APPIMAGE_EXTRACT_AND_RUN=1 pnpm tauri build` on Linux (`.deb`, `.rpm`, `.AppImage`; the Linux ONNX runtime is staged by `ocr:prepare`).
+- CI (`.github/workflows/ci.yml`) runs a `windows-latest` + `ubuntu-24.04` matrix: clippy `-D warnings` and `cargo test` on both; Linux adds `cargo fmt --check` and `scripts/check-architecture.sh`; Windows adds `pnpm build`, `pnpm test`, `pnpm test:integrity` and `scripts/ocr/smoke-onnx.ps1`. A `bundle-linux` job uploads the Linux packages.
 - `.cargo/config.toml` (and `src-tauri/.cargo/config.toml`) only sets the Windows linker to `rust-lld.exe`. Use sccache via the `RUSTC_WRAPPER` environment variable (or your user-level `~/.cargo/config.toml`), not the repo config.
 
 ## Architecture
 
-Tauri v2 app: Rust backend in `src-tauri/`, React 19 + Zustand frontend in `src/`. It is Windows-first. Most native features (UI Automation selection, desktop capture, Windows OCR, the region picker) have only non-Windows fallbacks that report the feature is unavailable.
+Tauri v2 app: Rust backend in `src-tauri/`, React 19 + Zustand frontend in `src/`. The backend is split into `core/` (cross-platform logic) and `platform/` (OS contracts + one backend per target); the layout and dependency rules are in AGENTS.md. Windows implements every native feature. Linux currently delegates to the `unsupported` backend: ONNX OCR on image files, translation, dictionaries, tray, regular global shortcuts and a polling clipboard monitor work; UI Automation selection, desktop capture, keyboard gestures, in-place replace and Windows OCR are reported unavailable through `platform::CAPABILITIES`. `platform/linux/mod.rs` lists the planned Linux implementations.
 
 ### Backend wiring (`src-tauri/src/lib.rs`)
 
-- `run()` first runs `integrity::startup_report()`. A release EXE whose SHA-256 is wrong exits before Tauri starts.
-- `setup` registers managed state: `OcrService`, `RegionService`, `MonitorService`, `ShortcutBindings`, `SelectionService`, and `LookupService` (a redb file at `app_data_dir/transportal.redb`). It also sets up the system tray, global shortcuts, and the clipboard monitor.
+- `run()` first runs `core::integrity::startup_report()`. A release EXE whose SHA-256 is wrong exits before Tauri starts (enforced only where `SystemOps::enforce_release_hash()` is true, i.e. Windows).
+- `setup` registers managed state: `OcrService` (given `platform::native_ocr()`), `RegionService`, `MonitorService`, `ShortcutBindings`, `SelectionService`, and `LookupService` (a redb file at `app_data_dir/transportal.redb`). It also sets up the system tray, global shortcuts, and the clipboard monitor.
 - Every `#[tauri::command]` lives in `commands.rs` and must be listed in `generate_handler!` in `lib.rs`.
 - Windows:
   - `shell` (overlay, declared in `tauri.conf.json`).
@@ -31,16 +32,18 @@ Tauri v2 app: Rust backend in `src-tauri/`, React 19 + Zustand frontend in `src/
 
 ### Pluggable subsystems (trait + registry)
 
-- **Translation**: the `provider::Translator` trait, with engines registered in `provider::registry()`. Current engines: google, openai (OpenAI-compatible SSE streaming), tencent, youdao. `provider/lang.rs` handles language codes.
-- **Dictionary**: the `dict::DictSource` trait. `dictionary::LookupService` orders sources, enables them, caches results in an LRU, and reports status. `dict/mod.rs` holds `DictStore` (redb storage plus ECCEDICT CSV import).
+All paths below are under `src-tauri/src/`.
+
+- **Translation**: the `core::translation::Translator` trait, with engines registered in `core::translation::registry()`. Current engines: google, openai (OpenAI-compatible SSE streaming), tencent, youdao. `core/translation/lang.rs` handles language codes. `core/intent.rs` classifies text as word or sentence.
+- **Dictionary**: the `core::dictionary::DictSource` trait. `core/dictionary/lookup.rs` (`LookupService`) orders sources, enables them, caches results in an LRU, and reports status. `core/dictionary/mod.rs` holds `DictStore` (redb storage plus ECCEDICT CSV import); `eccedict.rs` downloads/imports the full CSV and `examples.rs` generates LLM example sentences.
 - **OCR**:
-  - The `ocr::OcrEngine` trait with `ocr/registry.rs`. Engines are Windows `Media.Ocr` (in `native/ocr/`) and ONNX PP-OCRv4 (`ocr/onnx.rs`, using `ort` with `load-dynamic`, so the runtime DLL is loaded at runtime from staged assets managed by `ocr/assets.rs`).
-  - `ocr/workflow.rs` drives capture → recognize → optional translate sessions.
-  - `ocr/picture.rs` keeps the image plus text boxes for in-place translation.
-  - `ocr/region.rs` implements the frozen-desktop region picker.
-  - `ocr/monitor.rs` implements auto region translation (polling a fixed screen region for changes).
-- **Native**: `native/mod.rs` exposes traits (for example `SelectionReader`) and selects `windows.rs` or `fallback.rs` via `#[cfg]`. Subfolders cover `selection` (UIA + clipboard fallback, in-place replace), `desktop` (DXGI capture), `ocr`, `integrity`, and `memory`.
-- **Shortcuts**: `shortcut.rs` handles global hotkey registration, conflict reporting, window positioning near the caret or selection, and the clipboard monitor. `shortcut_sequence.rs` parses multi-key sequences such as `Ctrl+C+C`.
+  - The `core::ocr::OcrEngine` trait with `core/ocr/registry.rs`. Engines are Windows `Media.Ocr` (`platform/windows/ocr.rs`, injected via `Backend::native_ocr()`) and ONNX PP-OCRv4 (`core/ocr/onnx.rs`, using `ort` with `load-dynamic`, so the runtime library is loaded at runtime from staged assets managed by `core/ocr/assets.rs`).
+  - `core/ocr/workflow.rs` drives capture → recognize → optional translate sessions.
+  - `core/ocr/picture.rs` keeps the image plus text boxes for in-place translation.
+  - `core/ocr/region.rs` implements the frozen-desktop region picker.
+  - `core/ocr/monitor.rs` implements auto region translation (polling a fixed screen region for changes).
+- **Platform**: `platform/mod.rs` defines `Backend` and `Capabilities` and picks `ActiveBackend` with the only `#[cfg]` switch. Contracts: `WindowOps` (DWM, placement, native hide, outside-click probe, move/resize), `SelectionOps` (UIA read, synthesized copy, foreground target, in-place replace), `ClipboardOps` (sequence number, origin, change listener), `GestureSource` (low-level keyboard hook: Ctrl+C+C, ink key, Win+Shift+S, Esc), `DesktopCapture` (GDI/DXGI, capture exclusion), `SystemOps` (memory, integrity policy, fatal error dialog). Call them through the `Platform*` aliases (`PlatformWindow::place_window_smartly(...)`) with the contract trait in scope.
+- **Shortcuts**: `core/shortcut.rs` handles global hotkey registration, conflict reporting, capability-based availability and window positioning near the caret or selection. `platform/key_sequence.rs` detects double Ctrl+C from raw key events. `core/clipboard_monitor.rs` forwards copied text when clipboard translation is on.
 
 ### Rust → frontend events
 

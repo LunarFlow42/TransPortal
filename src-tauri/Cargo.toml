@@ -77,6 +77,16 @@ windows = { version = "0.58", features = [
     "Win32_Graphics_Dwm",
 ] }
 
+# Linux backend (src/platform/linux). Phase 1 delegates to the unsupported
+# backend and needs no extra crates. Phase 2 adds them here, one capability at
+# a time, so they never reach Windows builds:
+#   ashpd              XDG portals: Screenshot, ScreenCast, GlobalShortcuts, RemoteDesktop
+#   pipewire           frames from the ScreenCast portal (auto region translation)
+#   atspi              AT-SPI accessibility bus: reading the selection
+#   reis               libei: synthesized copy/paste and key observation
+#   wayland-client / wayland-protocols(-wlr)   data-control clipboard events
+[target.'cfg(target_os = "linux")'.dependencies]
+
 [profile.dev]
 incremental = true
 debug = 1
