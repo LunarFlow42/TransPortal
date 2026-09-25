@@ -1,24 +1,20 @@
 //! Observe the OS screenshot shortcut; never register or swallow Win+Shift+S.
 
-use crate::core::ocr::{ClipboardOrigin, ScreenCapture, ScreenEvent, ScreenObserver};
+use crate::core::ocr::{ScreenCapture, ScreenEvent, ScreenObserver};
 use std::cell::{Cell, RefCell};
 use std::sync::mpsc::{self, SyncSender};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
-use windows::Win32::Foundation::{CloseHandle, LPARAM, LRESULT, WPARAM};
-use windows::Win32::System::DataExchange::{GetClipboardOwner, GetClipboardSequenceNumber};
+use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
+use windows::Win32::System::DataExchange::GetClipboardSequenceNumber;
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-use windows::Win32::System::Threading::{
-    GetCurrentThreadId, OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
-    QueryFullProcessImageNameW,
-};
+use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VIRTUAL_KEY, VK_ESCAPE, VK_S};
 use windows::Win32::UI::WindowsAndMessaging::{
-    CallNextHookEx, DispatchMessageW, GetForegroundWindow, GetMessageW, GetWindowThreadProcessId,
-    KBDLLHOOKSTRUCT, MSG, PostThreadMessageW, SetWindowsHookExW, TranslateMessage,
-    UnhookWindowsHookEx, WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP, WM_QUIT, WM_SYSKEYDOWN, WM_SYSKEYUP,
+    CallNextHookEx, DispatchMessageW, GetForegroundWindow, GetMessageW, KBDLLHOOKSTRUCT, MSG,
+    PostThreadMessageW, SetWindowsHookExW, TranslateMessage, UnhookWindowsHookEx, WH_KEYBOARD_LL,
+    WM_KEYDOWN, WM_KEYUP, WM_QUIT, WM_SYSKEYDOWN, WM_SYSKEYUP,
 };
-use windows::core::PWSTR;
 
 pub struct WindowsScreenCapture;
 
@@ -130,52 +126,6 @@ impl Drop for Observer {
 impl ScreenCapture for WindowsScreenCapture {
     fn supported(&self) -> bool {
         true
-    }
-
-    fn clipboard_revision(&self) -> u32 {
-        // SAFETY: a read-only, argument-free sequence query.
-        unsafe { GetClipboardSequenceNumber() }
-    }
-
-    fn clipboard_origin(&self) -> ClipboardOrigin {
-        // Only accept images published by Windows' snipping processes. Closing
-        // the snip with its X button must not OCR a later, unrelated image copy.
-        let owner_name = unsafe {
-            let Ok(owner) = GetClipboardOwner() else {
-                return ClipboardOrigin::Unavailable;
-            };
-            let mut pid = 0;
-            GetWindowThreadProcessId(owner, Some(&mut pid));
-            let Ok(process) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) else {
-                return ClipboardOrigin::Unavailable;
-            };
-            let mut path = [0u16; 32768];
-            let mut len = path.len() as u32;
-            let result = QueryFullProcessImageNameW(
-                process,
-                PROCESS_NAME_WIN32,
-                PWSTR(path.as_mut_ptr()),
-                &mut len,
-            );
-            let _ = CloseHandle(process);
-            if result.is_err() {
-                return ClipboardOrigin::Unavailable;
-            }
-            String::from_utf16_lossy(&path[..len as usize])
-        };
-        let filename = owner_name.rsplit(['\\', '/']).next().unwrap_or("");
-        if [
-            "SnippingTool.exe",
-            "ScreenClippingHost.exe",
-            "ScreenSketch.exe",
-        ]
-        .iter()
-        .any(|name| filename.eq_ignore_ascii_case(name))
-        {
-            ClipboardOrigin::SnippingTool
-        } else {
-            ClipboardOrigin::Other
-        }
     }
 
     fn observe(&self, events: SyncSender<ScreenEvent>) -> Result<Box<dyn ScreenObserver>, String> {

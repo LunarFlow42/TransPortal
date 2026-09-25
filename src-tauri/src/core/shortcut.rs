@@ -718,9 +718,9 @@ pub async fn on_replace_selection(app: &AppHandle) {
             .capture(&app_clone)
     })
     .await
-    .unwrap_or_else(|_| crate::platform::CaptureOutcome {
+    .unwrap_or_else(|_| crate::core::selection::CaptureOutcome {
         text: String::new(),
-        method: crate::platform::CaptureMethod::Clipboard,
+        method: crate::platform::selection::CaptureMethod::Clipboard,
         error: Some("捕获失败".into()),
         replace_token: None,
         bounds: None,
@@ -839,7 +839,7 @@ pub fn show_shell(app: &AppHandle) {
 
 pub fn show_shell_with_anchor(
     app: &AppHandle,
-    anchor_bounds: Option<&crate::platform::SelectionBounds>,
+    anchor_bounds: Option<&crate::platform::selection::SelectionBounds>,
     no_activate: bool,
 ) {
     if let Some(settings) = app.get_webview_window("settings") {

@@ -126,20 +126,11 @@ pub enum ScreenEvent {
     Cancel,
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub enum ClipboardOrigin {
-    SnippingTool,
-    Other,
-    Unavailable,
-}
-
 /// Owns the observer's lifetime. Dropping it unhooks the keyboard observer.
 pub trait ScreenObserver: Send + Sync {}
 
 pub trait ScreenCapture: Send + Sync {
     fn supported(&self) -> bool;
-    fn clipboard_revision(&self) -> u32;
-    fn clipboard_origin(&self) -> ClipboardOrigin;
     fn observe(&self, events: SyncSender<ScreenEvent>) -> Result<Box<dyn ScreenObserver>, String>;
 }
 

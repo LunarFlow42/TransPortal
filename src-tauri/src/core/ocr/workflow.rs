@@ -4,9 +4,11 @@ use super::picture::{Cancellation, OcrPicture};
 use super::region::{ConfirmedRegion, RegionService};
 use super::registry::{OcrConfig, OcrRegistry};
 use super::{
-    ClipboardOrigin, OCR_EVENT, OcrEngine, OcrEngineInfo, OcrEvent, OcrImage, OcrMode, OcrStage,
-    ScreenCapture, ScreenEvent, ScreenObserver,
+    OCR_EVENT, OcrEngine, OcrEngineInfo, OcrEvent, OcrImage, OcrMode, OcrStage, ScreenCapture,
+    ScreenEvent, ScreenObserver,
 };
+use crate::platform::PlatformClipboard;
+use crate::platform::clipboard::{ClipboardOps, ClipboardOrigin};
 use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, mpsc};
@@ -83,6 +85,7 @@ pub struct OcrService {
     registry: OcrRegistry,
     pub assets: Arc<OnnxAssets>,
     capture: Arc<dyn ScreenCapture>,
+    clipboard: PlatformClipboard,
     sessions: Mutex<SessionState>,
     /// Cancelled native inference cannot be forcibly interrupted; serialize it
     /// with the next request so rapid retries cannot accumulate model instances.
@@ -113,6 +116,7 @@ impl OcrService {
             registry: OcrRegistry::new(engines, default_engine),
             assets,
             capture: crate::platform::ocr::screen_capture(),
+            clipboard: PlatformClipboard::default(),
             sessions: Mutex::new(SessionState::default()),
             inference: Mutex::new(()),
             observer: Mutex::new(None),
@@ -435,7 +439,7 @@ impl OcrService {
                 let image = confirmed.crop()?;
                 // Sampled after the selection so a copy made while selecting
                 // still counts as newer than the screenshot.
-                let revision = service.capture.clipboard_revision();
+                let revision = service.clipboard.revision();
                 service.recognize_image(
                     &app,
                     event.clone(),
@@ -474,7 +478,7 @@ impl OcrService {
         event.image_path = Some(path.to_string_lossy().into_owned());
         self.sessions.lock().unwrap().update(event.clone());
         let id = event.id;
-        let revision = self.capture.clipboard_revision();
+        let revision = self.clipboard.revision();
         let _ = app.emit_to("shell", OCR_EVENT, &event);
         let app = app.clone();
         tauri::async_runtime::spawn_blocking(move || {
@@ -623,9 +627,9 @@ impl OcrService {
                         .into(),
                 );
             }
-            let revision = self.capture.clipboard_revision();
+            let revision = self.clipboard.revision();
             if revision != 0 && revision != baseline {
-                match self.capture.clipboard_origin() {
+                match self.clipboard.origin() {
                     ClipboardOrigin::Other => {
                         // A later unrelated copy ends this request instead of
                         // silently feeding its contents into OCR/translation.
@@ -638,7 +642,7 @@ impl OcrService {
                     }
                     ClipboardOrigin::SnippingTool => {
                         if let Ok(image) = app.clipboard().read_image()
-                            && self.capture.clipboard_revision() == revision
+                            && self.clipboard.revision() == revision
                         {
                             break (image, revision);
                         }
@@ -743,8 +747,7 @@ impl OcrService {
                 if event.mode == OcrMode::Silent {
                     let _ = app.clipboard().write_text(event.text.clone());
                     event.copied = true;
-                } else if image_revision != 0 && self.capture.clipboard_revision() == image_revision
-                {
+                } else if image_revision != 0 && self.clipboard.revision() == image_revision {
                     match app.clipboard().write_text(event.text.clone()) {
                         Ok(()) => event.copied = true,
                         Err(error) => {

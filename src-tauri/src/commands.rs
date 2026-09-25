@@ -2,10 +2,10 @@ use crate::core::dictionary::eccedict::{self, DictProgress};
 use crate::core::dictionary::{DictEntry, ExampleSentence};
 use crate::core::dictionary::{DictStatus, LookupService, SourceInfo};
 use crate::core::intent::{IntentResult, classify_intent};
+use crate::core::selection::CaptureOutcome;
 use crate::core::translation::{
     StreamChunk, TranslateQuery, TranslateResult, Translator, openai::OpenAiConfig,
 };
-use crate::platform::CaptureOutcome;
 use crate::platform::system::SystemOps;
 use crate::platform::window::WindowOps;
 use crate::platform::{PlatformSystem, PlatformWindow};

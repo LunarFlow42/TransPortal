@@ -3,19 +3,19 @@
 
 mod window;
 
+use super::clipboard::{ClipboardOps, ClipboardOrigin};
 use super::desktop::{DesktopCapture, ScreenRect};
-use super::selection::{SelectionPlatform, SelectionTarget};
+use super::selection::{
+    CaptureMethod, SelectionBounds, SelectionContent, SelectionOps, SelectionTarget,
+};
 use super::system::{MemoryReport, SystemOps, TrimResult};
 use super::window::{SizeMove, WindowOps};
-use super::{Backend, Capabilities, SelectionBounds};
-use super::{CaptureMethod, SelectionContent, SelectionReader};
+use super::{Backend, Capabilities};
 use crate::core::ocr::{
-    ClipboardOrigin, OcrEngine, OcrEngineInfo, OcrImage, RecognizedText, ScreenCapture,
-    ScreenEvent, ScreenObserver,
+    OcrEngine, OcrEngineInfo, OcrImage, RecognizedText, ScreenCapture, ScreenEvent, ScreenObserver,
 };
 use std::sync::mpsc::SyncSender;
-use tauri::AppHandle;
-use tauri::{Runtime, WebviewWindow};
+use tauri::{AppHandle, Runtime, WebviewWindow};
 
 /// Backend for targets without native integration; also the base that
 /// partially implemented backends delegate to.
@@ -24,6 +24,8 @@ pub struct UnsupportedBackend;
 impl Backend for UnsupportedBackend {
     type Window = UnsupportedWindow;
     type System = UnsupportedSystem;
+    type Selection = UnsupportedSelection;
+    type Clipboard = UnsupportedClipboard;
     type Desktop = UnsupportedDesktop;
     const CAPABILITIES: Capabilities = Capabilities::NONE;
 }
@@ -116,52 +118,50 @@ impl ScreenCapture for UnavailableOcr {
     fn supported(&self) -> bool {
         false
     }
-    fn clipboard_revision(&self) -> u32 {
-        0
-    }
-    fn clipboard_origin(&self) -> ClipboardOrigin {
-        ClipboardOrigin::Unavailable
-    }
     fn observe(&self, _: SyncSender<ScreenEvent>) -> Result<Box<dyn ScreenObserver>, String> {
         Err(UNAVAILABLE.into())
     }
 }
 
-/// Placeholder reader used on non-Windows targets.
-pub struct FallbackSelectionReader;
+/// No native selection: capture degrades to whatever the clipboard holds.
+#[derive(Default)]
+pub struct UnsupportedSelection;
 
-impl FallbackSelectionReader {
-    pub fn new() -> Self {
-        Self
-    }
-}
-
-impl Default for FallbackSelectionReader {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl SelectionReader for FallbackSelectionReader {
+impl SelectionOps for UnsupportedSelection {
     fn method(&self) -> CaptureMethod {
         CaptureMethod::UiAutomation
     }
-
     fn read_selection(&self) -> Result<SelectionContent, String> {
         Err("native selection capture is only implemented on Windows".to_string())
     }
-}
-
-pub struct UnsupportedSelection;
-impl SelectionPlatform for UnsupportedSelection {
+    fn copy_to_clipboard(&self) -> Result<(), String> {
+        Ok(())
+    }
     fn foreground(&self) -> Option<SelectionTarget> {
         None
     }
-    fn clipboard_revision(&self) -> u32 {
+    fn replace(
+        &self,
+        _: &AppHandle,
+        _: &WebviewWindow,
+        _: &SelectionTarget,
+        _: &str,
+        _: &str,
+    ) -> Result<(), String> {
+        Err("当前平台不支持选中文本替换。".into())
+    }
+}
+
+/// No change counter or owner information.
+#[derive(Default)]
+pub struct UnsupportedClipboard;
+
+impl ClipboardOps for UnsupportedClipboard {
+    fn revision(&self) -> u32 {
         0
     }
-    fn replace(&self, _: &AppHandle, _: &SelectionTarget, _: &str, _: &str) -> Result<(), String> {
-        Err("当前平台不支持选中文本替换。".into())
+    fn origin(&self) -> ClipboardOrigin {
+        ClipboardOrigin::Unavailable
     }
 }
 

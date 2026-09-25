@@ -1,13 +1,15 @@
+use super::clipboard::WindowsClipboard;
 use super::clipboard_restore::ClipboardRestore;
 use super::input::{copy_selection_to_clipboard, key_input};
 use super::uia::WindowsSelectionReader;
-use crate::platform::SelectionReader;
-use crate::platform::selection::{SelectionPlatform, SelectionTarget};
+use crate::platform::clipboard::ClipboardOps;
+use crate::platform::selection::{
+    CaptureMethod, SelectionContent, SelectionOps, SelectionTarget, normalize_selection,
+};
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, WebviewWindow};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use windows::Win32::Foundation::HWND;
-use windows::Win32::System::DataExchange::GetClipboardSequenceNumber;
 use windows::Win32::System::Threading::GetCurrentProcessId;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetAsyncKeyState, INPUT, SendInput, VK_CONTROL, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT, VK_V,
@@ -17,6 +19,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     SetForegroundWindow,
 };
 
+#[derive(Default)]
 pub struct WindowsSelection;
 
 fn target() -> Option<SelectionTarget> {
@@ -58,29 +61,32 @@ fn wait_for_modifiers() -> Result<(), String> {
     Ok(())
 }
 
-impl SelectionPlatform for WindowsSelection {
+impl SelectionOps for WindowsSelection {
+    fn method(&self) -> CaptureMethod {
+        CaptureMethod::UiAutomation
+    }
+
+    fn read_selection(&self) -> Result<SelectionContent, String> {
+        WindowsSelectionReader::new().read_via_uia()
+    }
+
+    fn copy_to_clipboard(&self) -> Result<(), String> {
+        copy_selection_to_clipboard()
+    }
+
     fn foreground(&self) -> Option<SelectionTarget> {
         target().filter(|target| target.process != unsafe { GetCurrentProcessId() })
-    }
-    fn clipboard_revision(&self) -> u32 {
-        unsafe { GetClipboardSequenceNumber() }
     }
 
     fn replace(
         &self,
         app: &AppHandle,
+        owner: &WebviewWindow,
         source: &SelectionTarget,
         expected: &str,
         replacement: &str,
     ) -> Result<(), String> {
-        if replacement.trim().is_empty() || replacement.chars().count() > 100_000 {
-            return Err("译文为空或过长，无法替换。".into());
-        }
-        let owner = app
-            .get_webview_window("shell")
-            .ok_or("译文窗口不可用。")?
-            .hwnd()
-            .map_err(|e| e.to_string())?;
+        let owner = owner.hwnd().map_err(|e| e.to_string())?;
         let mut restore = ClipboardRestore::snapshot(HWND(owner.0))?;
         let window = HWND(source.window as *mut _);
         unsafe {
@@ -108,19 +114,17 @@ impl SelectionPlatform for WindowsSelection {
             return Err("无法恢复原输入框焦点，请重新选中文字。".into());
         }
         // Read the actual selection again; never blindly paste at a stale caret.
-        let selected = match WindowsSelectionReader::new().read_selection() {
+        let selected = match WindowsSelectionReader::new().read_via_uia() {
             Ok(content) if !content.text.trim().is_empty() => content.text,
             _ => {
                 copy_selection_to_clipboard()?;
-                restore.owned_revision = Some(self.clipboard_revision());
+                restore.owned_revision = Some(WindowsClipboard.revision());
                 app.clipboard()
                     .read_text()
                     .map_err(|error| format!("无法核对选中文字：{error}"))?
             }
         };
-        if crate::core::selection::normalize_selection(&selected)
-            != crate::core::selection::normalize_selection(expected)
-        {
+        if normalize_selection(&selected) != normalize_selection(expected) {
             return Err("选中的文字已变化，已取消替换。请重新取词。".into());
         }
         wait_for_modifiers()?;
@@ -130,7 +134,7 @@ impl SelectionPlatform for WindowsSelection {
         app.clipboard()
             .write_text(replacement.to_string())
             .map_err(|error| format!("无法准备译文：{error}"))?;
-        restore.owned_revision = Some(self.clipboard_revision());
+        restore.owned_revision = Some(WindowsClipboard.revision());
         // Recheck after clipboard access, which can briefly yield to another app.
         if target().as_ref() != Some(source) {
             return Err("输入焦点已变化，已取消替换。".into());

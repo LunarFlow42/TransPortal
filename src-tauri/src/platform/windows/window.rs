@@ -1,7 +1,7 @@
 //! Overlay window plumbing: DWM attributes, sizing, placement and native hide.
 
-use crate::platform::SelectionBounds;
 use crate::platform::placement::compute_smart_placement;
+use crate::platform::selection::SelectionBounds;
 
 /// Configure a transparent borderless window on Windows:
 /// - Disables DWM border drawing (`DWMWA_BORDER_COLOR` = `DWMWA_COLOR_NONE`)

@@ -64,7 +64,7 @@ pub fn observe_size_move<R: tauri::Runtime>(
 
 pub fn place_window_smartly<R: tauri::Runtime>(
     window: &tauri::WebviewWindow<R>,
-    _anchor_bounds: Option<&crate::platform::SelectionBounds>,
+    _anchor_bounds: Option<&crate::platform::selection::SelectionBounds>,
     center: bool,
     _no_activate: bool,
 ) -> Result<(), String> {

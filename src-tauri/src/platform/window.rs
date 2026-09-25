@@ -4,7 +4,7 @@
 //! Methods are associated functions generic over the Tauri runtime, so the
 //! backend is dispatched statically through [`super::PlatformWindow`].
 
-use super::SelectionBounds;
+use super::selection::SelectionBounds;
 use tauri::{Runtime, WebviewWindow};
 
 /// Phases of an interactive (modal) move or resize of a window.

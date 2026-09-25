@@ -1,11 +1,11 @@
-//! Windows implementation of [`SelectionReader`](crate::platform::SelectionReader) backed by UI Automation.
+//! Windows implementation of [`SelectionOps::read_selection`](crate::platform::selection::SelectionOps::read_selection) backed by UI Automation.
 //!
 //! Uses the `CUIAutomation` client to query the focused element for its
 //! `TextPattern`, then extracts every selection range. This is the
 //! "deep integration" path; if the focused control does not expose a
 //! `TextPattern`, the caller falls back to the clipboard.
 
-use crate::platform::{CaptureMethod, SelectionBounds, SelectionContent, SelectionReader};
+use crate::platform::selection::{SelectionBounds, SelectionContent};
 use windows::Win32::System::Com::{
     CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED, CoCreateInstance, CoInitializeEx,
     CoUninitialize,
@@ -36,7 +36,7 @@ impl WindowsSelectionReader {
 
     /// Query the focused element's `TextPattern` and concatenate its selection
     /// ranges along with physical bounding rectangles.
-    fn read_via_uia(&self) -> Result<SelectionContent, String> {
+    pub fn read_via_uia(&self) -> Result<SelectionContent, String> {
         // SAFETY: every call below is a documented Win32/UIA operation. COM is
         // initialized (or already initialized) on the calling thread before any
         // interface is created.
@@ -166,15 +166,5 @@ fn extract_bounds_from_safearray(
 impl Default for WindowsSelectionReader {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-impl SelectionReader for WindowsSelectionReader {
-    fn method(&self) -> CaptureMethod {
-        CaptureMethod::UiAutomation
-    }
-
-    fn read_selection(&self) -> Result<SelectionContent, String> {
-        self.read_via_uia()
     }
 }

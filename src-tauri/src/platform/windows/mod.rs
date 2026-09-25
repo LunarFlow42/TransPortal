@@ -1,5 +1,6 @@
 //! Windows backend: Win32, UI Automation, DWM, DXGI and Windows.Media.Ocr.
 
+mod clipboard;
 mod clipboard_restore;
 mod desktop;
 mod dxgi;
@@ -14,23 +15,25 @@ mod system;
 mod uia;
 mod window;
 
+use super::selection::SelectionBounds;
 use super::window::{SizeMove, WindowOps};
-use super::{Backend, Capabilities, SelectionBounds};
+use super::{Backend, Capabilities};
 use tauri::{Runtime, WebviewWindow};
 
+pub use clipboard::WindowsClipboard;
 pub use desktop::WindowsDesktop;
-pub use input::copy_selection_to_clipboard;
 pub use keyboard_hook::WindowsScreenCapture;
 pub use ocr::WindowsOcrEngine;
 pub use selection::WindowsSelection;
 pub use system::WindowsSystem;
-pub use uia::WindowsSelectionReader;
 
 pub struct WindowsBackend;
 
 impl Backend for WindowsBackend {
     type Window = WindowsWindow;
     type System = WindowsSystem;
+    type Selection = WindowsSelection;
+    type Clipboard = WindowsClipboard;
     type Desktop = WindowsDesktop;
     const CAPABILITIES: Capabilities = Capabilities::ALL;
 }

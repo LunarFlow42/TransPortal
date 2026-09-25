@@ -1,7 +1,7 @@
 //! Portable overlay placement: pick a position next to the selection or the
 //! cursor inside a monitor work area.
 
-use super::SelectionBounds;
+use super::selection::SelectionBounds;
 
 /// Pure calculation of target position given monitor work area, window size, scale factor, anchor bounds or cursor, and center flag.
 pub fn compute_smart_placement(
@@ -81,7 +81,6 @@ pub fn compute_smart_placement(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::platform::SelectionBounds;
 
     #[test]
     fn test_compute_smart_placement_center() {
