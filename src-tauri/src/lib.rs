@@ -1,7 +1,6 @@
 pub mod commands;
 pub mod core;
-pub mod native;
-mod shortcut_sequence;
+pub mod platform;
 
 use crate::core::{dictionary, integrity, ocr, selection, shell, shortcut};
 
@@ -14,7 +13,7 @@ use tauri::{
 /// Bring the shell bubble to the foreground.
 fn focus_shell<R: tauri::Runtime>(app: &AppHandle<R>) {
     shell::present(app, false, |window| {
-        native::configure_transparent_window(window);
+        platform::configure_transparent_window(window);
         let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();
@@ -50,7 +49,7 @@ pub fn open_or_focus_settings<R: tauri::Runtime>(
         .build()
         .map_err(|e| e.to_string())?;
 
-        native::configure_transparent_window(&window);
+        platform::configure_transparent_window(&window);
         let win_clone = window.clone();
         window.on_window_event(move |event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
@@ -139,7 +138,7 @@ fn setup_dictionary(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> 
 pub fn run() {
     let report = integrity::startup_report();
     if report.blocks_startup() {
-        native::integrity::platform()
+        platform::integrity::platform()
             .show_failure(report.error.as_deref().unwrap_or("程序完整性检查失败。"));
         std::process::exit(2);
     }
@@ -185,7 +184,7 @@ pub fn run() {
             app.state::<ocr::OcrService>()
                 .install_observer(app.handle());
             if let Some(window) = app.get_webview_window("shell") {
-                native::configure_transparent_window(&window);
+                platform::configure_transparent_window(&window);
             }
             shortcut::register(app.handle());
             shortcut::start_clipboard_monitor(app.handle());

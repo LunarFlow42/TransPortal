@@ -1,6 +1,6 @@
 use super::clipboard::ClipboardRestore;
 use super::{SelectionPlatform, SelectionTarget};
-use crate::native::{
+use crate::platform::{
     SelectionReader,
     windows::{WindowsSelectionReader, copy_selection_to_clipboard, key_input},
 };

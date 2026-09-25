@@ -6,7 +6,7 @@
 
 use super::OcrMode;
 use super::picture::Cancellation;
-use crate::native::desktop::{DesktopCapture, ScreenRect};
+use crate::platform::desktop::{DesktopCapture, ScreenRect};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use image::ImageEncoder;
 use image::codecs::jpeg::JpegEncoder;
@@ -133,7 +133,7 @@ pub struct RegionService {
 impl Default for RegionService {
     fn default() -> Self {
         Self {
-            desktop: crate::native::desktop::platform(),
+            desktop: crate::platform::desktop::platform(),
             state: Mutex::new(State::default()),
         }
     }
@@ -234,7 +234,7 @@ impl RegionService {
             .transparent(true)
             .build()
             .map_err(|e| e.to_string())?;
-            crate::native::configure_transparent_window(&window);
+            crate::platform::configure_transparent_window(&window);
             Ok(window)
         }
     }

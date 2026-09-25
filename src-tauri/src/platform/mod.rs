@@ -15,6 +15,7 @@ use tauri_plugin_clipboard_manager::ClipboardExt;
 
 pub mod desktop;
 pub mod integrity;
+pub mod key_sequence;
 pub mod memory;
 pub mod ocr;
 pub mod selection;

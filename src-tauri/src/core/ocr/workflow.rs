@@ -97,7 +97,7 @@ pub struct OcrService {
 
 impl OcrService {
     pub fn new(assets: Arc<OnnxAssets>) -> Self {
-        let native = crate::native::ocr::engine();
+        let native = crate::platform::ocr::engine();
         let native_available = native.id() != "unavailable";
         let default_engine = if native_available {
             native.id()
@@ -112,7 +112,7 @@ impl OcrService {
         Self {
             registry: OcrRegistry::new(engines, default_engine),
             assets,
-            capture: crate::native::ocr::screen_capture(),
+            capture: crate::platform::ocr::screen_capture(),
             sessions: Mutex::new(SessionState::default()),
             inference: Mutex::new(()),
             observer: Mutex::new(None),

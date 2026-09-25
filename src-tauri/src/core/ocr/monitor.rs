@@ -6,7 +6,7 @@ use super::picture::{
 use super::region::{RegionPurpose, RegionService};
 use super::{OcrImage, OcrService};
 use crate::core::translation::OpenAiConfig;
-use crate::native::desktop::{DesktopCapture, ScreenRect};
+use crate::platform::desktop::{DesktopCapture, ScreenRect};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::sync::{Arc, Mutex};
@@ -63,7 +63,7 @@ pub struct MonitorService {
 impl Default for MonitorService {
     fn default() -> Self {
         Self {
-            desktop: crate::native::desktop::platform(),
+            desktop: crate::platform::desktop::platform(),
             state: Mutex::new(MonitorState::default()),
         }
     }

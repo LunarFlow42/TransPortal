@@ -1,6 +1,6 @@
 //! One-use replacement tokens bind an explicit action to the original selection.
 
-use crate::native::{
+use crate::platform::{
     self, CaptureMethod, CaptureOutcome,
     selection::{SelectionPlatform, SelectionTarget},
 };
@@ -28,7 +28,7 @@ pub struct SelectionService {
 impl Default for SelectionService {
     fn default() -> Self {
         Self {
-            platform: native::selection::platform(),
+            platform: platform::selection::platform(),
             state: Mutex::new(SelectionState::default()),
             operation: Mutex::new(()),
             double_copy: AtomicBool::new(true),
@@ -84,7 +84,7 @@ impl SelectionService {
             return failure("正在处理上一次取词或替换，请稍后重试。");
         };
         let target = self.platform.foreground();
-        let outcome = native::capture_selected_text(app);
+        let outcome = platform::capture_selected_text(app);
         self.record(outcome, target)
     }
 

@@ -794,7 +794,7 @@ pub fn compute_smart_placement(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::native::SelectionBounds;
+    use crate::platform::SelectionBounds;
 
     #[test]
     fn test_selection_bounds_union() {

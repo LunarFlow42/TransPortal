@@ -5,7 +5,7 @@ use crate::core::intent::{IntentResult, classify_intent};
 use crate::core::translation::{
     StreamChunk, TranslateQuery, TranslateResult, Translator, openai::OpenAiConfig,
 };
-use crate::native::CaptureOutcome;
+use crate::platform::CaptureOutcome;
 use serde::Serialize;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -148,7 +148,7 @@ pub async fn verify_integrity(
             .lock()
             .unwrap() = report.clone();
         if report.blocks_startup() {
-            crate::native::integrity::platform()
+            crate::platform::integrity::platform()
                 .show_failure(report.error.as_deref().unwrap_or("程序完整性检查失败。"));
             app.exit(2);
         }
@@ -329,7 +329,7 @@ pub fn get_frozen_pixels(
 #[tauri::command]
 pub fn confirm_region(
     id: u64,
-    region: crate::native::desktop::ScreenRect,
+    region: crate::platform::desktop::ScreenRect,
     app: AppHandle,
 ) -> Result<(), String> {
     crate::core::ocr::region::confirm(&app, id, region)
@@ -428,7 +428,7 @@ pub struct CursorPosition {
 /// Return the current cursor position in physical screen coordinates across all monitors.
 #[tauri::command]
 pub fn get_cursor_position(app: AppHandle) -> Option<CursorPosition> {
-    if let Some((x, y)) = crate::native::get_global_cursor_pos() {
+    if let Some((x, y)) = crate::platform::get_global_cursor_pos() {
         return Some(CursorPosition {
             x: x as f64,
             y: y as f64,
@@ -490,7 +490,7 @@ pub fn resize_and_clamp_window(
     width: f64,
     height: f64,
 ) -> Result<(), String> {
-    crate::native::resize_and_clamp_window(&window, width, height)
+    crate::platform::resize_and_clamp_window(&window, width, height)
 }
 
 /// Hide the overlay unless a newer show superseded the frontend's dismiss.
@@ -501,22 +501,22 @@ pub async fn hide_shell(app: AppHandle, generation: Option<u64>) -> Result<bool,
 
 #[tauri::command]
 pub fn set_window_acrylic(window: tauri::WebviewWindow, enabled: bool) -> Result<(), String> {
-    crate::native::set_window_acrylic(&window, enabled);
+    crate::platform::set_window_acrylic(&window, enabled);
     Ok(())
 }
 
 #[tauri::command]
 pub fn set_window_theme(window: tauri::WebviewWindow, dark: bool) -> Result<(), String> {
-    crate::native::set_window_theme(&window, dark);
+    crate::platform::set_window_theme(&window, dark);
     Ok(())
 }
 
 #[tauri::command]
-pub fn get_memory_usage() -> Result<crate::native::memory::MemoryReport, String> {
-    crate::native::memory::get_memory_usage()
+pub fn get_memory_usage() -> Result<crate::platform::memory::MemoryReport, String> {
+    crate::platform::memory::get_memory_usage()
 }
 
 #[tauri::command]
-pub fn trim_memory() -> Result<crate::native::memory::TrimResult, String> {
-    crate::native::memory::trim_memory()
+pub fn trim_memory() -> Result<crate::platform::memory::TrimResult, String> {
+    crate::platform::memory::trim_memory()
 }
