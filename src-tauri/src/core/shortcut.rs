@@ -2,11 +2,13 @@
 
 use crate::core::ocr::{OcrMode, OcrService};
 use crate::platform::PlatformWindow;
+use crate::platform::gestures::{GestureSource, InkKey};
 use crate::platform::window::WindowOps;
+use crate::platform::{CAPABILITIES, PlatformGestures};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 #[cfg(not(target_os = "windows"))]
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
@@ -389,7 +391,6 @@ pub fn set_double_copy_enabled(app: &AppHandle, enabled: bool) {
     );
 }
 
-pub static INK_TRANSLATE_KEY: AtomicU32 = AtomicU32::new(0);
 pub static CLIPBOARD_MONITOR_ENABLED: AtomicBool = AtomicBool::new(false);
 
 pub fn set_clipboard_monitor_enabled(enabled: bool) {
@@ -397,24 +398,7 @@ pub fn set_clipboard_monitor_enabled(enabled: bool) {
 }
 
 pub fn set_ink_translate_key(key: &str) {
-    let vk = match key.trim().to_ascii_lowercase().as_str() {
-        "~" | "`" => 0xC0,                // VK_OEM_3
-        "capslock" | "caps_lock" => 0x14, // VK_CAPITAL
-        "f1" => 0x70,
-        "f2" => 0x71,
-        "f3" => 0x72,
-        "f4" => 0x73,
-        "f5" => 0x74,
-        "f6" => 0x75,
-        "f7" => 0x76,
-        "f8" => 0x77,
-        "f9" => 0x78,
-        "f10" => 0x79,
-        "f11" => 0x7A,
-        "f12" => 0x7B,
-        _ => 0,
-    };
-    INK_TRANSLATE_KEY.store(vk, Ordering::Relaxed);
+    PlatformGestures::set_ink_key(InkKey::parse(key));
 }
 
 #[cfg(target_os = "windows")]
@@ -591,7 +575,7 @@ pub fn finish_startup_checks(app: &AppHandle) {
 }
 pub fn retry(app: &AppHandle) -> ShortcutReport {
     let ocr = app.state::<OcrService>();
-    if ocr.supported() && !ocr.observer_status().0 {
+    if CAPABILITIES.keyboard_gestures && !ocr.observer_status().0 {
         ocr.install_observer(app);
     }
     let bindings = app.state::<ShortcutBindings>();

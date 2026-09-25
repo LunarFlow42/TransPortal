@@ -5,15 +5,15 @@ mod window;
 
 use super::clipboard::{ClipboardOps, ClipboardOrigin};
 use super::desktop::{DesktopCapture, ScreenRect};
+use super::gestures::{GestureEvent, GestureObserver, GestureSource, InkKey};
 use super::selection::{
     CaptureMethod, SelectionBounds, SelectionContent, SelectionOps, SelectionTarget,
 };
 use super::system::{MemoryReport, SystemOps, TrimResult};
 use super::window::{SizeMove, WindowOps};
 use super::{Backend, Capabilities};
-use crate::core::ocr::{
-    OcrEngine, OcrEngineInfo, OcrImage, RecognizedText, ScreenCapture, ScreenEvent, ScreenObserver,
-};
+use crate::core::ocr::OcrEngine;
+use std::sync::Arc;
 use std::sync::mpsc::SyncSender;
 use tauri::{AppHandle, Runtime, WebviewWindow};
 
@@ -26,8 +26,13 @@ impl Backend for UnsupportedBackend {
     type System = UnsupportedSystem;
     type Selection = UnsupportedSelection;
     type Clipboard = UnsupportedClipboard;
+    type Gestures = UnsupportedGestures;
     type Desktop = UnsupportedDesktop;
     const CAPABILITIES: Capabilities = Capabilities::NONE;
+
+    fn native_ocr() -> Option<Arc<dyn OcrEngine>> {
+        None
+    }
 }
 
 /// Window operations through Tauri alone.
@@ -91,35 +96,14 @@ impl WindowOps for UnsupportedWindow {
     }
 }
 
-pub struct UnavailableOcr;
-const UNAVAILABLE: &str = "当前平台尚未提供本地 OCR；Windows 10/11 可使用系统 OCR。";
+/// No global keyboard observation.
+#[derive(Default)]
+pub struct UnsupportedGestures;
 
-impl OcrEngine for UnavailableOcr {
-    fn id(&self) -> &'static str {
-        "unavailable"
-    }
-
-    fn info(&self) -> Result<OcrEngineInfo, String> {
-        Ok(OcrEngineInfo {
-            id: self.id().into(),
-            label: "本地 OCR".into(),
-            languages: vec![],
-            available: false,
-            error: Some(UNAVAILABLE.into()),
-        })
-    }
-
-    fn recognize(&self, _: OcrImage<'_>, _: Option<&str>) -> Result<RecognizedText, String> {
-        Err(UNAVAILABLE.into())
-    }
-}
-
-impl ScreenCapture for UnavailableOcr {
-    fn supported(&self) -> bool {
-        false
-    }
-    fn observe(&self, _: SyncSender<ScreenEvent>) -> Result<Box<dyn ScreenObserver>, String> {
-        Err(UNAVAILABLE.into())
+impl GestureSource for UnsupportedGestures {
+    fn set_ink_key(_: Option<InkKey>) {}
+    fn observe(&self, _: SyncSender<GestureEvent>) -> Result<Box<dyn GestureObserver>, String> {
+        Err("当前平台不支持全局键盘监听。".into())
     }
 }
 

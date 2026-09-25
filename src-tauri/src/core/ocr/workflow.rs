@@ -3,12 +3,11 @@ use super::onnx::OnnxOcrEngine;
 use super::picture::{Cancellation, OcrPicture};
 use super::region::{ConfirmedRegion, RegionService};
 use super::registry::{OcrConfig, OcrRegistry};
-use super::{
-    OCR_EVENT, OcrEngine, OcrEngineInfo, OcrEvent, OcrImage, OcrMode, OcrStage, ScreenCapture,
-    ScreenEvent, ScreenObserver,
-};
-use crate::platform::PlatformClipboard;
-use crate::platform::clipboard::{ClipboardOps, ClipboardOrigin};
+use super::{OCR_EVENT, OcrEngine, OcrEngineInfo, OcrEvent, OcrImage, OcrMode, OcrStage};
+use crate::platform::clipboard::ClipboardOps;
+use crate::platform::clipboard::ClipboardOrigin;
+use crate::platform::gestures::{GestureEvent, GestureObserver, GestureSource};
+use crate::platform::{CAPABILITIES, PlatformClipboard, PlatformGestures};
 use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, mpsc};
@@ -84,13 +83,13 @@ impl SessionState {
 pub struct OcrService {
     registry: OcrRegistry,
     pub assets: Arc<OnnxAssets>,
-    capture: Arc<dyn ScreenCapture>,
+    gestures: PlatformGestures,
     clipboard: PlatformClipboard,
     sessions: Mutex<SessionState>,
     /// Cancelled native inference cannot be forcibly interrupted; serialize it
     /// with the next request so rapid retries cannot accumulate model instances.
     inference: Mutex<()>,
-    observer: Mutex<Option<Box<dyn ScreenObserver>>>,
+    observer: Mutex<Option<Box<dyn GestureObserver>>>,
     observer_error: Mutex<Option<String>>,
     translate_shortcut_error: Mutex<Option<String>>,
     translation: Mutex<Cancellation>,
@@ -99,23 +98,21 @@ pub struct OcrService {
 }
 
 impl OcrService {
-    pub fn new(assets: Arc<OnnxAssets>) -> Self {
-        let native = crate::platform::ocr::engine();
-        let native_available = native.id() != "unavailable";
-        let default_engine = if native_available {
-            native.id()
-        } else {
-            super::onnx::ENGINE_ID
-        };
+    /// `native` is the OS recognizer, if the platform has one; it becomes the
+    /// default engine ahead of ONNX.
+    pub fn new(assets: Arc<OnnxAssets>, native: Option<Arc<dyn OcrEngine>>) -> Self {
+        let default_engine = native
+            .as_ref()
+            .map_or(super::onnx::ENGINE_ID, |native| native.id());
         let mut engines: Vec<Arc<dyn OcrEngine>> =
             vec![Arc::new(OnnxOcrEngine::new(assets.clone()))];
-        if native_available {
+        if let Some(native) = native {
             engines.insert(0, native);
         }
         Self {
             registry: OcrRegistry::new(engines, default_engine),
             assets,
-            capture: crate::platform::ocr::screen_capture(),
+            gestures: PlatformGestures::default(),
             clipboard: PlatformClipboard::default(),
             sessions: Mutex::new(SessionState::default()),
             inference: Mutex::new(()),
@@ -129,8 +126,9 @@ impl OcrService {
 }
 
 impl OcrService {
+    /// Screenshot OCR needs desktop capture; image files work everywhere.
     pub fn supported(&self) -> bool {
-        self.capture.supported()
+        CAPABILITIES.screen_capture
     }
 
     pub fn config(&self) -> OcrConfig {
@@ -276,11 +274,11 @@ impl OcrService {
     }
 
     pub fn install_observer(&self, app: &AppHandle) {
-        if !self.supported() {
+        if !CAPABILITIES.keyboard_gestures {
             return;
         }
         let (sender, receiver) = mpsc::sync_channel(16);
-        match self.capture.observe(sender) {
+        match self.gestures.observe(sender) {
             Ok(observer) => {
                 *self.observer.lock().unwrap() = Some(observer);
                 *self.observer_error.lock().unwrap() = None;
@@ -289,7 +287,7 @@ impl OcrService {
                     while let Ok(event) = receiver.recv() {
                         let service = app.state::<OcrService>();
                         match event {
-                            ScreenEvent::DoubleCopy {
+                            GestureEvent::DoubleCopy {
                                 clipboard_revision,
                                 window,
                             } => {
@@ -302,16 +300,16 @@ impl OcrService {
                                     )
                                 });
                             }
-                            ScreenEvent::InkTranslate { window: _ } => {
+                            GestureEvent::InkTranslate { window: _ } => {
                                 let app = app.clone();
                                 tauri::async_runtime::spawn_blocking(move || {
                                     crate::core::shortcut::on_hotkey(&app)
                                 });
                             }
-                            ScreenEvent::Snip { clipboard_revision } => {
+                            GestureEvent::Snip { clipboard_revision } => {
                                 crate::core::shortcut::on_system_snip(&app, clipboard_revision);
                             }
-                            ScreenEvent::Cancel => {
+                            GestureEvent::Cancel => {
                                 service.cancel(&app);
                                 let monitor = app.state::<super::monitor::MonitorService>();
                                 if monitor.latest().active {

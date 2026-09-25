@@ -1,7 +1,8 @@
 //! Observe the OS screenshot shortcut; never register or swallow Win+Shift+S.
 
-use crate::core::ocr::{ScreenCapture, ScreenEvent, ScreenObserver};
+use crate::platform::gestures::{GestureEvent, GestureObserver, GestureSource, InkKey};
 use std::cell::{Cell, RefCell};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc::{self, SyncSender};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
@@ -16,10 +17,14 @@ use windows::Win32::UI::WindowsAndMessaging::{
     WM_KEYDOWN, WM_KEYUP, WM_QUIT, WM_SYSKEYDOWN, WM_SYSKEYUP,
 };
 
-pub struct WindowsScreenCapture;
+#[derive(Default)]
+pub struct KeyboardHook;
+
+/// Virtual-key code of the ink translation key; `0` when disabled.
+static INK_KEY: AtomicU32 = AtomicU32::new(0);
 
 thread_local! {
-    static EVENTS: RefCell<Option<SyncSender<ScreenEvent>>> = const { RefCell::new(None) };
+    static EVENTS: RefCell<Option<SyncSender<GestureEvent>>> = const { RefCell::new(None) };
     static SNIP_KEY_DOWN: Cell<bool> = const { Cell::new(false) };
     static INK_KEY_DOWN: Cell<bool> = const { Cell::new(false) };
     static DOUBLE_COPY: RefCell<crate::platform::key_sequence::DoubleCopyDetector> = RefCell::new(Default::default());
@@ -54,7 +59,7 @@ unsafe extern "system" fn keyboard_hook(code: i32, wparam: WPARAM, lparam: LPARA
                 let revision = unsafe { GetClipboardSequenceNumber() };
                 EVENTS.with_borrow(|sender| {
                     if let Some(sender) = sender {
-                        let _ = sender.try_send(ScreenEvent::DoubleCopy {
+                        let _ = sender.try_send(GestureEvent::DoubleCopy {
                             clipboard_revision: revision,
                             window,
                         });
@@ -62,15 +67,14 @@ unsafe extern "system" fn keyboard_hook(code: i32, wparam: WPARAM, lparam: LPARA
                 });
             }
 
-            let ink_vk =
-                crate::core::shortcut::INK_TRANSLATE_KEY.load(std::sync::atomic::Ordering::Relaxed);
+            let ink_vk = INK_KEY.load(Ordering::Relaxed);
             if ink_vk != 0 && key.vkCode == ink_vk {
                 if down {
                     INK_KEY_DOWN.set(true);
                 } else if up && INK_KEY_DOWN.replace(false) {
                     EVENTS.with_borrow(|sender| {
                         if let Some(sender) = sender {
-                            let _ = sender.try_send(ScreenEvent::InkTranslate { window });
+                            let _ = sender.try_send(GestureEvent::InkTranslate { window });
                         }
                     });
                 }
@@ -88,7 +92,7 @@ unsafe extern "system" fn keyboard_hook(code: i32, wparam: WPARAM, lparam: LPARA
                 let revision = unsafe { GetClipboardSequenceNumber() };
                 EVENTS.with_borrow(|sender| {
                     if let Some(sender) = sender {
-                        let _ = sender.try_send(ScreenEvent::Snip {
+                        let _ = sender.try_send(GestureEvent::Snip {
                             clipboard_revision: revision,
                         });
                     }
@@ -97,7 +101,7 @@ unsafe extern "system" fn keyboard_hook(code: i32, wparam: WPARAM, lparam: LPARA
         } else if down && key.vkCode == u32::from(VK_ESCAPE.0) {
             EVENTS.with_borrow(|sender| {
                 if let Some(sender) = sender {
-                    let _ = sender.try_send(ScreenEvent::Cancel);
+                    let _ = sender.try_send(GestureEvent::Cancel);
                 }
             });
         }
@@ -110,7 +114,7 @@ struct Observer {
     thread_id: u32,
     thread: Option<JoinHandle<()>>,
 }
-impl ScreenObserver for Observer {}
+impl GestureObserver for Observer {}
 impl Drop for Observer {
     fn drop(&mut self) {
         // SAFETY: this is the dedicated message queue we own, not a UI thread.
@@ -123,12 +127,21 @@ impl Drop for Observer {
     }
 }
 
-impl ScreenCapture for WindowsScreenCapture {
-    fn supported(&self) -> bool {
-        true
+impl GestureSource for KeyboardHook {
+    fn set_ink_key(key: Option<InkKey>) {
+        let vk = match key {
+            Some(InkKey::Backquote) => 0xC0, // VK_OEM_3
+            Some(InkKey::CapsLock) => 0x14,  // VK_CAPITAL
+            Some(InkKey::Function(number)) => 0x6F + u32::from(number), // VK_F1 = 0x70
+            None => 0,
+        };
+        INK_KEY.store(vk, Ordering::Relaxed);
     }
 
-    fn observe(&self, events: SyncSender<ScreenEvent>) -> Result<Box<dyn ScreenObserver>, String> {
+    fn observe(
+        &self,
+        events: SyncSender<GestureEvent>,
+    ) -> Result<Box<dyn GestureObserver>, String> {
         let (ready_tx, ready_rx) = mpsc::sync_channel(1);
         let thread = thread::Builder::new()
             .name("ocr-shortcut-observer".into())

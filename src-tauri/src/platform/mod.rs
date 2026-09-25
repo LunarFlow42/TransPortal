@@ -6,8 +6,10 @@
 //! the factories and [`CAPABILITIES`]. `#[cfg(target_os)]` appears only in
 //! this file and inside the backends.
 
+use crate::core::ocr::OcrEngine;
 use clipboard::ClipboardOps;
 use desktop::DesktopCapture;
+use gestures::GestureSource;
 use selection::SelectionOps;
 use std::sync::Arc;
 use system::SystemOps;
@@ -15,9 +17,9 @@ use window::WindowOps;
 
 pub mod clipboard;
 pub mod desktop;
+pub mod gestures;
 pub mod imaging;
 pub mod key_sequence;
-pub mod ocr;
 pub mod placement;
 pub mod selection;
 pub mod system;
@@ -77,15 +79,25 @@ pub trait Backend {
     type System: SystemOps;
     type Selection: SelectionOps + Default;
     type Clipboard: ClipboardOps + Default;
+    type Gestures: GestureSource + Default;
     type Desktop: DesktopCapture + Default;
     const CAPABILITIES: Capabilities;
+
+    /// The OS text recognizer, if any. ONNX OCR is available everywhere.
+    fn native_ocr() -> Option<Arc<dyn OcrEngine>>;
 }
 
 pub type PlatformWindow = <ActiveBackend as Backend>::Window;
 pub type PlatformSystem = <ActiveBackend as Backend>::System;
 pub type PlatformSelection = <ActiveBackend as Backend>::Selection;
 pub type PlatformClipboard = <ActiveBackend as Backend>::Clipboard;
+pub type PlatformGestures = <ActiveBackend as Backend>::Gestures;
 pub type PlatformDesktop = <ActiveBackend as Backend>::Desktop;
+
+/// The system OCR engine of the active backend, if any.
+pub fn native_ocr() -> Option<Arc<dyn OcrEngine>> {
+    ActiveBackend::native_ocr()
+}
 
 /// A desktop capturer of the active backend.
 pub fn desktop() -> Arc<dyn DesktopCapture> {
@@ -105,7 +117,9 @@ mod tests {
         let _: fn() -> bool = B::System::enforce_release_hash;
         let _: fn() -> B::Selection = B::Selection::default;
         let _: fn() -> B::Clipboard = B::Clipboard::default;
+        let _: fn() -> B::Gestures = B::Gestures::default;
         let _: fn() -> B::Desktop = B::Desktop::default;
+        let _: fn() -> Option<Arc<dyn OcrEngine>> = B::native_ocr;
         B::CAPABILITIES
     }
 

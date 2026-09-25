@@ -18,11 +18,13 @@ mod window;
 use super::selection::SelectionBounds;
 use super::window::{SizeMove, WindowOps};
 use super::{Backend, Capabilities};
+use crate::core::ocr::OcrEngine;
+use std::sync::Arc;
 use tauri::{Runtime, WebviewWindow};
 
 pub use clipboard::WindowsClipboard;
 pub use desktop::WindowsDesktop;
-pub use keyboard_hook::WindowsScreenCapture;
+pub use keyboard_hook::KeyboardHook;
 pub use ocr::WindowsOcrEngine;
 pub use selection::WindowsSelection;
 pub use system::WindowsSystem;
@@ -34,8 +36,13 @@ impl Backend for WindowsBackend {
     type System = WindowsSystem;
     type Selection = WindowsSelection;
     type Clipboard = WindowsClipboard;
+    type Gestures = KeyboardHook;
     type Desktop = WindowsDesktop;
     const CAPABILITIES: Capabilities = Capabilities::ALL;
+
+    fn native_ocr() -> Option<Arc<dyn OcrEngine>> {
+        Some(Arc::new(WindowsOcrEngine::default()))
+    }
 }
 
 pub struct WindowsWindow;

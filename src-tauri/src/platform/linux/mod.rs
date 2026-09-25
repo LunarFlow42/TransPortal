@@ -21,6 +21,8 @@
 
 use super::unsupported::UnsupportedBackend;
 use super::{Backend, Capabilities};
+use crate::core::ocr::OcrEngine;
+use std::sync::Arc;
 
 pub struct LinuxBackend;
 
@@ -29,6 +31,12 @@ impl Backend for LinuxBackend {
     type System = <UnsupportedBackend as Backend>::System;
     type Selection = <UnsupportedBackend as Backend>::Selection;
     type Clipboard = <UnsupportedBackend as Backend>::Clipboard;
+    type Gestures = <UnsupportedBackend as Backend>::Gestures;
     type Desktop = <UnsupportedBackend as Backend>::Desktop;
     const CAPABILITIES: Capabilities = <UnsupportedBackend as Backend>::CAPABILITIES;
+
+    /// Linux has no system OCR service; ONNX OCR covers it.
+    fn native_ocr() -> Option<Arc<dyn OcrEngine>> {
+        None
+    }
 }

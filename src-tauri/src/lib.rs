@@ -170,7 +170,7 @@ pub fn run() {
                 ocr_data.clone(),
                 ocr_data.join("downloads"),
             ));
-            app.manage(ocr::OcrService::new(ocr_assets));
+            app.manage(ocr::OcrService::new(ocr_assets, platform::native_ocr()));
             app.manage(ocr::region::RegionService::default());
             ocr::region::RegionService::prewarm(app.handle());
             app.manage(ocr::monitor::MonitorService::default());

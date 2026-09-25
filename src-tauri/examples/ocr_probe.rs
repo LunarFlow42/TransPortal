@@ -48,7 +48,8 @@ async fn main() -> Result<(), String> {
     let selected = option(&args, "--engine").unwrap_or_else(|| "windows".into());
     let engine: Arc<dyn OcrEngine> = match selected.as_str() {
         "onnx" => Arc::new(OnnxOcrEngine::new(assets)),
-        "windows" => transportal_lib::platform::ocr::engine(),
+        "windows" => transportal_lib::platform::native_ocr()
+            .ok_or("system OCR is not available on this platform")?,
         _ => return Err("--engine must be windows or onnx".into()),
     };
     let image_path = option(&args, "--image");

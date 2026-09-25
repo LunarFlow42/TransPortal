@@ -1,4 +1,5 @@
-//! Local OCR contracts and screenshot workflow. Platform APIs live in `native`.
+//! Local OCR contracts and screenshot workflow. OS engines and capture live
+//! in `crate::platform` and implement the contracts defined here.
 
 pub mod assets;
 pub mod monitor;
@@ -9,7 +10,6 @@ pub mod registry;
 mod workflow;
 
 use serde::{Deserialize, Serialize};
-use std::sync::mpsc::SyncSender;
 pub use workflow::{OcrService, OcrStatus};
 
 pub const OCR_EVENT: &str = "transportal://ocr";
@@ -108,30 +108,6 @@ pub trait OcrEngine: Send + Sync {
         image: OcrImage<'_>,
         language: Option<&str>,
     ) -> Result<RecognizedText, String>;
-}
-
-#[derive(Debug)]
-pub enum ScreenEvent {
-    /// Observe the OS-owned Win+Shift+S chord without consuming it.
-    Snip {
-        clipboard_revision: u32,
-    },
-    DoubleCopy {
-        clipboard_revision: u32,
-        window: usize,
-    },
-    InkTranslate {
-        window: usize,
-    },
-    Cancel,
-}
-
-/// Owns the observer's lifetime. Dropping it unhooks the keyboard observer.
-pub trait ScreenObserver: Send + Sync {}
-
-pub trait ScreenCapture: Send + Sync {
-    fn supported(&self) -> bool;
-    fn observe(&self, events: SyncSender<ScreenEvent>) -> Result<Box<dyn ScreenObserver>, String>;
 }
 
 /// Preserve aspect ratio while satisfying the native engine's dimension limit.
