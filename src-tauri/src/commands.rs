@@ -3,6 +3,7 @@ use crate::dictionary::{DictStatus, LookupService, SourceInfo};
 use crate::native::CaptureOutcome;
 use crate::provider::{
     StreamChunk, TranslateQuery, TranslateResult, Translator,
+    lang::{DetectedLang, detect_language},
     openai::{OpenAiCompatibleProvider, OpenAiConfig},
 };
 use futures_util::StreamExt;
@@ -27,6 +28,11 @@ pub struct IntentResult {
     pub is_pure_ascii: bool,
 }
 
+/// Chinese and Japanese are written without spaces, so whitespace cannot
+/// separate words there. Dictionary headwords rarely exceed four characters
+/// (idioms included); longer runs are phrases or sentences to translate.
+const MAX_UNSPACED_WORD_CHARS: usize = 4;
+
 /// Fast heuristic text granularity detector (< 1ms).
 ///
 /// Distinguishes single words / short phrases (word card) from sentences and
@@ -41,11 +47,21 @@ pub fn classify_intent(text: &str) -> IntentResult {
 
     let words: Vec<&str> = clean.split_whitespace().collect();
     let word_count = words.len();
+    let unspaced = matches!(
+        detect_language(&clean),
+        DetectedLang::Chinese | DetectedLang::Japanese
+    );
 
     let intent = if word_count == 0 {
         TextIntent::Word
     } else if has_sentence_punctuation {
         TextIntent::Sentence
+    } else if unspaced {
+        if word_count == 1 && char_count <= MAX_UNSPACED_WORD_CHARS {
+            TextIntent::Word
+        } else {
+            TextIntent::Sentence
+        }
     } else if word_count <= 2 && char_count <= 40 {
         TextIntent::Word
     } else {
@@ -695,6 +711,30 @@ mod tests {
 
         let res2 = detect_intent("Hello world! How are you doing today?".to_string());
         assert_eq!(res2.intent, TextIntent::Sentence);
+    }
+
+    #[test]
+    fn test_detect_intent_unspaced_scripts() {
+        // Whole unpunctuated Chinese phrases are one whitespace "word".
+        for word in ["打", "你好", "取词", "一石二鸟"] {
+            assert_eq!(
+                detect_intent(word.to_string()).intent,
+                TextIntent::Word,
+                "{word}"
+            );
+        }
+        for phrase in [
+            "今天天气真不错",
+            "计算机科学与技术",
+            "你好 世界",
+            "これは日本語です",
+        ] {
+            assert_eq!(
+                detect_intent(phrase.to_string()).intent,
+                TextIntent::Sentence,
+                "{phrase}"
+            );
+        }
     }
 
     #[test]

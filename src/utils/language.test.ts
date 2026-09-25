@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { detectLanguage, resolveTargetLanguage } from './language';
+import { detectLanguage, languageTagOf, resolveTargetLanguage } from './language';
 
 describe('detectLanguage', () => {
   it('detects English and Latin text', () => {
@@ -58,5 +58,14 @@ describe('resolveTargetLanguage', () => {
   it('defaults preferred target to zh-CN if empty', () => {
     expect(resolveTargetLanguage('你好')).toBe('en');
     expect(resolveTargetLanguage('hello')).toBe('zh-CN');
+  });
+});
+
+describe('languageTagOf', () => {
+  it('returns the tag of the text language for back-translation', () => {
+    expect(languageTagOf('今天天气真不错')).toBe('zh-CN');
+    expect(languageTagOf('Hello world')).toBe('en');
+    expect(languageTagOf('こんにちは')).toBe('ja');
+    expect(languageTagOf('안녕하세요')).toBe('ko');
   });
 });

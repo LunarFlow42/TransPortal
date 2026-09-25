@@ -66,3 +66,10 @@ export function resolveTargetLanguage(text: string, preferredTarget = 'zh-CN'): 
       return target;
   }
 }
+
+const LANGUAGE_TAGS: Record<DetectedLang, string> = { zh: 'zh-CN', ja: 'ja', ko: 'ko', en: 'en' };
+
+/** Language tag of the text's own language, e.g. the target of a back-translation. */
+export function languageTagOf(text: string): string {
+  return LANGUAGE_TAGS[detectLanguage(text)];
+}

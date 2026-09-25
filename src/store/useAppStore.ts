@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { invoke, Channel } from '@tauri-apps/api/core';
 import { forgetScrollTops } from '../utils/scrollMemory';
 import { isNewOcrEvent } from '../utils/ocr';
-import { resolveTargetLanguage } from '../utils/language';
+import { languageTagOf, resolveTargetLanguage } from '../utils/language';
 import type {
   Density,
   DictEntry,
@@ -278,13 +278,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     get().setOpenaiConfig({ prompt_template: aiPromptTemplate });
   },
   runBackTranslation: async () => {
-    const { lookupStack, provider, openaiConfig, targetLanguage } = get();
+    const { lookupStack, provider, openaiConfig } = get();
     const node = lookupStack[lookupStack.length - 1];
     if (!node || !node.translation) return;
 
     set({ backTranslation: { text: '', loading: true, error: null } });
 
-    const backTarget = targetLanguage.startsWith('zh') ? 'en' : 'zh-CN';
+    // Back-translation returns to the source text's language: the forward
+    // target depends on the source, so the preference alone cannot tell.
+    const backTarget = languageTagOf(node.text);
     let accumulated = '';
     const channel = new Channel<StreamChunk>();
     channel.onmessage = (chunk) => {

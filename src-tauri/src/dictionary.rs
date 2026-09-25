@@ -8,7 +8,7 @@
 
 use crate::dict::{DictEntry, DictSource, DictStore, ExampleSentence, PosDefinition};
 use crate::provider::google::GoogleFreeProvider;
-use crate::provider::{TranslateQuery, Translator};
+use crate::provider::{TranslateQuery, Translator, resolve_target_lang};
 use lru::LruCache;
 use reqwest::Client;
 use serde::Serialize;
@@ -103,93 +103,160 @@ impl YoudaoSource {
             return None;
         }
         let json: Value = response.json().await.ok()?;
-
-        let ec_word = json.pointer("/ec/word/0");
-        let simple_word = json.pointer("/simple/word/0");
-        let ee_word = json.pointer("/ee/word/0");
-
-        let phonetic = phone_of(ec_word)
-            .or_else(|| phone_of(simple_word))
-            .map(|phone| format!("/{phone}/"));
-
-        let mut definitions = Vec::new();
-        if let Some(trs) = ec_word.and_then(|w| w.get("trs")).and_then(Value::as_array) {
-            for block in trs {
-                let text = block
-                    .pointer("/tr/0/l/i/0")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default();
-                push_definition(&mut definitions, text);
-            }
-        }
-
-        let mut english_definitions = Vec::new();
-        if let Some(trs) = ee_word.and_then(|w| w.get("trs")).and_then(Value::as_array) {
-            for entry in trs {
-                let pos = entry
-                    .get("pos")
-                    .and_then(Value::as_str)
-                    .unwrap_or("def")
-                    .to_string();
-                let meanings: Vec<String> = entry
-                    .get("tr")
-                    .and_then(Value::as_array)
-                    .map(|items| {
-                        items
-                            .iter()
-                            .filter_map(|item| item.pointer("/l/i").and_then(Value::as_str))
-                            .map(str::to_string)
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                if !meanings.is_empty() {
-                    english_definitions.push(PosDefinition { pos, meanings });
-                }
-            }
-        }
-
-        let mut examples = Vec::new();
-        if let Some(pairs) = json
-            .pointer("/blng_sents_part/sentence-pair")
-            .and_then(Value::as_array)
-        {
-            for pair in pairs.iter().take(3) {
-                let en = pair.get("sentence").and_then(Value::as_str);
-                let zh = pair
-                    .get("sentence-translation")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default();
-                if let Some(en) = en.filter(|s| !s.trim().is_empty()) {
-                    examples.push(ExampleSentence {
-                        en: en.to_string(),
-                        zh: zh.to_string(),
-                    });
-                }
-            }
-        }
-
-        if definitions.is_empty()
-            && english_definitions.is_empty()
-            && phonetic.is_none()
-            && examples.is_empty()
-        {
-            return None;
-        }
-
-        Some(DictEntry {
-            word: word.to_string(),
-            phonetic,
-            audio_url: Some(format!(
-                "https://dict.youdao.com/dictvoice?audio={word}&type=2"
-            )),
-            definitions,
-            english_definitions,
-            exchange: exchange_of(ec_word),
-            tags: Vec::new(),
-            examples,
-            source: "youdao".to_string(),
-        })
+        parse_youdao(word, &json)
     }
+}
+
+/// Build an entry from a Youdao `jsonapi` response.
+///
+/// English headwords carry `ec` (English→Chinese) and `ee` sections; Chinese
+/// headwords carry `ce` (Chinese→English) instead. Without any definitions
+/// the result is not a hit: pinyin or example sentences alone would show a
+/// card with no meaning and suppress the machine-translation fallback.
+fn parse_youdao(word: &str, json: &Value) -> Option<DictEntry> {
+    let ec_word = json.pointer("/ec/word/0");
+    let ce_word = json.pointer("/ce/word/0");
+    let simple_word = json.pointer("/simple/word/0");
+    let ee_word = json.pointer("/ee/word/0");
+
+    let phonetic = phone_of(ec_word)
+        .or_else(|| phone_of(simple_word))
+        .map(|phone| format!("/{phone}/"));
+
+    let mut definitions = Vec::new();
+    if let Some(trs) = ec_word.and_then(|w| w.get("trs")).and_then(Value::as_array) {
+        for block in trs {
+            let text = block
+                .pointer("/tr/0/l/i/0")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            push_definition(&mut definitions, text);
+        }
+    }
+    if let Some(trs) = ce_word.and_then(|w| w.get("trs")).and_then(Value::as_array) {
+        for block in trs {
+            let Some(line) = block.pointer("/tr/0/l") else {
+                continue;
+            };
+            let pos = line.get("pos").and_then(Value::as_str).unwrap_or("def");
+            push_meaning(&mut definitions, pos, &ce_meaning(line));
+        }
+    }
+
+    let mut english_definitions = Vec::new();
+    if let Some(trs) = ee_word.and_then(|w| w.get("trs")).and_then(Value::as_array) {
+        for entry in trs {
+            let pos = entry
+                .get("pos")
+                .and_then(Value::as_str)
+                .unwrap_or("def")
+                .to_string();
+            let meanings: Vec<String> = entry
+                .get("tr")
+                .and_then(Value::as_array)
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(|item| item.pointer("/l/i").and_then(Value::as_str))
+                        .map(str::to_string)
+                        .collect()
+                })
+                .unwrap_or_default();
+            if !meanings.is_empty() {
+                english_definitions.push(PosDefinition { pos, meanings });
+            }
+        }
+    }
+
+    if definitions.is_empty() && english_definitions.is_empty() {
+        return None;
+    }
+
+    let mut examples = Vec::new();
+    if let Some(pairs) = json
+        .pointer("/blng_sents_part/sentence-pair")
+        .and_then(Value::as_array)
+    {
+        for pair in pairs.iter().take(3) {
+            let sentence = pair.get("sentence").and_then(Value::as_str);
+            let translation = pair
+                .get("sentence-translation")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let Some(sentence) = sentence.filter(|s| !s.trim().is_empty()) else {
+                continue;
+            };
+            // For Chinese headwords the source sentence is the Chinese side.
+            let (en, zh) = if has_han(sentence) {
+                (translation, sentence)
+            } else {
+                (sentence, translation)
+            };
+            examples.push(ExampleSentence {
+                en: en.to_string(),
+                zh: zh.to_string(),
+            });
+        }
+    }
+
+    Some(DictEntry {
+        word: word.to_string(),
+        phonetic,
+        audio_url: Some(youdao_audio_url(word)),
+        definitions,
+        english_definitions,
+        exchange: exchange_of(ec_word),
+        tags: Vec::new(),
+        examples,
+        source: "youdao".to_string(),
+    })
+}
+
+/// Youdao pronunciation; its default English voice is near-silent for Chinese.
+fn youdao_audio_url(word: &str) -> String {
+    if has_han(word) {
+        format!("https://dict.youdao.com/dictvoice?audio={word}&le=zh")
+    } else {
+        format!("https://dict.youdao.com/dictvoice?audio={word}&type=2")
+    }
+}
+
+/// Join a `ce` line's text runs, e.g. `["", {"#text":"how"}, " ", {"#text":"do"}]`.
+fn ce_meaning(line: &Value) -> String {
+    line.get("i")
+        .and_then(Value::as_array)
+        .map(|parts| {
+            parts
+                .iter()
+                .filter_map(|part| {
+                    part.as_str()
+                        .or_else(|| part.get("#text").and_then(Value::as_str))
+                })
+                .collect::<String>()
+        })
+        .unwrap_or_default()
+        .trim()
+        .to_string()
+}
+
+/// Append `meaning`, merging it into the previous definition when the part of
+/// speech repeats (Youdao lists each `ce` meaning as its own block).
+fn push_meaning(definitions: &mut Vec<PosDefinition>, pos: &str, meaning: &str) {
+    if meaning.is_empty() {
+        return;
+    }
+    match definitions.last_mut() {
+        Some(last) if last.pos == pos => last.meanings.push(meaning.to_string()),
+        _ => definitions.push(PosDefinition {
+            pos: pos.to_string(),
+            meanings: vec![meaning.to_string()],
+        }),
+    }
+}
+
+fn has_han(text: &str) -> bool {
+    text.chars()
+        .any(|c| matches!(c as u32, 0x4E00..=0x9FFF | 0x3400..=0x4DBF))
 }
 
 impl Default for YoudaoSource {
@@ -245,8 +312,9 @@ impl DictSource for GoogleDictSource {
     async fn query(&self, word: &str) -> Result<Option<DictEntry>, String> {
         let query = TranslateQuery {
             text: word.to_string(),
-            source_lang: Some("en".to_string()),
-            target_lang: Some("zh-CN".to_string()),
+            source_lang: None,
+            // Chinese headwords look up English meanings, everything else Chinese.
+            target_lang: Some(resolve_target_lang(word, Some("zh-CN"))),
         };
         let result = match self.google.translate(&query).await {
             Ok(result) => result,
@@ -277,9 +345,7 @@ impl DictSource for GoogleDictSource {
         Ok(Some(DictEntry {
             word: word.to_string(),
             phonetic: None,
-            audio_url: Some(format!(
-                "https://dict.youdao.com/dictvoice?audio={word}&type=2"
-            )),
+            audio_url: Some(youdao_audio_url(word)),
             definitions,
             english_definitions: Vec::new(),
             exchange: None,
@@ -572,5 +638,113 @@ fn split_pos(text: &str) -> (String, &str) {
         ("def".to_string(), text)
     } else {
         (pos.to_string(), rest)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn ce_block(pos: Option<&str>, words: &[&str]) -> Value {
+        let mut parts = vec![json!("")];
+        for (index, word) in words.iter().enumerate() {
+            if index > 0 {
+                parts.push(json!(" "));
+            }
+            parts.push(json!({ "#text": word, "@action": "link" }));
+        }
+        let mut line = json!({ "i": parts, "#tran": "中文释义；" });
+        if let Some(pos) = pos {
+            line["pos"] = json!(pos);
+        }
+        json!({ "tr": [{ "l": line }] })
+    }
+
+    #[test]
+    fn chinese_headwords_use_the_ce_section_and_chinese_audio() {
+        let response = json!({
+            "ce": { "word": [{ "phone": "nǐ hǎo", "trs": [
+                ce_block(None, &["hello"]),
+                ce_block(None, &["hi"]),
+                ce_block(None, &["how", "do", "you", "do"]),
+            ]}]},
+            "blng_sents_part": { "sentence-pair": [{
+                "sentence": "哈罗，约翰，你好吗？",
+                "sentence-translation": "Hello John, how are you?"
+            }]}
+        });
+        let entry = parse_youdao("你好", &response).expect("hit");
+        assert_eq!(entry.definitions.len(), 1);
+        assert_eq!(entry.definitions[0].pos, "def");
+        assert_eq!(
+            entry.definitions[0].meanings,
+            ["hello", "hi", "how do you do"]
+        );
+        // The Chinese sentence is the translation side of an English example.
+        assert_eq!(entry.examples[0].en, "Hello John, how are you?");
+        assert_eq!(entry.examples[0].zh, "哈罗，约翰，你好吗？");
+        assert!(entry.audio_url.unwrap().ends_with("&le=zh"));
+    }
+
+    #[test]
+    fn ce_meanings_group_by_consecutive_part_of_speech() {
+        let response = json!({ "ce": { "word": [{ "trs": [
+            ce_block(Some("vt."), &["hit"]),
+            ce_block(Some("vi."), &["fight"]),
+            ce_block(Some("vi."), &["strike"]),
+            ce_block(Some("n."), &["dozen"]),
+        ]}]}});
+        let entry = parse_youdao("打", &response).expect("hit");
+        let grouped: Vec<(&str, Vec<&str>)> = entry
+            .definitions
+            .iter()
+            .map(|d| {
+                (
+                    d.pos.as_str(),
+                    d.meanings.iter().map(String::as_str).collect(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            grouped,
+            [
+                ("vt.", vec!["hit"]),
+                ("vi.", vec!["fight", "strike"]),
+                ("n.", vec!["dozen"]),
+            ]
+        );
+    }
+
+    #[test]
+    fn responses_without_definitions_fall_back_to_translation() {
+        // What Youdao returns for phrases such as 取词 / 今天天气真不错.
+        let response = json!({
+            "web_trans": { "web-translation": [{ "trans": [{ "value": "Autostemming" }] }] },
+            "blng_sents_part": { "sentence-pair": [{
+                "sentence": "取词窗口背景色设置。",
+                "sentence-translation": "Floating window background color setting."
+            }]}
+        });
+        assert!(parse_youdao("取词", &response).is_none());
+    }
+
+    #[test]
+    fn english_headwords_keep_the_ec_section() {
+        let response = json!({
+            "ec": { "word": [{ "usphone": "ˈæpl", "trs": [
+                { "tr": [{ "l": { "i": ["n. 苹果；苹果树"] } }] }
+            ]}]},
+            "blng_sents_part": { "sentence-pair": [{
+                "sentence": "An apple a day.",
+                "sentence-translation": "一天一苹果。"
+            }]}
+        });
+        let entry = parse_youdao("apple", &response).expect("hit");
+        assert_eq!(entry.phonetic.as_deref(), Some("/ˈæpl/"));
+        assert_eq!(entry.definitions[0].pos, "n.");
+        assert_eq!(entry.definitions[0].meanings, ["苹果", "苹果树"]);
+        assert_eq!(entry.examples[0].en, "An apple a day.");
+        assert!(entry.audio_url.unwrap().ends_with("&type=2"));
     }
 }
