@@ -3,16 +3,11 @@
 
 mod window;
 
-pub use window::{
-    PointerProbe, configure_transparent_window, force_hide_window, get_global_cursor_pos,
-    observe_size_move, place_window_smartly, resize_and_clamp_window, set_window_acrylic,
-    set_window_theme,
-};
-
 use super::desktop::{DesktopCapture, ScreenRect};
 use super::selection::{SelectionPlatform, SelectionTarget};
 use super::system::{IntegrityPlatform, MemoryReport, TrimResult};
-use super::{Backend, Capabilities};
+use super::window::{SizeMove, WindowOps};
+use super::{Backend, Capabilities, SelectionBounds};
 use super::{CaptureMethod, SelectionContent, SelectionReader};
 use crate::core::ocr::{
     ClipboardOrigin, OcrEngine, OcrEngineInfo, OcrImage, RecognizedText, ScreenCapture,
@@ -20,13 +15,76 @@ use crate::core::ocr::{
 };
 use std::sync::mpsc::SyncSender;
 use tauri::AppHandle;
+use tauri::{Runtime, WebviewWindow};
 
 /// Backend for targets without native integration; also the base that
 /// partially implemented backends delegate to.
 pub struct UnsupportedBackend;
 
 impl Backend for UnsupportedBackend {
+    type Window = UnsupportedWindow;
     const CAPABILITIES: Capabilities = Capabilities::NONE;
+}
+
+/// Window operations through Tauri alone.
+pub struct UnsupportedWindow;
+
+impl WindowOps for UnsupportedWindow {
+    type Probe = window::PointerProbe;
+
+    fn configure_transparent_window<R: Runtime>(window: &WebviewWindow<R>) {
+        window::configure_transparent_window(window);
+    }
+
+    fn resize_and_clamp_window<R: Runtime>(
+        window: &WebviewWindow<R>,
+        width: f64,
+        height: f64,
+    ) -> Result<(), String> {
+        window::resize_and_clamp_window(window, width, height)
+    }
+
+    fn set_window_acrylic<R: Runtime>(window: &WebviewWindow<R>, enabled: bool) {
+        window::set_window_acrylic(window, enabled);
+    }
+
+    fn set_window_theme<R: Runtime>(window: &WebviewWindow<R>, dark: bool) {
+        window::set_window_theme(window, dark);
+    }
+
+    fn get_global_cursor_pos() -> Option<(i32, i32)> {
+        window::get_global_cursor_pos()
+    }
+
+    fn force_hide_window<R: Runtime>(window: &WebviewWindow<R>) {
+        window::force_hide_window(window);
+    }
+
+    /// Unknown without native window APIs; callers treat it as "not ours".
+    fn is_foreground<R: Runtime>(_window: &WebviewWindow<R>) -> bool {
+        false
+    }
+
+    /// Global pointer sampling needs native APIs; the overlay relies on blur.
+    fn pointer_probe<R: Runtime>(_window: &WebviewWindow<R>) -> Option<Self::Probe> {
+        None
+    }
+
+    fn observe_size_move<R: Runtime>(
+        window: &WebviewWindow<R>,
+        on_phase: impl Fn(SizeMove) + Send + 'static,
+    ) -> Result<(), String> {
+        window::observe_size_move(window, on_phase)
+    }
+
+    fn place_window_smartly<R: Runtime>(
+        window: &WebviewWindow<R>,
+        anchor_bounds: Option<&SelectionBounds>,
+        center: bool,
+        no_activate: bool,
+    ) -> Result<(), String> {
+        window::place_window_smartly(window, anchor_bounds, center, no_activate)
+    }
 }
 
 pub struct UnavailableOcr;

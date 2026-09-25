@@ -45,23 +45,19 @@ pub fn force_hide_window<R: tauri::Runtime>(_window: &tauri::WebviewWindow<R>) {
 /// Global pointer sampling is Windows-only; the overlay relies on blur here.
 pub struct PointerProbe;
 
-impl PointerProbe {
-    pub fn new<R: tauri::Runtime>(_window: &tauri::WebviewWindow<R>) -> Option<Self> {
-        None
-    }
-
-    pub fn window_visible(&self) -> bool {
+impl crate::platform::window::PointerProbe for PointerProbe {
+    fn window_visible(&self) -> bool {
         false
     }
 
-    pub fn pressed_outside(&self) -> Option<bool> {
+    fn pressed_outside(&self) -> Option<bool> {
         None
     }
 }
 
 pub fn observe_size_move<R: tauri::Runtime>(
     _window: &tauri::WebviewWindow<R>,
-    _on_phase: impl Fn(crate::platform::SizeMove) + Send + 'static,
+    _on_phase: impl Fn(crate::platform::window::SizeMove) + Send + 'static,
 ) -> Result<(), String> {
     Err("move/resize observation is only implemented on Windows".to_string())
 }

@@ -18,18 +18,17 @@ impl PointerProbe {
             hwnd: handle.0 as isize,
         })
     }
+}
 
-    /// Whether the probed window is currently shown.
-    pub fn window_visible(&self) -> bool {
+impl crate::platform::window::PointerProbe for PointerProbe {
+    fn window_visible(&self) -> bool {
         use windows::Win32::Foundation::HWND;
         use windows::Win32::UI::WindowsAndMessaging::IsWindowVisible;
 
         unsafe { IsWindowVisible(HWND(self.hwnd as *mut _)).as_bool() }
     }
 
-    /// `None` while no mouse button is held; otherwise whether the cursor is
-    /// outside every window owned by this process.
-    pub fn pressed_outside(&self) -> Option<bool> {
+    fn pressed_outside(&self) -> Option<bool> {
         use windows::Win32::Foundation::POINT;
         use windows::Win32::System::Threading::GetCurrentProcessId;
         use windows::Win32::UI::Input::KeyboardAndMouse::{VK_LBUTTON, VK_MBUTTON, VK_RBUTTON};

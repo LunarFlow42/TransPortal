@@ -6,7 +6,9 @@
 
 use super::OcrMode;
 use super::picture::Cancellation;
+use crate::platform::PlatformWindow;
 use crate::platform::desktop::{DesktopCapture, ScreenRect};
+use crate::platform::window::WindowOps;
 use base64::{Engine, engine::general_purpose::STANDARD};
 use image::ImageEncoder;
 use image::codecs::jpeg::JpegEncoder;
@@ -234,7 +236,7 @@ impl RegionService {
             .transparent(true)
             .build()
             .map_err(|e| e.to_string())?;
-            crate::platform::configure_transparent_window(&window);
+            PlatformWindow::configure_transparent_window(&window);
             Ok(window)
         }
     }

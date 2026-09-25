@@ -1,6 +1,8 @@
 //! Configurable global shortcuts and non-consuming Windows copy/snip gestures.
 
 use crate::core::ocr::{OcrMode, OcrService};
+use crate::platform::PlatformWindow;
+use crate::platform::window::WindowOps;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::sync::Mutex;
@@ -694,7 +696,7 @@ pub fn on_input_translate(app: &AppHandle) {
     }
     if let Some(window) = app.get_webview_window("shell") {
         if !is_pinned() || !window.is_visible().unwrap_or(false) {
-            let _ = crate::platform::place_window_smartly(&window, None, true, false);
+            let _ = PlatformWindow::place_window_smartly(&window, None, true, false);
         }
         crate::core::shell::present(app, false, |window| {
             let _ = window.unminimize();
@@ -848,12 +850,8 @@ pub fn show_shell_with_anchor(
         crate::core::shell::present(app, no_activate, |window| {
             // In no-activate mode the placement call is what shows the window.
             if reposition {
-                let _ = crate::platform::place_window_smartly(
-                    window,
-                    anchor_bounds,
-                    false,
-                    no_activate,
-                );
+                let _ =
+                    PlatformWindow::place_window_smartly(window, anchor_bounds, false, no_activate);
             }
             if !no_activate || !window.is_visible().unwrap_or(false) {
                 let _ = window.unminimize();

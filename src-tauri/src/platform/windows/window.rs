@@ -179,6 +179,17 @@ pub fn force_hide_window<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
     }
 }
 
+/// Whether `window` is the foreground window.
+pub fn is_foreground_window<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) -> bool {
+    use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+
+    let foreground = unsafe { GetForegroundWindow() }.0 as usize;
+    window
+        .hwnd()
+        .ok()
+        .is_some_and(|handle| handle.0 as usize == foreground)
+}
+
 /// Intelligently places the window near the given anchor bounds or cursor,
 /// with multi-monitor awareness, collision detection, and smart flip-to-top.
 pub fn place_window_smartly<R: tauri::Runtime>(

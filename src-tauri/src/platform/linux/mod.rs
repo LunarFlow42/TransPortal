@@ -25,5 +25,6 @@ use super::{Backend, Capabilities};
 pub struct LinuxBackend;
 
 impl Backend for LinuxBackend {
+    type Window = <UnsupportedBackend as Backend>::Window;
     const CAPABILITIES: Capabilities = <UnsupportedBackend as Backend>::CAPABILITIES;
 }

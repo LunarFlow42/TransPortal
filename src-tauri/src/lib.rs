@@ -3,6 +3,8 @@ pub mod core;
 pub mod platform;
 
 use crate::core::{dictionary, integrity, ocr, selection, shell, shortcut};
+use crate::platform::PlatformWindow;
+use crate::platform::window::WindowOps;
 
 use tauri::{
     AppHandle, Manager,
@@ -13,7 +15,7 @@ use tauri::{
 /// Bring the shell bubble to the foreground.
 fn focus_shell<R: tauri::Runtime>(app: &AppHandle<R>) {
     shell::present(app, false, |window| {
-        platform::configure_transparent_window(window);
+        PlatformWindow::configure_transparent_window(window);
         let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();
@@ -49,7 +51,7 @@ pub fn open_or_focus_settings<R: tauri::Runtime>(
         .build()
         .map_err(|e| e.to_string())?;
 
-        platform::configure_transparent_window(&window);
+        PlatformWindow::configure_transparent_window(&window);
         let win_clone = window.clone();
         window.on_window_event(move |event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
@@ -184,7 +186,7 @@ pub fn run() {
             app.state::<ocr::OcrService>()
                 .install_observer(app.handle());
             if let Some(window) = app.get_webview_window("shell") {
-                platform::configure_transparent_window(&window);
+                PlatformWindow::configure_transparent_window(&window);
             }
             shortcut::register(app.handle());
             shortcut::start_clipboard_monitor(app.handle());

@@ -1,6 +1,6 @@
 //! Interactive move/resize observation through a window subclass.
 
-use crate::platform::SizeMove;
+use crate::platform::window::SizeMove;
 
 struct SizeMoveObserver {
     on_phase: Box<dyn Fn(SizeMove)>,

@@ -12,6 +12,7 @@
 use serde::Serialize;
 use tauri::AppHandle;
 use tauri_plugin_clipboard_manager::ClipboardExt;
+use window::WindowOps;
 
 pub mod desktop;
 pub mod imaging;
@@ -20,6 +21,7 @@ pub mod ocr;
 pub mod placement;
 pub mod selection;
 pub mod system;
+pub mod window;
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -71,39 +73,19 @@ impl Capabilities {
 /// One implementation per target OS. Every backend must name a type for each
 /// contract, so a backend that falls behind the contracts fails to compile.
 pub trait Backend {
+    type Window: WindowOps;
     const CAPABILITIES: Capabilities;
 }
+
+pub type PlatformWindow = <ActiveBackend as Backend>::Window;
 
 /// Capabilities of the backend compiled for this target.
 pub const CAPABILITIES: Capabilities = <ActiveBackend as Backend>::CAPABILITIES;
 
 #[cfg(not(target_os = "windows"))]
 use unsupported::FallbackSelectionReader;
-#[cfg(not(target_os = "windows"))]
-pub use unsupported::{
-    PointerProbe, configure_transparent_window, force_hide_window, get_global_cursor_pos,
-    observe_size_move, place_window_smartly, resize_and_clamp_window, set_window_acrylic,
-    set_window_theme,
-};
 #[cfg(target_os = "windows")]
 use windows::WindowsSelectionReader;
-#[cfg(target_os = "windows")]
-pub use windows::{
-    PointerProbe, configure_transparent_window, force_hide_window, get_global_cursor_pos,
-    observe_size_move, place_window_smartly, resize_and_clamp_window, set_window_acrylic,
-    set_window_theme,
-};
-
-/// Phases of an interactive (modal) move or resize of a window.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SizeMove {
-    /// The user grabbed an edge, the resize grip or a drag handle.
-    Start,
-    /// The first size change of the current interaction.
-    Resize,
-    /// The interaction ended; `resized` tells whether the size changed.
-    End { resized: bool },
-}
 
 /// Screen bounding box of selected text in physical pixels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -303,6 +285,7 @@ mod tests {
 
     /// Compile-time and runtime check that a backend provides every contract.
     fn exercise<B: Backend>() -> Capabilities {
+        let _probe: Option<<B::Window as WindowOps>::Probe> = None;
         B::CAPABILITIES
     }
 

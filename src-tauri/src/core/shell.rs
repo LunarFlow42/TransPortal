@@ -1,7 +1,8 @@
 //! Overlay (`shell` window) visibility: show/hide ordering, outside-click
 //! dismissal and move/resize reporting.
 
-use crate::platform::SizeMove;
+use crate::platform::PlatformWindow;
+use crate::platform::window::{PointerProbe, SizeMove, WindowOps};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
@@ -94,7 +95,7 @@ pub fn hide_now<R: Runtime>(app: &AppHandle<R>) {
 /// so the native hide makes it stick either way.
 fn conceal<R: Runtime>(window: &WebviewWindow<R>) -> Result<(), String> {
     let result = window.hide().map_err(|e| e.to_string());
-    crate::platform::force_hide_window(window);
+    PlatformWindow::force_hide_window(window);
     result
 }
 
@@ -106,7 +107,7 @@ fn may_hide(generation: Option<u64>, current: u64, size_moving: bool) -> bool {
 /// overlay is visible. A no-activate overlay never loses focus, so blur alone
 /// cannot dismiss it.
 fn watch_outside_clicks<R: Runtime>(app: &AppHandle<R>, window: &WebviewWindow<R>) {
-    let Some(probe) = crate::platform::PointerProbe::new(window) else {
+    let Some(probe) = PlatformWindow::pointer_probe(window) else {
         return;
     };
     if WATCHING_CLICKS.swap(true, Ordering::SeqCst) {
@@ -143,7 +144,7 @@ pub fn observe_size_move<R: Runtime>(app: &AppHandle<R>) {
         return;
     };
     let emitter = app.clone();
-    let result = crate::platform::observe_size_move(&window, move |phase| match phase {
+    let result = PlatformWindow::observe_size_move(&window, move |phase| match phase {
         SizeMove::Start => {
             SIZE_MOVING.store(true, Ordering::SeqCst);
             let _ = emitter.emit_to(SHELL_LABEL, SIZE_MOVE_EVENT, true);

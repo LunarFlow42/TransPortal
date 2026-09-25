@@ -6,6 +6,8 @@ use crate::core::translation::{
     StreamChunk, TranslateQuery, TranslateResult, Translator, openai::OpenAiConfig,
 };
 use crate::platform::CaptureOutcome;
+use crate::platform::PlatformWindow;
+use crate::platform::window::WindowOps;
 use serde::Serialize;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -428,7 +430,7 @@ pub struct CursorPosition {
 /// Return the current cursor position in physical screen coordinates across all monitors.
 #[tauri::command]
 pub fn get_cursor_position(app: AppHandle) -> Option<CursorPosition> {
-    if let Some((x, y)) = crate::platform::get_global_cursor_pos() {
+    if let Some((x, y)) = PlatformWindow::get_global_cursor_pos() {
         return Some(CursorPosition {
             x: x as f64,
             y: y as f64,
@@ -490,7 +492,7 @@ pub fn resize_and_clamp_window(
     width: f64,
     height: f64,
 ) -> Result<(), String> {
-    crate::platform::resize_and_clamp_window(&window, width, height)
+    PlatformWindow::resize_and_clamp_window(&window, width, height)
 }
 
 /// Hide the overlay unless a newer show superseded the frontend's dismiss.
@@ -501,13 +503,13 @@ pub async fn hide_shell(app: AppHandle, generation: Option<u64>) -> Result<bool,
 
 #[tauri::command]
 pub fn set_window_acrylic(window: tauri::WebviewWindow, enabled: bool) -> Result<(), String> {
-    crate::platform::set_window_acrylic(&window, enabled);
+    PlatformWindow::set_window_acrylic(&window, enabled);
     Ok(())
 }
 
 #[tauri::command]
 pub fn set_window_theme(window: tauri::WebviewWindow, dark: bool) -> Result<(), String> {
-    crate::platform::set_window_theme(&window, dark);
+    PlatformWindow::set_window_theme(&window, dark);
     Ok(())
 }
 
