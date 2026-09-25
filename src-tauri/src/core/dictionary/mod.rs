@@ -8,6 +8,8 @@
 //! Lookups never fabricate data: an unknown word returns `Ok(None)` and the
 //! frontend falls back to the AI provider.
 
+pub mod eccedict;
+pub mod examples;
 pub mod lookup;
 
 pub use lookup::{DictStatus, LookupService, SourceInfo};

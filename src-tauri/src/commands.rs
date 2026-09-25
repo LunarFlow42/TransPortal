@@ -1,81 +1,14 @@
+use crate::core::dictionary::eccedict::{self, DictProgress};
 use crate::core::dictionary::{DictEntry, ExampleSentence};
 use crate::core::dictionary::{DictStatus, LookupService, SourceInfo};
+use crate::core::intent::{IntentResult, classify_intent};
 use crate::core::translation::{
-    StreamChunk, TranslateQuery, TranslateResult, Translator,
-    lang::{DetectedLang, detect_language},
-    openai::{OpenAiCompatibleProvider, OpenAiConfig},
+    StreamChunk, TranslateQuery, TranslateResult, Translator, openai::OpenAiConfig,
 };
 use crate::native::CaptureOutcome;
-use futures_util::StreamExt;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, State};
-use tokio::io::AsyncWriteExt;
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum TextIntent {
-    Word,
-    Sentence,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct IntentResult {
-    pub intent: TextIntent,
-    pub word_count: usize,
-    pub char_count: usize,
-    pub clean_text: String,
-    pub is_pure_ascii: bool,
-}
-
-/// Chinese and Japanese are written without spaces, so whitespace cannot
-/// separate words there. Dictionary headwords rarely exceed four characters
-/// (idioms included); longer runs are phrases or sentences to translate.
-const MAX_UNSPACED_WORD_CHARS: usize = 4;
-
-/// Fast heuristic text granularity detector (< 1ms).
-///
-/// Distinguishes single words / short phrases (word card) from sentences and
-/// paragraphs (ghost bubble). Shared by the IPC command and the hotkey path.
-pub fn classify_intent(text: &str) -> IntentResult {
-    let clean = text.trim().to_string();
-    let char_count = clean.chars().count();
-    let is_pure_ascii = clean.is_ascii();
-
-    let has_sentence_punctuation =
-        clean.contains(['.', '?', '!', ';', '。', '？', '！', '；', '\n']);
-
-    let words: Vec<&str> = clean.split_whitespace().collect();
-    let word_count = words.len();
-    let unspaced = matches!(
-        detect_language(&clean),
-        DetectedLang::Chinese | DetectedLang::Japanese
-    );
-
-    let intent = if word_count == 0 {
-        TextIntent::Word
-    } else if has_sentence_punctuation {
-        TextIntent::Sentence
-    } else if unspaced {
-        if word_count == 1 && char_count <= MAX_UNSPACED_WORD_CHARS {
-            TextIntent::Word
-        } else {
-            TextIntent::Sentence
-        }
-    } else if word_count <= 2 && char_count <= 40 {
-        TextIntent::Word
-    } else {
-        TextIntent::Sentence
-    };
-
-    IntentResult {
-        intent,
-        word_count,
-        char_count,
-        clean_text: clean,
-        is_pure_ascii,
-    }
-}
 
 /// IPC command wrapper around [`classify_intent`].
 #[tauri::command]
@@ -424,36 +357,14 @@ pub fn pause_auto_ocr(paused: bool, app: AppHandle) -> Result<(), String> {
         .pause(&app, paused)
 }
 
-/// Progress payload for the full-dictionary download + import pipeline.
-#[derive(Debug, Clone, Serialize)]
-pub struct DictProgress {
-    /// `downloading` | `importing` | `done`
-    pub stage: String,
-    pub downloaded: u64,
-    pub total: Option<u64>,
-    pub imported: Option<usize>,
-}
-
 /// Import an ECCEDICT-format CSV file into the local redb store.
 #[tauri::command]
 pub async fn import_eccedict(
     path: String,
     service: State<'_, LookupService>,
 ) -> Result<usize, String> {
-    let store = service.local_handle();
-    let count = tauri::async_runtime::spawn_blocking(move || store.import_csv_file(&path))
-        .await
-        .map_err(|e| e.to_string())?
-        .map_err(|e| e.to_string())?;
-    service.invalidate_cache();
-    Ok(count)
+    eccedict::import_file(&service, path).await
 }
-
-/// Full ECCEDICT CSV mirrors, tried in order (jsdelivr first for CN networks).
-const ECCEDICT_CSV_URLS: [&str; 2] = [
-    "https://cdn.jsdelivr.net/gh/H1DDENADM1N/ECCEDICT@master/ecdict.csv",
-    "https://raw.githubusercontent.com/H1DDENADM1N/ECCEDICT/master/ecdict.csv",
-];
 
 /// Download the full (~63 MB) ECCEDICT CSV with progress, then import it.
 #[tauri::command]
@@ -461,71 +372,10 @@ pub async fn download_eccedict(
     on_progress: tauri::ipc::Channel<DictProgress>,
     service: State<'_, LookupService>,
 ) -> Result<usize, String> {
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(600))
-        .build()
-        .map_err(|e| e.to_string())?;
-
-    let mut response = None;
-    let mut last_error = String::new();
-    for url in ECCEDICT_CSV_URLS {
-        match client.get(url).send().await {
-            Ok(resp) if resp.status().is_success() => {
-                response = Some(resp);
-                break;
-            }
-            Ok(resp) => last_error = format!("{url} -> HTTP {}", resp.status()),
-            Err(err) => last_error = format!("{url} -> {err}"),
-        }
-    }
-    let response = response.ok_or_else(|| format!("all mirrors failed: {last_error}"))?;
-
-    let total = response.content_length();
-    let path = std::env::temp_dir().join("transportal-eccedict.csv");
-    let mut file = tokio::fs::File::create(&path)
-        .await
-        .map_err(|e| format!("failed to create temp file: {e}"))?;
-
-    let mut downloaded: u64 = 0;
-    let mut stream = response.bytes_stream();
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|e| format!("download stream error: {e}"))?;
-        file.write_all(&chunk)
-            .await
-            .map_err(|e| format!("failed to write download: {e}"))?;
-        downloaded += chunk.len() as u64;
-        let _ = on_progress.send(DictProgress {
-            stage: "downloading".to_string(),
-            downloaded,
-            total,
-            imported: None,
-        });
-    }
-    drop(file);
-
-    let _ = on_progress.send(DictProgress {
-        stage: "importing".to_string(),
-        downloaded,
-        total,
-        imported: None,
-    });
-
-    let path = path.to_string_lossy().to_string();
-    let store = service.local_handle();
-    let count = tauri::async_runtime::spawn_blocking(move || store.import_csv_file(&path))
-        .await
-        .map_err(|e| e.to_string())?
-        .map_err(|e| e.to_string())?;
-    service.invalidate_cache();
-
-    let _ = on_progress.send(DictProgress {
-        stage: "done".to_string(),
-        downloaded,
-        total,
-        imported: Some(count),
-    });
-
-    Ok(count)
+    eccedict::download_and_import(&service, |progress| {
+        let _ = on_progress.send(progress);
+    })
+    .await
 }
 
 /// Capture the current foreground selection (UIA, then clipboard fallback).
@@ -625,36 +475,7 @@ pub async fn generate_examples(
     word: String,
     openai_config: OpenAiConfig,
 ) -> Result<Vec<ExampleSentence>, String> {
-    if openai_config.api_key.trim().is_empty() {
-        return Ok(Vec::new());
-    }
-
-    const SYSTEM: &str = "You are an English dictionary assistant. \
-Return ONLY a JSON array of 2 to 3 example sentences. Each item must be \
-{\"en\": \"<English sentence>\", \"zh\": \"<Chinese translation>\"}. \
-No prose, no markdown, no code fences.";
-
-    let provider = OpenAiCompatibleProvider::new(openai_config);
-    let content = provider
-        .chat(SYSTEM, &format!("Word: {word}"))
-        .await
-        .map_err(|e| e.to_string())?;
-
-    Ok(parse_examples(&content))
-}
-
-/// Extract a JSON array of `{en, zh}` objects from an LLM reply.
-fn parse_examples(content: &str) -> Vec<ExampleSentence> {
-    let start = content.find('[');
-    let end = content.rfind(']');
-    let Some((start, end)) = start.zip(end) else {
-        return Vec::new();
-    };
-    if end <= start {
-        return Vec::new();
-    }
-
-    serde_json::from_str::<Vec<ExampleSentence>>(&content[start..=end]).unwrap_or_default()
+    crate::core::dictionary::examples::generate(&word, openai_config).await
 }
 
 #[tauri::command]
@@ -698,64 +519,4 @@ pub fn get_memory_usage() -> Result<crate::native::memory::MemoryReport, String>
 #[tauri::command]
 pub fn trim_memory() -> Result<crate::native::memory::TrimResult, String> {
     crate::native::memory::trim_memory()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_detect_intent_word() {
-        let res = detect_intent("portal".to_string());
-        assert_eq!(res.intent, TextIntent::Word);
-        assert_eq!(res.word_count, 1);
-
-        let res2 = detect_intent("cognitive load".to_string());
-        assert_eq!(res2.intent, TextIntent::Word);
-        assert_eq!(res2.word_count, 2);
-    }
-
-    #[test]
-    fn test_detect_intent_sentence() {
-        let res = detect_intent("This is a cognitive portal for languages.".to_string());
-        assert_eq!(res.intent, TextIntent::Sentence);
-
-        let res2 = detect_intent("Hello world! How are you doing today?".to_string());
-        assert_eq!(res2.intent, TextIntent::Sentence);
-    }
-
-    #[test]
-    fn test_detect_intent_unspaced_scripts() {
-        // Whole unpunctuated Chinese phrases are one whitespace "word".
-        for word in ["打", "你好", "取词", "一石二鸟"] {
-            assert_eq!(
-                detect_intent(word.to_string()).intent,
-                TextIntent::Word,
-                "{word}"
-            );
-        }
-        for phrase in [
-            "今天天气真不错",
-            "计算机科学与技术",
-            "你好 世界",
-            "これは日本語です",
-        ] {
-            assert_eq!(
-                detect_intent(phrase.to_string()).intent,
-                TextIntent::Sentence,
-                "{phrase}"
-            );
-        }
-    }
-
-    #[test]
-    fn test_parse_examples() {
-        let raw = "```json\n[{\"en\":\"A portal opened.\",\"zh\":\"传送门打开了。\"}]\n```";
-        let examples = parse_examples(raw);
-        assert_eq!(examples.len(), 1);
-        assert_eq!(examples[0].en, "A portal opened.");
-        assert_eq!(examples[0].zh, "传送门打开了。");
-
-        assert!(parse_examples("no json here").is_empty());
-    }
 }

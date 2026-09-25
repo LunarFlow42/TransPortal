@@ -4,6 +4,7 @@
 pub mod anki;
 pub mod dictionary;
 pub mod integrity;
+pub mod intent;
 pub mod ocr;
 pub mod selection;
 pub mod shell;
