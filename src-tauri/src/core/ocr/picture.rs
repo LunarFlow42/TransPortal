@@ -1,7 +1,7 @@
 //! Original image coordinates and provider-independent image translation.
 
 use super::OcrImage;
-use crate::provider::{TranslateQuery, Translator};
+use crate::core::translation::{TranslateQuery, Translator};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use futures_util::{StreamExt, stream};
 use serde::{Deserialize, Serialize};
@@ -192,7 +192,8 @@ pub async fn translate_blocks(
             let result = if let Some(text) = cached {
                 Ok(text)
             } else {
-                let resolved_target = crate::provider::resolve_target_lang(&source, Some(&target));
+                let resolved_target =
+                    crate::core::translation::resolve_target_lang(&source, Some(&target));
                 let query = TranslateQuery {
                     text: source.clone(),
                     source_lang: None,
@@ -252,7 +253,7 @@ pub async fn translate_blocks(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::provider::{ProviderError, TranslateResult};
+    use crate::core::translation::{ProviderError, TranslateResult};
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     struct Provider(AtomicUsize);

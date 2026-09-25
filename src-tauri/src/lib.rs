@@ -1,15 +1,9 @@
-pub mod anki;
 pub mod commands;
-pub mod dict;
-pub mod dictionary;
-pub mod integrity;
+pub mod core;
 pub mod native;
-pub mod ocr;
-pub mod provider;
-pub mod selection;
-pub mod shell;
-pub mod shortcut;
 mod shortcut_sequence;
+
+use crate::core::{dictionary, integrity, ocr, selection, shell, shortcut};
 
 use tauri::{
     AppHandle, Manager,
@@ -132,9 +126,10 @@ fn setup_dictionary(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> 
     let data_dir = app.path().app_data_dir()?;
     std::fs::create_dir_all(&data_dir)?;
     let db_path = data_dir.join("transportal.redb");
-    let store = dict::DictStore::open(&db_path).map_err(|e| -> Box<dyn std::error::Error> {
-        Box::new(std::io::Error::other(e.to_string()))
-    })?;
+    let store =
+        dictionary::DictStore::open(&db_path).map_err(|e| -> Box<dyn std::error::Error> {
+            Box::new(std::io::Error::other(e.to_string()))
+        })?;
     let service = dictionary::LookupService::new(std::sync::Arc::new(store), db_path);
     app.manage(service);
     Ok(())

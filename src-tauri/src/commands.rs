@@ -1,11 +1,11 @@
-use crate::dict::{DictEntry, ExampleSentence};
-use crate::dictionary::{DictStatus, LookupService, SourceInfo};
-use crate::native::CaptureOutcome;
-use crate::provider::{
+use crate::core::dictionary::{DictEntry, ExampleSentence};
+use crate::core::dictionary::{DictStatus, LookupService, SourceInfo};
+use crate::core::translation::{
     StreamChunk, TranslateQuery, TranslateResult, Translator,
     lang::{DetectedLang, detect_language},
     openai::{OpenAiCompatibleProvider, OpenAiConfig},
 };
+use crate::native::CaptureOutcome;
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -85,7 +85,7 @@ pub fn detect_intent(text: String) -> IntentResult {
 
 /// Build the provider selected by name from the microkernel registry.
 fn build_provider(provider: Option<String>, config: Option<OpenAiConfig>) -> Arc<dyn Translator> {
-    crate::provider::create(provider.as_deref().unwrap_or("google_free"), config)
+    crate::core::translation::create(provider.as_deref().unwrap_or("google_free"), config)
 }
 
 /// Full translation command.
@@ -169,46 +169,48 @@ pub fn set_dict_source_order(
 /// Replace only the selection shortcut; OCR shortcuts remain registered.
 #[tauri::command]
 pub fn set_hotkey(accelerator: String, app: AppHandle) -> Result<(), String> {
-    crate::shortcut::set_selection_hotkey(&app, &accelerator)
+    crate::core::shortcut::set_selection_hotkey(&app, &accelerator)
 }
 
 /// Configure any global shortcut action individually.
 #[tauri::command]
 pub fn set_shortcut(
-    action: crate::shortcut::ShortcutAction,
+    action: crate::core::shortcut::ShortcutAction,
     accelerator: String,
     app: AppHandle,
 ) -> Result<(), String> {
-    crate::shortcut::set_shortcut(&app, action, &accelerator)
+    crate::core::shortcut::set_shortcut(&app, action, &accelerator)
 }
 
 #[tauri::command]
-pub fn shortcut_status(app: AppHandle) -> crate::shortcut::ShortcutReport {
-    crate::shortcut::status(&app)
+pub fn shortcut_status(app: AppHandle) -> crate::core::shortcut::ShortcutReport {
+    crate::core::shortcut::status(&app)
 }
 
 #[tauri::command]
 pub fn finish_startup_checks(app: AppHandle) {
-    crate::shortcut::finish_startup_checks(&app);
+    crate::core::shortcut::finish_startup_checks(&app);
 }
 
 #[tauri::command]
-pub fn retry_shortcuts(app: AppHandle) -> crate::shortcut::ShortcutReport {
-    crate::shortcut::retry(&app)
+pub fn retry_shortcuts(app: AppHandle) -> crate::core::shortcut::ShortcutReport {
+    crate::core::shortcut::retry(&app)
 }
 
 #[tauri::command]
 pub fn integrity_status(
-    state: State<'_, crate::integrity::IntegrityState>,
-) -> crate::integrity::IntegrityReport {
+    state: State<'_, crate::core::integrity::IntegrityState>,
+) -> crate::core::integrity::IntegrityReport {
     state.0.lock().unwrap().clone()
 }
 
 #[tauri::command]
-pub async fn verify_integrity(app: AppHandle) -> Result<crate::integrity::IntegrityReport, String> {
+pub async fn verify_integrity(
+    app: AppHandle,
+) -> Result<crate::core::integrity::IntegrityReport, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let report = crate::integrity::startup_report();
-        *app.state::<crate::integrity::IntegrityState>()
+        let report = crate::core::integrity::startup_report();
+        *app.state::<crate::core::integrity::IntegrityState>()
             .0
             .lock()
             .unwrap() = report.clone();
@@ -224,33 +226,37 @@ pub async fn verify_integrity(app: AppHandle) -> Result<crate::integrity::Integr
 }
 
 #[tauri::command]
-pub async fn ocr_status(app: AppHandle) -> Result<crate::ocr::OcrStatus, String> {
-    tauri::async_runtime::spawn_blocking(move || app.state::<crate::ocr::OcrService>().status())
-        .await
-        .map_err(|e| e.to_string())
+pub async fn ocr_status(app: AppHandle) -> Result<crate::core::ocr::OcrStatus, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<crate::core::ocr::OcrService>().status()
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn set_ocr_language(language: Option<String>, app: AppHandle) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
-        app.state::<crate::ocr::OcrService>().set_language(language)
+        app.state::<crate::core::ocr::OcrService>()
+            .set_language(language)
     })
     .await
     .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-pub async fn get_ocr_config(app: AppHandle) -> crate::ocr::registry::OcrConfig {
-    app.state::<crate::ocr::OcrService>().config()
+pub async fn get_ocr_config(app: AppHandle) -> crate::core::ocr::registry::OcrConfig {
+    app.state::<crate::core::ocr::OcrService>().config()
 }
 
 #[tauri::command]
 pub async fn set_ocr_config(
-    config: crate::ocr::registry::OcrConfig,
+    config: crate::core::ocr::registry::OcrConfig,
     app: AppHandle,
-) -> Result<crate::ocr::registry::OcrConfig, String> {
+) -> Result<crate::core::ocr::registry::OcrConfig, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        app.state::<crate::ocr::OcrService>().configure(config)
+        app.state::<crate::core::ocr::OcrService>()
+            .configure(config)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -259,9 +265,9 @@ pub async fn set_ocr_config(
 #[tauri::command]
 pub async fn install_onnx_ocr(
     app: AppHandle,
-    on_progress: tauri::ipc::Channel<crate::ocr::assets::InstallProgress>,
+    on_progress: tauri::ipc::Channel<crate::core::ocr::assets::InstallProgress>,
 ) -> Result<(), String> {
-    let assets = app.state::<crate::ocr::OcrService>().assets.clone();
+    let assets = app.state::<crate::core::ocr::OcrService>().assets.clone();
     assets
         .install(&move |progress| {
             let _ = on_progress.send(progress);
@@ -274,26 +280,31 @@ pub async fn install_onnx_ocr(
 #[tauri::command]
 pub async fn ocr_image(
     path: String,
-    mode: crate::ocr::OcrMode,
+    mode: crate::core::ocr::OcrMode,
     app: AppHandle,
 ) -> Result<u64, String> {
-    app.state::<crate::ocr::OcrService>()
-        .start_image(&app, mode, std::path::PathBuf::from(path))
+    app.state::<crate::core::ocr::OcrService>().start_image(
+        &app,
+        mode,
+        std::path::PathBuf::from(path),
+    )
 }
 
 #[tauri::command]
-pub async fn start_ocr(mode: crate::ocr::OcrMode, app: AppHandle) -> Result<u64, String> {
-    app.state::<crate::ocr::OcrService>()
+pub async fn start_ocr(mode: crate::core::ocr::OcrMode, app: AppHandle) -> Result<u64, String> {
+    app.state::<crate::core::ocr::OcrService>()
         .start(&app, mode, None)
 }
 
 #[tauri::command]
 pub async fn cancel_ocr(app: AppHandle) {
-    app.state::<crate::ocr::OcrService>().cancel(&app);
+    app.state::<crate::core::ocr::OcrService>().cancel(&app);
 }
 
 #[tauri::command]
-pub fn ocr_latest(service: State<'_, crate::ocr::OcrService>) -> Option<crate::ocr::OcrEvent> {
+pub fn ocr_latest(
+    service: State<'_, crate::core::ocr::OcrService>,
+) -> Option<crate::core::ocr::OcrEvent> {
     service.latest()
 }
 
@@ -305,11 +316,11 @@ pub async fn translate_ocr_picture(
     provider: Option<String>,
     openai_config: Option<OpenAiConfig>,
     app: AppHandle,
-) -> Result<crate::ocr::picture::PictureTranslation, String> {
+) -> Result<crate::core::ocr::picture::PictureTranslation, String> {
     let (picture, cancel) = app
-        .state::<crate::ocr::OcrService>()
+        .state::<crate::core::ocr::OcrService>()
         .picture_translation(id, texts)?;
-    crate::ocr::picture::translate_blocks(
+    crate::core::ocr::picture::translate_blocks(
         &picture.blocks,
         build_provider(provider, openai_config),
         &target_lang,
@@ -327,7 +338,7 @@ pub async fn export_ocr_picture(
 ) -> Result<(), String> {
     use tauri_plugin_clipboard_manager::ClipboardExt;
     tauri::async_runtime::spawn_blocking(move || {
-        let image = crate::ocr::picture::decode_png(&data_url)?;
+        let image = crate::core::ocr::picture::decode_png(&data_url)?;
         if let Some(path) = path {
             image
                 .save_with_format(path, image::ImageFormat::Png)
@@ -349,26 +360,26 @@ pub async fn export_ocr_picture(
 
 #[tauri::command]
 pub async fn begin_auto_ocr(
-    options: crate::ocr::monitor::MonitorOptions,
+    options: crate::core::ocr::monitor::MonitorOptions,
     app: AppHandle,
 ) -> Result<u64, String> {
-    app.state::<crate::ocr::monitor::MonitorService>()
+    app.state::<crate::core::ocr::monitor::MonitorService>()
         .begin(&app, options)
         .await
 }
 
 #[tauri::command]
 pub fn auto_ocr_latest(
-    service: State<'_, crate::ocr::monitor::MonitorService>,
-) -> crate::ocr::monitor::MonitorUpdate {
+    service: State<'_, crate::core::ocr::monitor::MonitorService>,
+) -> crate::core::ocr::monitor::MonitorUpdate {
     service.latest()
 }
 
 /// Shared native region selector, used by snips and auto-translation alike.
 #[tauri::command]
 pub fn region_selection(
-    service: State<'_, crate::ocr::region::RegionService>,
-) -> Option<crate::ocr::region::RegionSelection> {
+    service: State<'_, crate::core::ocr::region::RegionService>,
+) -> Option<crate::core::ocr::region::RegionSelection> {
     service.selection()
 }
 
@@ -376,7 +387,7 @@ pub fn region_selection(
 #[tauri::command]
 pub fn get_frozen_pixels(
     id: u64,
-    service: State<'_, crate::ocr::region::RegionService>,
+    service: State<'_, crate::core::ocr::region::RegionService>,
 ) -> Result<tauri::ipc::Response, String> {
     let raw = service.get_frozen_pixels(id)?;
     Ok(tauri::ipc::Response::new(raw))
@@ -388,28 +399,28 @@ pub fn confirm_region(
     region: crate::native::desktop::ScreenRect,
     app: AppHandle,
 ) -> Result<(), String> {
-    crate::ocr::region::confirm(&app, id, region)
+    crate::core::ocr::region::confirm(&app, id, region)
 }
 
 #[tauri::command]
 pub fn cancel_region(id: Option<u64>, app: AppHandle) {
-    crate::ocr::region::cancel(&app, id);
+    crate::core::ocr::region::cancel(&app, id);
 }
 
 #[tauri::command]
 pub async fn benchmark_ocr(app: AppHandle) -> Result<u64, String> {
-    app.state::<crate::ocr::OcrService>().benchmark()
+    app.state::<crate::core::ocr::OcrService>().benchmark()
 }
 
 #[tauri::command]
 pub fn stop_auto_ocr(discard: bool, app: AppHandle) {
-    app.state::<crate::ocr::monitor::MonitorService>()
+    app.state::<crate::core::ocr::monitor::MonitorService>()
         .stop(&app, discard);
 }
 
 #[tauri::command]
 pub fn pause_auto_ocr(paused: bool, app: AppHandle) -> Result<(), String> {
-    app.state::<crate::ocr::monitor::MonitorService>()
+    app.state::<crate::core::ocr::monitor::MonitorService>()
         .pause(&app, paused)
 }
 
@@ -521,7 +532,7 @@ pub async fn download_eccedict(
 #[tauri::command]
 pub async fn capture_selection(app: AppHandle) -> Result<CaptureOutcome, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        app.state::<crate::selection::SelectionService>()
+        app.state::<crate::core::selection::SelectionService>()
             .capture(&app)
     })
     .await
@@ -530,17 +541,17 @@ pub async fn capture_selection(app: AppHandle) -> Result<CaptureOutcome, String>
 
 #[tauri::command]
 pub fn set_double_copy_enabled(enabled: bool, app: AppHandle) {
-    crate::shortcut::set_double_copy_enabled(&app, enabled);
+    crate::core::shortcut::set_double_copy_enabled(&app, enabled);
 }
 
 #[tauri::command]
 pub fn set_clipboard_monitor_enabled(enabled: bool) {
-    crate::shortcut::set_clipboard_monitor_enabled(enabled);
+    crate::core::shortcut::set_clipboard_monitor_enabled(enabled);
 }
 
 #[tauri::command]
 pub fn set_ink_translate_key(key: String) {
-    crate::shortcut::set_ink_translate_key(&key);
+    crate::core::shortcut::set_ink_translate_key(&key);
 }
 
 #[tauri::command]
@@ -550,7 +561,7 @@ pub async fn replace_captured_selection(
     app: AppHandle,
 ) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
-        app.state::<crate::selection::SelectionService>()
+        app.state::<crate::core::selection::SelectionService>()
             .replace(&app, token, &text)
     })
     .await
@@ -584,25 +595,25 @@ pub fn get_cursor_position(app: AppHandle) -> Option<CursorPosition> {
 /// Sets whether the shell overlay window is pinned in place.
 #[tauri::command]
 pub fn set_window_pinned(pinned: bool) {
-    crate::shortcut::set_pinned(pinned);
+    crate::core::shortcut::set_pinned(pinned);
 }
 
 /// Probe AnkiConnect and return its API version.
 #[tauri::command]
 pub async fn anki_test_connection(endpoint: String) -> Result<i64, String> {
-    crate::anki::version(&endpoint).await
+    crate::core::anki::version(&endpoint).await
 }
 
 /// List Anki deck names.
 #[tauri::command]
 pub async fn anki_list_decks(endpoint: String) -> Result<Vec<String>, String> {
-    crate::anki::deck_names(&endpoint).await
+    crate::core::anki::deck_names(&endpoint).await
 }
 
 /// Add a note (word + phonetic + original context sentence) to Anki.
 #[tauri::command]
-pub async fn anki_add_note(note: crate::anki::AnkiNoteRequest) -> Result<i64, String> {
-    crate::anki::add_note(&note).await
+pub async fn anki_add_note(note: crate::core::anki::AnkiNoteRequest) -> Result<i64, String> {
+    crate::core::anki::add_note(&note).await
 }
 
 /// Generate example sentences for a word via the configured LLM.
@@ -664,7 +675,7 @@ pub fn resize_and_clamp_window(
 /// Hide the overlay unless a newer show superseded the frontend's dismiss.
 #[tauri::command]
 pub async fn hide_shell(app: AppHandle, generation: Option<u64>) -> Result<bool, String> {
-    crate::shell::hide(&app, generation).await
+    crate::core::shell::hide(&app, generation).await
 }
 
 #[tauri::command]

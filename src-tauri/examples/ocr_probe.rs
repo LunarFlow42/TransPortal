@@ -5,9 +5,9 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
-use transportal_lib::ocr::assets::{OnnxAssets, current_platform, manifest};
-use transportal_lib::ocr::onnx::OnnxOcrEngine;
-use transportal_lib::ocr::{OcrEngine, OcrImage};
+use transportal_lib::core::ocr::assets::{OnnxAssets, current_platform, manifest};
+use transportal_lib::core::ocr::onnx::OnnxOcrEngine;
+use transportal_lib::core::ocr::{OcrEngine, OcrImage};
 
 fn option(args: &[String], name: &str) -> Option<String> {
     args.iter()

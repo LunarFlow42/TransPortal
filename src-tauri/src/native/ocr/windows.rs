@@ -1,5 +1,7 @@
-use crate::ocr::picture::OcrBlock;
-use crate::ocr::{OcrEngine, OcrEngineInfo, OcrImage, OcrLanguage, RecognizedText, fit_dimensions};
+use crate::core::ocr::picture::OcrBlock;
+use crate::core::ocr::{
+    OcrEngine, OcrEngineInfo, OcrImage, OcrLanguage, RecognizedText, fit_dimensions,
+};
 use windows::Globalization::Language;
 use windows::Graphics::Imaging::{
     BitmapAlphaMode, BitmapBufferAccessMode, BitmapPixelFormat, SoftwareBitmap,

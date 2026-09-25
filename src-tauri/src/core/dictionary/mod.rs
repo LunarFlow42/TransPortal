@@ -8,6 +8,10 @@
 //! Lookups never fabricate data: an unknown word returns `Ok(None)` and the
 //! frontend falls back to the AI provider.
 
+pub mod lookup;
+
+pub use lookup::{DictStatus, LookupService, SourceInfo};
+
 use csv::StringRecord;
 use redb::{Database, ReadableTableMetadata, TableDefinition};
 use serde::{Deserialize, Serialize};
@@ -147,7 +151,7 @@ impl DictStore {
 /// A pluggable word-lookup backend.
 ///
 /// Implementations may be online (network) or local (redb). The
-/// [`crate::dictionary::LookupService`] orchestrates them by priority.
+/// [`crate::core::dictionary::LookupService`] orchestrates them by priority.
 #[async_trait::async_trait]
 pub trait DictSource: Send + Sync {
     /// Stable identifier surfaced to the frontend, e.g. `local_eccedict`.

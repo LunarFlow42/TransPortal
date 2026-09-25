@@ -185,7 +185,7 @@ impl RegionService {
         owner: u64,
         cancel: Cancellation,
     ) -> Result<u64, String> {
-        crate::shell::hide_now(app);
+        crate::core::shell::hide_now(app);
         // A one-shot snip only needs the overlay hidden; continuous monitoring
         // must keep its own output out of every later capture.
         if let Err(error) = self.exclude_windows(app, true)

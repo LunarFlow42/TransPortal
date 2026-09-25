@@ -119,8 +119,8 @@ impl SelectionPlatform for WindowsSelection {
                     .map_err(|error| format!("无法核对选中文字：{error}"))?
             }
         };
-        if crate::selection::normalize_selection(&selected)
-            != crate::selection::normalize_selection(expected)
+        if crate::core::selection::normalize_selection(&selected)
+            != crate::core::selection::normalize_selection(expected)
         {
             return Err("选中的文字已变化，已取消替换。请重新取词。".into());
         }

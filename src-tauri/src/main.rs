@@ -3,7 +3,7 @@
 
 fn main() {
     if std::env::args_os().any(|argument| argument == "--check-integrity") {
-        let report = transportal_lib::integrity::check_current_executable();
+        let report = transportal_lib::core::integrity::check_current_executable();
         println!(
             "{}",
             serde_json::to_string(&report).expect("integrity report is serializable")

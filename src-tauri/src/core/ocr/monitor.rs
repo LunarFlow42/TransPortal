@@ -5,8 +5,8 @@ use super::picture::{
 };
 use super::region::{RegionPurpose, RegionService};
 use super::{OcrImage, OcrService};
+use crate::core::translation::OpenAiConfig;
 use crate::native::desktop::{DesktopCapture, ScreenRect};
-use crate::provider::OpenAiConfig;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::sync::{Arc, Mutex};
@@ -148,7 +148,7 @@ impl MonitorService {
                     state.error = Some(error.clone());
                 });
                 if !cancel.is_cancelled() {
-                    crate::shortcut::show_shell(app);
+                    crate::core::shortcut::show_shell(app);
                 }
                 return Err(error);
             }
@@ -173,7 +173,7 @@ impl MonitorService {
                     state.stage = "error".into();
                     state.error = Some(error);
                 });
-                crate::shortcut::show_shell(&window_app);
+                crate::core::shortcut::show_shell(&window_app);
             }
         })
         .map_err(|e| e.to_string())?;
@@ -197,7 +197,7 @@ impl MonitorService {
             (state.cancel.clone(), options)
         };
         RegionService::hide_window(app);
-        crate::shortcut::show_shell(app);
+        crate::core::shortcut::show_shell(app);
         Self::spawn(app, id, region, options, cancel);
         Ok(())
     }
@@ -237,7 +237,7 @@ impl MonitorService {
             .dismiss(app, |purpose, _| purpose == RegionPurpose::Monitor);
         self.restore_windows(app);
         if selecting {
-            crate::shortcut::show_shell(app);
+            crate::core::shortcut::show_shell(app);
         }
     }
 
@@ -281,7 +281,7 @@ impl MonitorService {
         options: MonitorOptions,
         cancel: Cancellation,
     ) {
-        let provider = crate::provider::create(&options.provider, options.openai_config);
+        let provider = crate::core::translation::create(&options.provider, options.openai_config);
         let mut cache = TranslationCache::new();
         let mut previous = None;
         // Give the region selector's hide a chance to reach the compositor.
@@ -325,7 +325,7 @@ impl MonitorService {
         id: u64,
         region: ScreenRect,
         target: &str,
-        provider: Arc<dyn crate::provider::Translator>,
+        provider: Arc<dyn crate::core::translation::Translator>,
         cancel: &Cancellation,
         cache: &mut TranslationCache,
         previous: &mut Option<[u8; 32]>,

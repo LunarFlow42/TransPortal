@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
-use transportal_lib::ocr::assets::{OnnxAssets, manifest};
+use transportal_lib::core::ocr::assets::{OnnxAssets, manifest};
 
 enum Value<'a> {
     Integer(u64),

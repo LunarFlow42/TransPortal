@@ -1,4 +1,4 @@
-use crate::ocr::{
+use crate::core::ocr::{
     ClipboardOrigin, OcrEngine, OcrEngineInfo, OcrImage, RecognizedText, ScreenCapture,
     ScreenEvent, ScreenObserver,
 };

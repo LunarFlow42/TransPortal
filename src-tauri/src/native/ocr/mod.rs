@@ -1,6 +1,6 @@
 //! Factories keep all platform conditions out of the OCR workflow and commands.
 
-use crate::ocr::{OcrEngine, ScreenCapture};
+use crate::core::ocr::{OcrEngine, ScreenCapture};
 use std::sync::Arc;
 
 #[cfg(not(target_os = "windows"))]

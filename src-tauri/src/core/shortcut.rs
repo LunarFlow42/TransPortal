@@ -1,6 +1,6 @@
 //! Configurable global shortcuts and non-consuming Windows copy/snip gestures.
 
-use crate::ocr::{OcrMode, OcrService};
+use crate::core::ocr::{OcrMode, OcrService};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::sync::Mutex;
@@ -302,7 +302,7 @@ fn apply_locked(
         state.bindings.get_mut(&action).unwrap().status.system =
             matches!(key, Some(BindingKey::SystemSnip | BindingKey::DoubleCopy));
         if action == ShortcutAction::DoubleCopy {
-            app.state::<crate::selection::SelectionService>()
+            app.state::<crate::core::selection::SelectionService>()
                 .set_double_copy(key == Some(BindingKey::DoubleCopy));
         }
         Ok(())
@@ -696,7 +696,7 @@ pub fn on_input_translate(app: &AppHandle) {
         if !is_pinned() || !window.is_visible().unwrap_or(false) {
             let _ = crate::native::place_window_smartly(&window, None, true, false);
         }
-        crate::shell::present(app, false, |window| {
+        crate::core::shell::present(app, false, |window| {
             let _ = window.unminimize();
             let _ = window.show();
             let _ = window.set_focus();
@@ -706,13 +706,13 @@ pub fn on_input_translate(app: &AppHandle) {
 }
 
 pub async fn on_replace_selection(app: &AppHandle) {
-    app.state::<crate::ocr::monitor::MonitorService>()
+    app.state::<crate::core::ocr::monitor::MonitorService>()
         .stop(app, true);
     app.state::<OcrService>().cancel(app);
     let app_clone = app.clone();
     let outcome = tauri::async_runtime::spawn_blocking(move || {
         app_clone
-            .state::<crate::selection::SelectionService>()
+            .state::<crate::core::selection::SelectionService>()
             .capture(&app_clone)
     })
     .await
@@ -734,9 +734,9 @@ pub async fn on_replace_selection(app: &AppHandle) {
     }
 
     let token = outcome.replace_token.unwrap();
-    let target_lang = crate::provider::resolve_target_lang(&outcome.text, Some("zh-CN"));
-    let provider = crate::provider::create("google_free", None);
-    let query = crate::provider::TranslateQuery {
+    let target_lang = crate::core::translation::resolve_target_lang(&outcome.text, Some("zh-CN"));
+    let provider = crate::core::translation::create("google_free", None);
+    let query = crate::core::translation::TranslateQuery {
         text: outcome.text,
         source_lang: None,
         target_lang: Some(target_lang.to_string()),
@@ -748,7 +748,7 @@ pub async fn on_replace_selection(app: &AppHandle) {
             let translated = result.translated_text;
             let replace_res = tauri::async_runtime::spawn_blocking(move || {
                 app_clone
-                    .state::<crate::selection::SelectionService>()
+                    .state::<crate::core::selection::SelectionService>()
                     .replace(&app_clone, token, &translated)
             })
             .await;
@@ -795,11 +795,11 @@ pub fn on_system_snip(app: &AppHandle, revision: u32) {
     }
 }
 pub fn on_hotkey(app: &AppHandle) {
-    app.state::<crate::ocr::monitor::MonitorService>()
+    app.state::<crate::core::ocr::monitor::MonitorService>()
         .stop(app, true);
     app.state::<OcrService>().cancel(app);
     let outcome = app
-        .state::<crate::selection::SelectionService>()
+        .state::<crate::core::selection::SelectionService>()
         .capture(app);
     let _ = app.emit_to("shell", SELECTION_EVENT, &outcome);
     show_shell_with_anchor(app, outcome.bounds.as_ref(), true);
@@ -820,10 +820,10 @@ pub fn on_double_copy(app: &AppHandle, revision: u32, window: usize) {
         return;
     }
     if let Some(outcome) = app
-        .state::<crate::selection::SelectionService>()
+        .state::<crate::core::selection::SelectionService>()
         .double_copy(app, revision, window)
     {
-        app.state::<crate::ocr::monitor::MonitorService>()
+        app.state::<crate::core::ocr::monitor::MonitorService>()
             .stop(app, true);
         app.state::<OcrService>().cancel(app);
         let _ = app.emit_to("shell", SELECTION_EVENT, &outcome);
@@ -845,7 +845,7 @@ pub fn show_shell_with_anchor(
     }
     if let Some(window) = app.get_webview_window("shell") {
         let reposition = !is_pinned() || !window.is_visible().unwrap_or(false);
-        crate::shell::present(app, no_activate, |window| {
+        crate::core::shell::present(app, no_activate, |window| {
             // In no-activate mode the placement call is what shows the window.
             if reposition {
                 let _ =

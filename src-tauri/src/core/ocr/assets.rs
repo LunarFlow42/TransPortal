@@ -11,28 +11,49 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 use tokio::io::AsyncWriteExt;
 
-const MANIFEST_JSON: &str = include_str!("../../resources/ocr/manifest.json");
-const NOTICE: &str = include_str!("../../resources/ocr/NOTICE.md");
+const MANIFEST_JSON: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/resources/ocr/manifest.json"
+));
+const NOTICE: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/resources/ocr/NOTICE.md"
+));
 const LICENSES: &[(&str, &str)] = &[
     (
         "LICENSE-ort-MIT.txt",
-        include_str!("../../resources/ocr/licenses/LICENSE-ort-MIT.txt"),
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/resources/ocr/licenses/LICENSE-ort-MIT.txt"
+        )),
     ),
     (
         "LICENSE-libloading.txt",
-        include_str!("../../resources/ocr/licenses/LICENSE-libloading.txt"),
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/resources/ocr/licenses/LICENSE-libloading.txt"
+        )),
     ),
     (
         "LICENSE-PaddleOCR.txt",
-        include_str!("../../resources/ocr/licenses/LICENSE-PaddleOCR.txt"),
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/resources/ocr/licenses/LICENSE-PaddleOCR.txt"
+        )),
     ),
     (
         "LICENSE-RapidOCR.txt",
-        include_str!("../../resources/ocr/licenses/LICENSE-RapidOCR.txt"),
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/resources/ocr/licenses/LICENSE-RapidOCR.txt"
+        )),
     ),
     (
         "LICENSE-paddle-ocr-rs.txt",
-        include_str!("../../resources/ocr/licenses/LICENSE-paddle-ocr-rs.txt"),
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/resources/ocr/licenses/LICENSE-paddle-ocr-rs.txt"
+        )),
     ),
 ];
 

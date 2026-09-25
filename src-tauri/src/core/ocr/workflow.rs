@@ -291,7 +291,7 @@ impl OcrService {
                             } => {
                                 let app = app.clone();
                                 tauri::async_runtime::spawn_blocking(move || {
-                                    crate::shortcut::on_double_copy(
+                                    crate::core::shortcut::on_double_copy(
                                         &app,
                                         clipboard_revision,
                                         window,
@@ -301,11 +301,11 @@ impl OcrService {
                             ScreenEvent::InkTranslate { window: _ } => {
                                 let app = app.clone();
                                 tauri::async_runtime::spawn_blocking(move || {
-                                    crate::shortcut::on_hotkey(&app)
+                                    crate::core::shortcut::on_hotkey(&app)
                                 });
                             }
                             ScreenEvent::Snip { clipboard_revision } => {
-                                crate::shortcut::on_system_snip(&app, clipboard_revision);
+                                crate::core::shortcut::on_system_snip(&app, clipboard_revision);
                             }
                             ScreenEvent::Cancel => {
                                 service.cancel(&app);
@@ -392,7 +392,7 @@ impl OcrService {
         event: &OcrEvent,
         cancel: Cancellation,
     ) -> Result<(), String> {
-        crate::shell::hide_now(app);
+        crate::core::shell::hide_now(app);
         let region = app.state::<RegionService>();
         let selection = region.freeze(app, event.mode.into(), event.id, cancel)?;
         if !self.is_current(event.id) {
@@ -580,9 +580,9 @@ impl OcrService {
                 return;
             }
             if stage == OcrStage::Cancelled {
-                crate::shell::hide_now(&window_app);
+                crate::core::shell::hide_now(&window_app);
             } else {
-                crate::shortcut::show_shell(&window_app);
+                crate::core::shortcut::show_shell(&window_app);
             }
         });
     }
@@ -606,7 +606,7 @@ impl OcrService {
         if !self.is_current(event.id) {
             return Ok(());
         }
-        crate::shell::hide_now(app);
+        crate::core::shell::hide_now(app);
         if baseline == 0 {
             return Err("无法读取剪贴板版本，已停止截图识别以避免读取旧图片。".into());
         }
@@ -826,11 +826,11 @@ mod tests {
                 id: "mock".into(),
                 label: "Mock Engine".into(),
                 languages: vec![
-                    crate::ocr::OcrLanguage {
+                    crate::core::ocr::OcrLanguage {
                         tag: "en-US".into(),
                         label: "English".into(),
                     },
-                    crate::ocr::OcrLanguage {
+                    crate::core::ocr::OcrLanguage {
                         tag: "zh-Hans-CN".into(),
                         label: "Chinese".into(),
                     },
@@ -843,15 +843,15 @@ mod tests {
             &self,
             _: OcrImage<'_>,
             lang: Option<&str>,
-        ) -> Result<crate::ocr::RecognizedText, String> {
+        ) -> Result<crate::core::ocr::RecognizedText, String> {
             if lang == Some("zh-Hans-CN") {
-                Ok(crate::ocr::RecognizedText {
+                Ok(crate::core::ocr::RecognizedText {
                     text: "测试文字识别".into(),
                     language: "zh-Hans-CN".into(),
                     blocks: vec![],
                 })
             } else {
-                Ok(crate::ocr::RecognizedText {
+                Ok(crate::core::ocr::RecognizedText {
                     text: "".into(),
                     language: "en-US".into(),
                     blocks: vec![],
@@ -885,7 +885,7 @@ mod tests {
                 Ok(OcrEngineInfo {
                     id: "mock_zh".into(),
                     label: "Mock Chinese".into(),
-                    languages: vec![crate::ocr::OcrLanguage {
+                    languages: vec![crate::core::ocr::OcrLanguage {
                         tag: "zh-Hans-CN".into(),
                         label: "Chinese".into(),
                     }],
@@ -897,8 +897,8 @@ mod tests {
                 &self,
                 _: OcrImage<'_>,
                 _: Option<&str>,
-            ) -> Result<crate::ocr::RecognizedText, String> {
-                Ok(crate::ocr::RecognizedText {
+            ) -> Result<crate::core::ocr::RecognizedText, String> {
+                Ok(crate::core::ocr::RecognizedText {
                     text: "".into(),
                     language: "zh-Hans-CN".into(),
                     blocks: vec![],

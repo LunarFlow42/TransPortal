@@ -174,7 +174,7 @@ pub fn match_language_tag<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ocr::{OcrImage, RecognizedText};
+    use crate::core::ocr::{OcrImage, RecognizedText};
     use std::sync::atomic::{AtomicBool, Ordering};
 
     struct FakeEngine {
@@ -259,11 +259,11 @@ mod tests {
     #[test]
     fn language_tag_matching_handles_aliases_case_and_prefixes() {
         let languages = vec![
-            crate::ocr::OcrLanguage {
+            crate::core::ocr::OcrLanguage {
                 tag: "en-US".into(),
                 label: "English".into(),
             },
-            crate::ocr::OcrLanguage {
+            crate::core::ocr::OcrLanguage {
                 tag: "zh-Hans-CN".into(),
                 label: "Chinese (Simplified)".into(),
             },
@@ -309,7 +309,7 @@ mod tests {
 
     #[test]
     fn language_tag_matching_supports_onnx_bilingual_tag() {
-        let languages = vec![crate::ocr::OcrLanguage {
+        let languages = vec![crate::core::ocr::OcrLanguage {
             tag: "zh-Hans-en".into(),
             label: "Chinese + English".into(),
         }];
@@ -340,11 +340,11 @@ mod tests {
                     id: "lang".into(),
                     label: "Lang Engine".into(),
                     languages: vec![
-                        crate::ocr::OcrLanguage {
+                        crate::core::ocr::OcrLanguage {
                             tag: "en-US".into(),
                             label: "English".into(),
                         },
-                        crate::ocr::OcrLanguage {
+                        crate::core::ocr::OcrLanguage {
                             tag: "zh-Hans-CN".into(),
                             label: "Chinese".into(),
                         },

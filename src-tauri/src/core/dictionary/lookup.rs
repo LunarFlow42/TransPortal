@@ -6,9 +6,9 @@
 //! sources are skipped automatically, so the app works out of the box without
 //! any local data.
 
-use crate::dict::{DictEntry, DictSource, DictStore, ExampleSentence, PosDefinition};
-use crate::provider::google::GoogleFreeProvider;
-use crate::provider::{TranslateQuery, Translator, resolve_target_lang};
+use crate::core::dictionary::{DictEntry, DictSource, DictStore, ExampleSentence, PosDefinition};
+use crate::core::translation::google::GoogleFreeProvider;
+use crate::core::translation::{TranslateQuery, Translator, resolve_target_lang};
 use lru::LruCache;
 use reqwest::Client;
 use serde::Serialize;

@@ -1,6 +1,6 @@
 //! Observe the OS screenshot shortcut; never register or swallow Win+Shift+S.
 
-use crate::ocr::{ClipboardOrigin, ScreenCapture, ScreenEvent, ScreenObserver};
+use crate::core::ocr::{ClipboardOrigin, ScreenCapture, ScreenEvent, ScreenObserver};
 use std::cell::{Cell, RefCell};
 use std::sync::mpsc::{self, SyncSender};
 use std::thread::{self, JoinHandle};
@@ -67,7 +67,7 @@ unsafe extern "system" fn keyboard_hook(code: i32, wparam: WPARAM, lparam: LPARA
             }
 
             let ink_vk =
-                crate::shortcut::INK_TRANSLATE_KEY.load(std::sync::atomic::Ordering::Relaxed);
+                crate::core::shortcut::INK_TRANSLATE_KEY.load(std::sync::atomic::Ordering::Relaxed);
             if ink_vk != 0 && key.vkCode == ink_vk {
                 if down {
                     INK_KEY_DOWN.set(true);
