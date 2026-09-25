@@ -24,6 +24,7 @@ pub struct UnsupportedBackend;
 impl Backend for UnsupportedBackend {
     type Window = UnsupportedWindow;
     type System = UnsupportedSystem;
+    type Desktop = UnsupportedDesktop;
     const CAPABILITIES: Capabilities = Capabilities::NONE;
 }
 
@@ -164,6 +165,7 @@ impl SelectionPlatform for UnsupportedSelection {
     }
 }
 
+#[derive(Default)]
 pub struct UnsupportedDesktop;
 impl DesktopCapture for UnsupportedDesktop {
     fn bounds(&self) -> Result<ScreenRect, String> {

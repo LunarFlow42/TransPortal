@@ -27,5 +27,6 @@ pub struct LinuxBackend;
 impl Backend for LinuxBackend {
     type Window = <UnsupportedBackend as Backend>::Window;
     type System = <UnsupportedBackend as Backend>::System;
+    type Desktop = <UnsupportedBackend as Backend>::Desktop;
     const CAPABILITIES: Capabilities = <UnsupportedBackend as Backend>::CAPABILITIES;
 }

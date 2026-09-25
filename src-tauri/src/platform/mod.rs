@@ -9,7 +9,9 @@
 //! implementation is isolated behind [`SelectionReader`] so `#[cfg]` never
 //! leaks into the rest of the crate and cross-platform builds stay green.
 
+use desktop::DesktopCapture;
 use serde::Serialize;
+use std::sync::Arc;
 use system::SystemOps;
 use tauri::AppHandle;
 use tauri_plugin_clipboard_manager::ClipboardExt;
@@ -76,11 +78,18 @@ impl Capabilities {
 pub trait Backend {
     type Window: WindowOps;
     type System: SystemOps;
+    type Desktop: DesktopCapture + Default;
     const CAPABILITIES: Capabilities;
 }
 
 pub type PlatformWindow = <ActiveBackend as Backend>::Window;
 pub type PlatformSystem = <ActiveBackend as Backend>::System;
+pub type PlatformDesktop = <ActiveBackend as Backend>::Desktop;
+
+/// A desktop capturer of the active backend.
+pub fn desktop() -> Arc<dyn DesktopCapture> {
+    Arc::new(PlatformDesktop::default())
+}
 
 /// Capabilities of the backend compiled for this target.
 pub const CAPABILITIES: Capabilities = <ActiveBackend as Backend>::CAPABILITIES;
@@ -289,6 +298,8 @@ mod tests {
     /// Compile-time and runtime check that a backend provides every contract.
     fn exercise<B: Backend>() -> Capabilities {
         let _probe: Option<<B::Window as WindowOps>::Probe> = None;
+        let _: fn() -> bool = B::System::enforce_release_hash;
+        let _: fn() -> B::Desktop = B::Desktop::default;
         B::CAPABILITIES
     }
 

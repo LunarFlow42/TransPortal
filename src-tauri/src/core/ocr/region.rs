@@ -135,7 +135,7 @@ pub struct RegionService {
 impl Default for RegionService {
     fn default() -> Self {
         Self {
-            desktop: crate::platform::desktop::platform(),
+            desktop: crate::platform::desktop(),
             state: Mutex::new(State::default()),
         }
     }

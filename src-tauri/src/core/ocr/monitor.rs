@@ -63,7 +63,7 @@ pub struct MonitorService {
 impl Default for MonitorService {
     fn default() -> Self {
         Self {
-            desktop: crate::platform::desktop::platform(),
+            desktop: crate::platform::desktop(),
             state: Mutex::new(MonitorState::default()),
         }
     }

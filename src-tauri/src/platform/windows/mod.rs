@@ -31,6 +31,7 @@ pub struct WindowsBackend;
 impl Backend for WindowsBackend {
     type Window = WindowsWindow;
     type System = WindowsSystem;
+    type Desktop = WindowsDesktop;
     const CAPABILITIES: Capabilities = Capabilities::ALL;
 }
 

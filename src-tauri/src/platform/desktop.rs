@@ -1,7 +1,6 @@
 //! Physical screen coordinates and capture; no platform APIs escape this trait.
 
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ScreenRect {
@@ -38,17 +37,6 @@ pub trait DesktopCapture: Send + Sync {
     fn capture(&self, region: ScreenRect) -> Result<image::RgbaImage, String>;
     /// Keep translated output out of later screenshots to avoid feedback loops.
     fn exclude(&self, window: &tauri::WebviewWindow, enabled: bool) -> Result<(), String>;
-}
-
-pub fn platform() -> Arc<dyn DesktopCapture> {
-    #[cfg(target_os = "windows")]
-    {
-        Arc::new(super::windows::WindowsDesktop::default())
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        Arc::new(super::unsupported::UnsupportedDesktop)
-    }
 }
 
 #[cfg(test)]
@@ -88,7 +76,7 @@ mod tests {
 
     #[test]
     fn test_desktop_capture_pipeline() {
-        let p = super::platform();
+        let p = crate::platform::desktop();
         if let Ok(bounds) = p.bounds() {
             assert!(bounds.width > 0 && bounds.height > 0);
             let test_region = ScreenRect {
