@@ -54,17 +54,6 @@ export async function resizeAndClampWindow(width: number, height: number): Promi
 }
 
 /**
- * Configure OS-level DWM Acrylic frosted glass effect on the current window.
- */
-export async function setWindowAcrylic(enabled: boolean): Promise<void> {
-  try {
-    await invoke('set_window_acrylic', { enabled });
-  } catch (error) {
-    console.warn('Failed to set window acrylic effect:', error);
-  }
-}
-
-/**
  * Configure DWM theme (dark/light) to coordinate backdrop material tinting.
  */
 export async function setWindowTheme(dark: boolean): Promise<void> {

@@ -39,12 +39,18 @@ describe('persistent OCR configuration', () => {
     expect(load).toHaveBeenCalledTimes(2);
   });
 
-  it('loads and saves acrylicEffect correctly', async () => {
-    const { data, store } = settingsFile({ acrylicEffect: true });
+  it('migrates from legacy acrylicEffect correctly', async () => {
+    settingsFile({ acrylicEffect: true });
+    const { loadSettings } = await import('./persistence');
+    expect(await loadSettings()).toMatchObject({ backdropBlur: true });
+  });
+
+  it('loads and saves backdropBlur correctly', async () => {
+    const { data, store } = settingsFile({ backdropBlur: false });
     const { loadSettings, saveSettings } = await import('./persistence');
-    expect(await loadSettings()).toMatchObject({ acrylicEffect: true });
-    await saveSettings({ acrylicEffect: false });
-    expect(Object.fromEntries(data)).toEqual({ acrylicEffect: false });
+    expect(await loadSettings()).toMatchObject({ backdropBlur: false });
+    await saveSettings({ backdropBlur: true });
+    expect(Object.fromEntries(data)).toEqual({ backdropBlur: true });
     expect(store.save).toHaveBeenCalledOnce();
   });
 

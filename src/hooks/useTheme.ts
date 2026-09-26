@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useAppStore } from '../store/useAppStore';
-import { setWindowAcrylic, setWindowTheme } from '../utils/windows';
+import { setWindowTheme } from '../utils/windows';
 
 const QUERY = '(prefers-color-scheme: dark)';
 
@@ -12,7 +12,7 @@ const QUERY = '(prefers-color-scheme: dark)';
 export function useTheme() {
   const theme = useAppStore((state) => state.theme);
   const overlayOpacity = useAppStore((state) => state.overlayOpacity);
-  const acrylicEffect = useAppStore((state) => state.acrylicEffect);
+  const backdropBlur = useAppStore((state) => state.backdropBlur);
 
   useEffect(() => {
     const media = window.matchMedia(QUERY);
@@ -39,10 +39,9 @@ export function useTheme() {
     );
   }, [overlayOpacity]);
 
-  // Sync OS-level DWM Acrylic frosted glass effect and data attribute
+  // Sync backdrop blur preference to the root element for CSS .surface
   useEffect(() => {
     const root = document.documentElement;
-    root.dataset.acrylic = acrylicEffect ? 'true' : 'false';
-    void setWindowAcrylic(acrylicEffect);
-  }, [acrylicEffect]);
+    root.dataset.backdropBlur = backdropBlur ? 'true' : 'false';
+  }, [backdropBlur]);
 }

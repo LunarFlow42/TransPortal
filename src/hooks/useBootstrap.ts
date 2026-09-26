@@ -226,8 +226,8 @@ export function useBootstrap(persist: boolean) {
         if (state.ocrPictureDefaultView !== previous.ocrPictureDefaultView) {
           patch.ocrPictureDefaultView = state.ocrPictureDefaultView;
         }
-        if (state.acrylicEffect !== previous.acrylicEffect) {
-          patch.acrylicEffect = state.acrylicEffect;
+        if (state.backdropBlur !== previous.backdropBlur) {
+          patch.backdropBlur = state.backdropBlur;
         }
         if (state.smoothTransitions !== previous.smoothTransitions) {
           patch.smoothTransitions = state.smoothTransitions;

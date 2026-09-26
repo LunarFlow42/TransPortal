@@ -502,12 +502,6 @@ pub async fn hide_shell(app: AppHandle, generation: Option<u64>) -> Result<bool,
 }
 
 #[tauri::command]
-pub fn set_window_acrylic(window: tauri::WebviewWindow, enabled: bool) -> Result<(), String> {
-    PlatformWindow::set_window_acrylic(&window, enabled);
-    Ok(())
-}
-
-#[tauri::command]
 pub fn set_window_theme(window: tauri::WebviewWindow, dark: bool) -> Result<(), String> {
     PlatformWindow::set_window_theme(&window, dark);
     Ok(())

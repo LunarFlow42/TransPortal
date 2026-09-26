@@ -46,9 +46,6 @@ pub trait WindowOps {
         height: f64,
     ) -> Result<(), String>;
 
-    /// Toggle the frosted-glass backdrop.
-    fn set_window_acrylic<R: Runtime>(window: &WebviewWindow<R>, enabled: bool);
-
     /// Tint native backdrop materials for the dark or light theme.
     fn set_window_theme<R: Runtime>(window: &WebviewWindow<R>, dark: bool);
 

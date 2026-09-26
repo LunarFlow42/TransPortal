@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
-import { resizeAndClampWindow, setWindowAcrylic, setWindowTheme } from './windows';
+import { resizeAndClampWindow, setWindowTheme } from './windows';
 
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
@@ -35,14 +35,6 @@ describe('windows utilities', () => {
     expect(invoke).toHaveBeenCalledWith('resize_and_clamp_window', {
       width: 500,
       height: 400,
-    });
-  });
-
-  it('calls native set_window_acrylic via IPC', async () => {
-    vi.mocked(invoke).mockResolvedValueOnce(undefined);
-    await setWindowAcrylic(true);
-    expect(invoke).toHaveBeenCalledWith('set_window_acrylic', {
-      enabled: true,
     });
   });
 

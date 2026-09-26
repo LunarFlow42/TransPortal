@@ -162,8 +162,8 @@ export const SettingsView: React.FC = () => {
     setTheme,
     overlayOpacity,
     setOverlayOpacity,
-    acrylicEffect,
-    setAcrylicEffect,
+    backdropBlur,
+    setBackdropBlur,
     smoothTransitions,
     setSmoothTransitions,
   } = useAppStore();
@@ -305,7 +305,7 @@ export const SettingsView: React.FC = () => {
             />
           </div>
 
-          {isMatch(['appearance', '外观', '界面', 'theme', '主题', 'opacity', '透明度', '毛玻璃', '亚克力', 'acrylic', '动效', '动画', '过渡', '平滑', 'transition', 'animation', 'font', '字号', 'crosshairs', '对齐', 'autohide', '隐藏']) && (
+          {isMatch(['appearance', '外观', '界面', 'theme', '主题', 'opacity', '透明度', '毛玻璃', '亚克力', 'acrylic', 'blur', '磨砂', '动效', '动画', '过渡', '平滑', 'transition', 'animation', 'font', '字号', 'crosshairs', '对齐', 'autohide', '隐藏']) && (
             <Section label="Appearance 外观与界面" icon={<Palette className="h-3.5 w-3.5" />}>
               <Surface variant="inner" className="flex flex-col gap-2.5 p-3">
                 <div className="flex items-center gap-3">
@@ -355,15 +355,15 @@ export const SettingsView: React.FC = () => {
 
                 <div className="flex items-center justify-between gap-3 border-t border-[var(--stroke)] pt-2.5">
                   <div className="flex flex-col gap-0.5">
-                    <span className="text-[13px] font-medium">系统级亚克力毛玻璃 (Acrylic)</span>
+                    <span className="text-[13px] font-medium">CSS 磨砂模糊滤镜 (Backdrop Blur)</span>
                     <p className="text-[10px] text-[var(--faint)]">
-                      在 Windows 11/10 下启用操作系统 DWM 原生亚克力磨砂透视效果。
+                      开启后浮层呈现毛玻璃磨砂透视效果；低性能设备可关闭以降低 GPU 负担。
                     </p>
                   </div>
                   <Switch
-                    checked={acrylicEffect}
-                    onChange={() => setAcrylicEffect(!acrylicEffect)}
-                    label="系统级亚克力毛玻璃"
+                    checked={backdropBlur}
+                    onChange={() => setBackdropBlur(!backdropBlur)}
+                    label="CSS 磨砂模糊滤镜"
                   />
                 </div>
 

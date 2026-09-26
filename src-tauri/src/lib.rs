@@ -245,7 +245,6 @@ pub fn run() {
             commands::open_settings_window,
             commands::resize_and_clamp_window,
             commands::hide_shell,
-            commands::set_window_acrylic,
             commands::set_window_theme,
             commands::get_memory_usage,
             commands::trim_memory,

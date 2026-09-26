@@ -53,10 +53,6 @@ impl WindowOps for UnsupportedWindow {
         window::resize_and_clamp_window(window, width, height)
     }
 
-    fn set_window_acrylic<R: Runtime>(window: &WebviewWindow<R>, enabled: bool) {
-        window::set_window_acrylic(window, enabled);
-    }
-
     fn set_window_theme<R: Runtime>(window: &WebviewWindow<R>, dark: bool) {
         window::set_window_theme(window, dark);
     }

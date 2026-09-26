@@ -93,7 +93,7 @@ interface AppState {
   historyIndex: number;
   autoHideOnBlur: boolean;
   targetLanguage: string;
-  acrylicEffect: boolean;
+  backdropBlur: boolean;
   smoothTransitions: boolean;
 
   // Config actions
@@ -119,7 +119,7 @@ interface AppState {
   benchmarkOcr: () => Promise<number>;
   setTheme: (theme: ThemeMode) => void;
   setOverlayOpacity: (opacity: number) => void;
-  setAcrylicEffect: (enabled: boolean) => void;
+  setBackdropBlur: (enabled: boolean) => void;
   setSmoothTransitions: (enabled: boolean) => void;
   togglePinned: () => void;
   hydrate: (settings: Partial<PersistedSettings>) => void;
@@ -215,7 +215,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   historyIndex: -1,
   autoHideOnBlur: true,
   targetLanguage: 'zh-CN',
-  acrylicEffect: false,
+  backdropBlur: true,
   smoothTransitions: true,
 
   setOcrPictureOriginal: (ocrPictureOriginal) => set({ ocrPictureOriginal }),
@@ -366,7 +366,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   setTheme: (theme) => set({ theme }),
   setOverlayOpacity: (overlayOpacity) => set({ overlayOpacity }),
-  setAcrylicEffect: (acrylicEffect) => set({ acrylicEffect }),
+  setBackdropBlur: (backdropBlur) => set({ backdropBlur }),
   setSmoothTransitions: (smoothTransitions) => set({ smoothTransitions }),
   togglePinned: () =>
     set((state) => {
@@ -402,7 +402,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       targetLanguage: settings.targetLanguage ?? state.targetLanguage,
       ocrTarget: settings.targetLanguage ?? state.ocrTarget,
       ocrPictureDefaultView: settings.ocrPictureDefaultView ?? state.ocrPictureDefaultView,
-      acrylicEffect: settings.acrylicEffect ?? state.acrylicEffect,
+      backdropBlur: settings.backdropBlur ?? settings.acrylicEffect ?? state.backdropBlur,
       smoothTransitions: settings.smoothTransitions ?? state.smoothTransitions,
     })),
 

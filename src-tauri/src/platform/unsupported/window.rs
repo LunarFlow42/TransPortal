@@ -31,8 +31,6 @@ pub fn resize_and_clamp_window<R: tauri::Runtime>(
     Ok(())
 }
 
-pub fn set_window_acrylic<R: tauri::Runtime>(_window: &tauri::WebviewWindow<R>, _enabled: bool) {}
-
 pub fn set_window_theme<R: tauri::Runtime>(_window: &tauri::WebviewWindow<R>, _dark: bool) {}
 
 pub fn get_global_cursor_pos() -> Option<(i32, i32)> {

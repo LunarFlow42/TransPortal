@@ -44,7 +44,8 @@ export async function loadSettings(): Promise<Partial<PersistedSettings>> {
     autoHideOnBlur,
     targetLanguage,
     ocrPictureDefaultView,
-    acrylicEffect,
+    backdropBlur,
+    legacyAcrylic,
     smoothTransitions,
     dictSources,
   ] = await Promise.all([
@@ -73,7 +74,8 @@ export async function loadSettings(): Promise<Partial<PersistedSettings>> {
     store.get<PersistedSettings['autoHideOnBlur']>('autoHideOnBlur'),
     store.get<PersistedSettings['targetLanguage']>('targetLanguage'),
     store.get<PersistedSettings['ocrPictureDefaultView']>('ocrPictureDefaultView'),
-    store.get<PersistedSettings['acrylicEffect']>('acrylicEffect'),
+    store.get<PersistedSettings['backdropBlur']>('backdropBlur'),
+    store.get<boolean>('acrylicEffect'),
     store.get<PersistedSettings['smoothTransitions']>('smoothTransitions'),
     store.get<PersistedSettings['dictSources']>('dictSources'),
   ]);
@@ -104,7 +106,7 @@ export async function loadSettings(): Promise<Partial<PersistedSettings>> {
     autoHideOnBlur,
     targetLanguage,
     ocrPictureDefaultView,
-    acrylicEffect,
+    backdropBlur: backdropBlur ?? legacyAcrylic,
     smoothTransitions,
     dictSources,
   };

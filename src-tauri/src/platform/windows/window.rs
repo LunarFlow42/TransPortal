@@ -104,29 +104,6 @@ pub fn resize_and_clamp_window<R: tauri::Runtime>(
     window.set_size(physical_size).map_err(|e| e.to_string())
 }
 
-/// Configures DWM system backdrop (Acrylic frosted glass or None) on Windows 11 (22H2+).
-/// DWMSBT_TRANSIENTWINDOW (3) provides the Acrylic effect for transient/popover windows.
-/// DWMSBT_NONE (1) disables the backdrop for transparent rendering.
-pub fn set_window_acrylic<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>, enabled: bool) {
-    use windows::Win32::Foundation::HWND;
-    use windows::Win32::Graphics::Dwm::{DWMWINDOWATTRIBUTE, DwmSetWindowAttribute};
-
-    if let Ok(handle) = window.hwnd() {
-        unsafe {
-            let hwnd = HWND(handle.0);
-            // DWMWA_SYSTEMBACKDROP_TYPE = 38
-            // DWMSBT_AUTO = 0, DWMSBT_NONE = 1, DWMSBT_MAINWINDOW = 2, DWMSBT_TRANSIENTWINDOW = 3
-            let backdrop_type: u32 = if enabled { 3 } else { 1 };
-            let _ = DwmSetWindowAttribute(
-                hwnd,
-                DWMWINDOWATTRIBUTE(38),
-                &backdrop_type as *const _ as *const _,
-                std::mem::size_of::<u32>() as u32,
-            );
-        }
-    }
-}
-
 /// Updates DWM immersive dark mode preference so DWM backdrop materials (like Acrylic)
 /// tint appropriately according to the active theme.
 pub fn set_window_theme<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>, dark: bool) {
