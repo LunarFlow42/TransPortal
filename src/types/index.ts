@@ -317,9 +317,6 @@ export interface PersistedSettings {
   autoHideOnBlur: boolean;
   targetLanguage: string;
   ocrPictureDefaultView?: 'translated' | 'original';
-  backdropBlur?: boolean;
-  /** @deprecated Use `backdropBlur` instead. Kept for migration. */
-  acrylicEffect?: boolean;
   smoothTransitions?: boolean;
   dictSources: { id: string; enabled: boolean }[];
 }

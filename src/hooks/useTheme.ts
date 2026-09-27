@@ -12,7 +12,6 @@ const QUERY = '(prefers-color-scheme: dark)';
 export function useTheme() {
   const theme = useAppStore((state) => state.theme);
   const overlayOpacity = useAppStore((state) => state.overlayOpacity);
-  const backdropBlur = useAppStore((state) => state.backdropBlur);
 
   useEffect(() => {
     const media = window.matchMedia(QUERY);
@@ -38,10 +37,4 @@ export function useTheme() {
       overlayOpacity.toFixed(3),
     );
   }, [overlayOpacity]);
-
-  // Sync backdrop blur preference to the root element for CSS .surface
-  useEffect(() => {
-    const root = document.documentElement;
-    root.dataset.backdropBlur = backdropBlur ? 'true' : 'false';
-  }, [backdropBlur]);
 }

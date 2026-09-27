@@ -162,8 +162,6 @@ export const SettingsView: React.FC = () => {
     setTheme,
     overlayOpacity,
     setOverlayOpacity,
-    backdropBlur,
-    setBackdropBlur,
     smoothTransitions,
     setSmoothTransitions,
   } = useAppStore();
@@ -352,20 +350,6 @@ export const SettingsView: React.FC = () => {
                 <p className="text-[10px] text-[var(--faint)]">
                   仅影响查词浮层（设置窗口固定不透明）。
                 </p>
-
-                <div className="flex items-center justify-between gap-3 border-t border-[var(--stroke)] pt-2.5">
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-[13px] font-medium">CSS 磨砂模糊滤镜 (Backdrop Blur)</span>
-                    <p className="text-[10px] text-[var(--faint)]">
-                      开启后浮层呈现毛玻璃磨砂透视效果；低性能设备可关闭以降低 GPU 负担。
-                    </p>
-                  </div>
-                  <Switch
-                    checked={backdropBlur}
-                    onChange={() => setBackdropBlur(!backdropBlur)}
-                    label="CSS 磨砂模糊滤镜"
-                  />
-                </div>
 
                 <div className="flex items-center justify-between gap-3 border-t border-[var(--stroke)] pt-2.5">
                   <div className="flex flex-col gap-0.5">
