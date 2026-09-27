@@ -11,7 +11,6 @@ import { StartupShortcutNotice } from '../components/ShortcutStatusPanel';
 import { Button, IconButton, Surface } from '../components/ui';
 import { useBootstrap } from '../hooks/useBootstrap';
 import { useHideOnBlur } from '../hooks/useHideOnBlur';
-import { useSmartDismiss } from '../hooks/useSmartDismiss';
 import { useMemoryManager } from '../hooks/useMemoryManager';
 import { useOcrEvents, useOcrStatus } from '../hooks/useOcr';
 import { useAutoOcrEvents } from '../hooks/useAutoOcr';
@@ -84,7 +83,6 @@ export const ShellView: React.FC = () => {
   const tabInitialStateRef = React.useRef<boolean>(false);
 
   useHideOnBlur();
-  const smartDismiss = useSmartDismiss();
   const { stage, dismiss } = useWindowAnimation();
   const smoothTransitions = useAppStore((state) => state.smoothTransitions);
   useMemoryManager();
@@ -432,9 +430,6 @@ export const ShellView: React.FC = () => {
 
   return (
     <div
-      onMouseEnter={smartDismiss.onMouseEnter}
-      onMouseLeave={smartDismiss.onMouseLeave}
-      onMouseDown={smartDismiss.onMouseDown}
       style={animationStyle}
       className={cn(
         'relative flex h-full w-full select-none flex-col items-center bg-transparent overflow-hidden',

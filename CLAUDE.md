@@ -8,12 +8,12 @@ The imported `AGENTS.md` is the source of truth for commands, conventions, and p
 
 ## Extra commands
 
-- Single frontend test file: `pnpm exec vitest run src/hooks/useSmartDismiss.test.ts`
+- Single frontend test file: `pnpm exec vitest run src/hooks/useHideOnBlur.test.ts`
 - Release integrity tooling tests: `pnpm test:integrity` (Node `--test` over `scripts/integrity/*.node.mjs`)
 - ONNX OCR assets: `pnpm ocr:prepare` downloads, verifies, and stages the model and runtime into `src-tauri/resources/ocr`. Debug builds read that directory directly. Release builds read the bundled resource dir.
 - Release build: `pnpm build:release` (NSIS + `SHA256SUMS` + `integrity.json`)
 - Linux packages: `APPIMAGE_EXTRACT_AND_RUN=1 pnpm tauri build` on Linux (`.deb`, `.rpm`, `.AppImage`; the Linux ONNX runtime is staged by `ocr:prepare`).
-- CI (`.github/workflows/ci.yml`) runs a `windows-latest` + `ubuntu-24.04` matrix: clippy `-D warnings` and `cargo test` on both; Linux adds `cargo fmt --check` and `scripts/check-architecture.sh`; Windows adds `pnpm build`, `pnpm test`, `pnpm test:integrity` and `scripts/ocr/smoke-onnx.ps1`. A `bundle-linux` job uploads the Linux packages.
+- CI (`.github/workflows/ci.yml`) runs a `windows-latest` + `ubuntu-24.04` matrix: clippy `-D warnings` and `cargo test` on both; Linux adds `cargo fmt --check` and `scripts/check-architecture.sh`; Windows adds `pnpm build`, `pnpm test`, `pnpm test:integrity` and `scripts/ocr/smoke-onnx.ps1`. A `bundle-linux` job on `feat/linux-native` uploads the Linux packages.
 - `.cargo/config.toml` (and `src-tauri/.cargo/config.toml`) only sets the Windows linker to `rust-lld.exe`. Use sccache via the `RUSTC_WRAPPER` environment variable (or your user-level `~/.cargo/config.toml`), not the repo config.
 
 ## Architecture
@@ -52,7 +52,7 @@ The backend pushes state with `emit` / `emit_to("shell", ...)` on `transportal:/
 - `transportal://shortcut-status`, `transportal://shell-shown`, `transportal://notice`
 - `transportal://clipboard-text`, `transportal://focus-input`, `transportal://ocr-assets-changed`
 
-Frontend hooks in `src/hooks/` (`useOcr`, `useAutoOcr`, `useSmartDismiss`, `useShortcutStatus`) and `ShellView` subscribe with `listen`. When you add an event, keep the channel name identical on both sides.
+Frontend hooks in `src/hooks/` (`useOcr`, `useAutoOcr`, `useHideOnBlur`, `useShortcutStatus`) and `ShellView` subscribe with `listen`. When you add an event, keep the channel name identical on both sides.
 
 ### Frontend state and settings
 

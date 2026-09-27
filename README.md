@@ -10,14 +10,14 @@
 
 ## 核心能力
 
-- **全局划词**：`Alt+T`（可配置）→ Windows 优先 UI Automation `TextPattern`，失败静默降级剪贴板；窗口在光标附近弹出并做屏幕边界钳制。
+- **全局划词**：`Alt+Q`（可配置）→ Windows 优先 UI Automation `TextPattern`，失败静默降级剪贴板；窗口在光标附近弹出并做屏幕边界钳制。
 - **启动检查**：恢复已保存键位后检查注册冲突，浮层主动提示，并可在关闭占用软件后重新检测。Windows 发布版启动时验证整个 EXE 的 SHA-256，缺失或不匹配即提示退出；详见 [启动检查](docs/STARTUP_CHECKS.md)。
-- **本地 OCR**：可切换 Windows 系统 OCR 与 ONNX · PP-OCRv4 FP32（中英混合识别），无需 Python 或 GPU。Windows 上 `Alt+Shift+T` 框选提取并复制文字，`Alt+Shift+S` 框选识别后翻译，框选器内置、不调用系统截图工具；浮层也可打开本地图片。ONNX 模型随桌面包分发，开发环境可一键安装，校验后离线使用。参见 [OCR 说明](docs/OCR.md)。
+- **本地 OCR**：可切换 Windows 系统 OCR 与 ONNX · PP-OCRv4 FP32（中英混合识别），无需 Python 或 GPU。Windows 上 `Alt+Shift+S` 框选提取并复制文字，`Alt+S` 框选原图直接翻译，`Alt+Shift+X` 框选对照翻译，框选器内置、不调用系统截图工具；浮层也可打开本地图片。ONNX 模型随桌面包分发，开发环境可一键安装，校验后离线使用。参见 [OCR 说明](docs/OCR.md)。
 - **图片原位翻译**：保留截图与文字坐标，在原文字位置绘制译文；支持校对原文、切换目标语言、对照原图，以及复制或保存 PNG 译图。
 - **自动区域翻译**：Windows 上框选固定屏幕区域，持续检查变化并更新译图；支持暂停、继续、停止与 `Esc` 取消。仅文字发送给翻译服务，截图不上传，重启不恢复监控。
 - **双按 C 与文本替换**：Windows 上 `Ctrl+C+C` 取词翻译，普通复制不被抢占；结果卡可将原输入框选中的文字替换为译文，粘贴前核对窗口、焦点和选区。开关在快捷键设置中。
 - **语义分流 + 原地形变**：单词→深度词卡，句子→幽灵气泡；Framer Motion `layoutId` 平滑形变。
-- **查词来源全部可配置**：Youdao（在线，默认首选）、Google（在线）、本地 ECCEDICT（可选），支持启用/禁用/排序，带命中状态与延迟；在线结果有内存 LRU 缓存。
+- **查词来源全部可配置**：Youdao（在线，默认首选）、Google（在线）、本地 ECCEDICT（可选），支持启用/禁用/排序，带命中状态与延迟；在线结果有内存 LRU缓存。
 - **离线词库**：`redb` 存储 ECCEDICT，支持一键下载全量 `ecdict.csv`（带进度）或手动导入；`scripts/eccedict/build_enriched_csv.py` 可把 fork 的英美音标/标签 `.ddb` 合并回 CSV。
 - **例句下钻**：交互式分词、点击生词原地切换、历史前进/后退。
 - **Anki 同步**：Rust 侧 JSON-RPC 直连 AnkiConnect（8765），携带划词原句。
@@ -34,7 +34,7 @@ pnpm build            # 仅构建前端
 pnpm ocr:prepare      # 下载、校验并暂存当前平台 ONNX 模型与运行库
 pnpm tauri build      # 构建桌面安装包（自动准备 ONNX 资源）
 pnpm build:release    # 构建发布包及 SHA256SUMS（Windows 默认 NSIS，含自身校验文件）
-# Linux：pnpm tauri build 生成 .deb / .rpm / .AppImage（AppImage 在无 FUSE 环境需 APPIMAGE_EXTRACT_AND_RUN=1）
+# Linux（feat/linux-native 分支）：pnpm tauri build 生成 .deb / .rpm / .AppImage（AppImage 在无 FUSE 环境需 APPIMAGE_EXTRACT_AND_RUN=1）
 pnpm test:integrity   # 校验文件生成工具测试
 pnpm exec tsc --noEmit
 

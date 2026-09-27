@@ -95,7 +95,6 @@ describe('OCR settings startup', () => {
       fontSize: 14,
       showCrosshairs: true,
       aiPromptTemplate: 'direct',
-      autoHideOnBlur: true,
       targetLanguage: 'zh-CN',
       ocrPictureDefaultView: 'translated',
     });

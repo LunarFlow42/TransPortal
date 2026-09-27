@@ -15,9 +15,8 @@ export const SIZE_MOVE_EVENT = 'transportal://shell-size-move';
  * elsewhere. The click is reported natively because an overlay shown without
  * activation never has focus to lose.
  *
- * Guarded against premature hiding when autoHideOnBlur is disabled,
- * pinned, auto-OCR is actively observing, or when auto-hide is temporarily
- * suppressed (e.g. during native window dragging or file dialogs). Moving or
+ * Guarded against premature hiding when the window is pinned, auto-OCR is actively observing,
+ * or when auto-hide is temporarily suppressed (e.g. during native window dragging or file dialogs). Moving or
  * resizing the overlay steals focus from the webview, so auto-hide is held
  * for the whole interaction. Playing pronunciation does not keep the overlay
  * open: leaving it is an explicit dismissal, which also stops the audio.
@@ -28,7 +27,6 @@ export function useHideOnBlur(active = true) {
 
     const dismissOnLeave = () => {
       const store = useAppStore.getState();
-      if (!store.autoHideOnBlur) return;
       if (isAutoHideSuppressed()) return;
       if (store.pinned) return;
       if (store.autoOcr?.active) return;

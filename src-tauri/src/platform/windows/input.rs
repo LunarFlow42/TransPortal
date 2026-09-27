@@ -21,7 +21,7 @@ pub fn copy_selection_to_clipboard() -> Result<(), String> {
     // SAFETY: `GetClipboardSequenceNumber` takes no arguments.
     let before = unsafe { GetClipboardSequenceNumber() };
 
-    // The hotkey that triggered us (`Alt+T`) is usually still physically held,
+    // The hotkey that triggered us (e.g. `Alt+Q`) is usually still physically held,
     // which would turn our synthesized Ctrl+C into Alt+Ctrl+C. Wait for the
     // user to let go before injecting anything.
     wait_for_keys_released(400);

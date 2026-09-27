@@ -150,7 +150,6 @@ export function useBootstrap(persist: boolean) {
           fontSize,
           showCrosshairs,
           aiPromptTemplate,
-          autoHideOnBlur,
           targetLanguage,
           ocrPictureDefaultView,
         } = useAppStore.getState();
@@ -171,7 +170,6 @@ export function useBootstrap(persist: boolean) {
           fontSize,
           showCrosshairs,
           aiPromptTemplate,
-          autoHideOnBlur,
           targetLanguage,
           ocrPictureDefaultView,
         });
@@ -217,9 +215,6 @@ export function useBootstrap(persist: boolean) {
         if (state.fontSize !== previous.fontSize) patch.fontSize = state.fontSize;
         if (state.showCrosshairs !== previous.showCrosshairs) patch.showCrosshairs = state.showCrosshairs;
         if (state.aiPromptTemplate !== previous.aiPromptTemplate) patch.aiPromptTemplate = state.aiPromptTemplate;
-        if (state.autoHideOnBlur !== previous.autoHideOnBlur) {
-          patch.autoHideOnBlur = state.autoHideOnBlur;
-        }
         if (state.targetLanguage !== previous.targetLanguage) {
           patch.targetLanguage = state.targetLanguage;
         }

@@ -314,7 +314,6 @@ export interface PersistedSettings {
   fontSize?: number;
   showCrosshairs?: boolean;
   aiPromptTemplate?: 'direct' | 'academic' | 'code' | 'casual';
-  autoHideOnBlur: boolean;
   targetLanguage: string;
   ocrPictureDefaultView?: 'translated' | 'original';
   smoothTransitions?: boolean;

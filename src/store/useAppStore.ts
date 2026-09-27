@@ -91,7 +91,6 @@ interface AppState {
   backTranslation: { text: string; loading: boolean; error: string | null } | null;
   history: string[];
   historyIndex: number;
-  autoHideOnBlur: boolean;
   targetLanguage: string;
   smoothTransitions: boolean;
 
@@ -110,7 +109,6 @@ interface AppState {
   runBackTranslation: () => Promise<void>;
   navigateHistory: (direction: 'prev' | 'next') => void;
   setAutoPronounce: (enabled: boolean) => void;
-  setAutoHideOnBlur: (enabled: boolean) => void;
   setTargetLanguage: (targetLanguage: string) => void;
   setOcrLanguage: (language: string) => Promise<boolean>;
   setOcrEngine: (engine: OcrEngineId) => Promise<boolean>;
@@ -211,7 +209,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   backTranslation: null,
   history: [],
   historyIndex: -1,
-  autoHideOnBlur: true,
   targetLanguage: 'zh-CN',
   smoothTransitions: true,
 
@@ -335,7 +332,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
   setAutoPronounce: (autoPronounce) => set({ autoPronounce }),
-  setAutoHideOnBlur: (autoHideOnBlur) => set({ autoHideOnBlur }),
   setTargetLanguage: (targetLanguage) => set({ targetLanguage, ocrTarget: targetLanguage }),
   setOcrLanguage: (language) => get().setOcrConfig(get().ocrEngine, language),
   setOcrEngine: (engine) => get().setOcrConfig(engine, 'auto'),
@@ -394,7 +390,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       fontSize: settings.fontSize ?? state.fontSize,
       showCrosshairs: settings.showCrosshairs ?? state.showCrosshairs,
       aiPromptTemplate: settings.aiPromptTemplate ?? state.aiPromptTemplate,
-      autoHideOnBlur: settings.autoHideOnBlur ?? state.autoHideOnBlur,
       targetLanguage: settings.targetLanguage ?? state.targetLanguage,
       ocrTarget: settings.targetLanguage ?? state.ocrTarget,
       ocrPictureDefaultView: settings.ocrPictureDefaultView ?? state.ocrPictureDefaultView,

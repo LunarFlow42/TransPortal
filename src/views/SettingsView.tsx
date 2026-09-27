@@ -153,8 +153,6 @@ export const SettingsView: React.FC = () => {
     setShowCrosshairs,
     autoPronounce,
     setAutoPronounce,
-    autoHideOnBlur,
-    setAutoHideOnBlur,
     targetLanguage,
     setTargetLanguage,
     settingsError,
@@ -303,7 +301,7 @@ export const SettingsView: React.FC = () => {
             />
           </div>
 
-          {isMatch(['appearance', '外观', '界面', 'theme', '主题', 'opacity', '透明度', '毛玻璃', '亚克力', 'acrylic', 'blur', '磨砂', '动效', '动画', '过渡', '平滑', 'transition', 'animation', 'font', '字号', 'crosshairs', '对齐', 'autohide', '隐藏']) && (
+          {isMatch(['appearance', '外观', '界面', 'theme', '主题', 'opacity', '透明度', '动效', '动画', '过渡', '平滑', 'transition', 'animation', 'font', '字号', 'crosshairs', '对齐']) && (
             <Section label="Appearance 外观与界面" icon={<Palette className="h-3.5 w-3.5" />}>
               <Surface variant="inner" className="flex flex-col gap-2.5 p-3">
                 <div className="flex items-center gap-3">
@@ -376,20 +374,6 @@ export const SettingsView: React.FC = () => {
                     checked={showCrosshairs}
                     onChange={() => setShowCrosshairs(!showCrosshairs)}
                     label="截图十字对齐辅助线"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between gap-3 border-t border-[var(--stroke)] pt-2.5">
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-[13px] font-medium">失去焦点自动隐藏</span>
-                    <p className="text-[10px] text-[var(--faint)]">
-                      当窗口失去焦点时自动隐藏（查词浮层置顶固定状态除外）。
-                    </p>
-                  </div>
-                  <Switch
-                    checked={autoHideOnBlur}
-                    onChange={() => setAutoHideOnBlur(!autoHideOnBlur)}
-                    label="失去焦点自动隐藏"
                   />
                 </div>
               </Surface>

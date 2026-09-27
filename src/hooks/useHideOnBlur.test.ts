@@ -55,7 +55,6 @@ describe('useHideOnBlur', () => {
     resumeAutoHide(0);
     lifecycle.effects.length = 0;
     useAppStore.setState({
-      autoHideOnBlur: true,
       pinned: false,
       autoOcr: null,
       smoothTransitions: true,
@@ -67,7 +66,7 @@ describe('useHideOnBlur', () => {
     vi.restoreAllMocks();
   });
 
-  it('hides after 100ms dismiss animation when window loses focus and autoHideOnBlur is true', async () => {
+  it('hides after 100ms dismiss animation when window loses focus', async () => {
     useHideOnBlur(true);
     const effect = lifecycle.effects[0];
     effect();
@@ -97,18 +96,6 @@ describe('useHideOnBlur', () => {
     effect();
 
     focusCallback!({ payload: true });
-
-    expect(mockHide).not.toHaveBeenCalled();
-  });
-
-  it('does not hide when autoHideOnBlur is disabled', () => {
-    useAppStore.setState({ autoHideOnBlur: false });
-
-    useHideOnBlur(true);
-    const effect = lifecycle.effects[0];
-    effect();
-
-    focusCallback!({ payload: false });
 
     expect(mockHide).not.toHaveBeenCalled();
   });
