@@ -70,7 +70,7 @@ Dependency rules (checked by `scripts/check-architecture.sh`):
 
 ## Linux verification
 
-CI runs clippy and tests on `ubuntu-24.04` and builds `.deb` / `.rpm` / `.AppImage`. Locally, on a Linux machine with the Tauri build dependencies (`pkg-config libssl-dev libdbus-1-dev libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev`):
+CI runs clippy and tests on `ubuntu-24.04`. Full Linux packaging (`.deb` / `.rpm` / `.AppImage`) is maintained on the dedicated `feat/linux-native` branch while Wayland native contracts are being developed. Locally, on a Linux machine with the Tauri build dependencies (`pkg-config libssl-dev libdbus-1-dev libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev`):
 
 - In `src-tauri/`: `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test`
 - Packages: `APPIMAGE_EXTRACT_AND_RUN=1 pnpm tauri build` (output in `src-tauri/target/release/bundle/{deb,rpm,appimage}`)

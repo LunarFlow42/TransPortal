@@ -2,8 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [master, main]
+    branches: [master, main, feat/linux-native]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   check:
@@ -81,6 +82,8 @@ jobs:
 
   bundle-linux:
     needs: check
+    # Linux packaging is reserved for the feat/linux-native branch during active development
+    if: github.ref == 'refs/heads/feat/linux-native'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
