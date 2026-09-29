@@ -41,26 +41,26 @@ const THEME_OPTIONS = [
 ];
 
 const PROVIDER_OPTIONS = [
-  { value: 'google_free', label: 'Google Free (zero config)' },
-  { value: 'youdao_free', label: 'Youdao Free 有道翻译 (zero config)' },
-  { value: 'tencent_free', label: 'Tencent Free 腾讯翻译君 (zero config)' },
-  { value: 'openai', label: 'OpenAI Compatible (BYOK SSE)' },
+  { value: 'google_free', label: 'Google Free' },
+  { value: 'youdao_free', label: 'Youdao Free 有道翻译' },
+  { value: 'tencent_free', label: 'Tencent Free 腾讯翻译君' },
+  { value: 'openai', label: 'OpenAI Compatible' },
 ];
 
 const TARGET_LANGUAGE_OPTIONS = [
-  { value: 'zh-CN', label: '简体中文 (Simplified Chinese)' },
+  { value: 'zh-CN', label: '简体中文' },
   { value: 'en', label: 'English' },
-  { value: 'ja', label: '日本語 (Japanese)' },
-  { value: 'ko', label: '한국어 (Korean)' },
-  { value: 'zh-TW', label: '繁體中文 (Traditional Chinese)' },
-  { value: 'fr', label: 'Français (French)' },
-  { value: 'de', label: 'Deutsch (German)' },
-  { value: 'es', label: 'Español (Spanish)' },
-  { value: 'ru', label: 'Русский (Russian)' },
+  { value: 'ja', label: '日本語' },
+  { value: 'ko', label: '한국어' },
+  { value: 'zh-TW', label: '繁體中文' },
+  { value: 'fr', label: 'Français' },
+  { value: 'de', label: 'Deutsch' },
+  { value: 'es', label: 'Español' },
+  { value: 'ru', label: 'Русский' },
 ];
 
 const INK_KEY_OPTIONS = [
-  { value: 'None', label: '已禁用 (None)' },
+  { value: 'None', label: '已禁用' },
   { value: 'Control', label: 'Ctrl 键' },
   { value: 'Alt', label: 'Alt 键' },
   { value: 'Shift', label: 'Shift 键' },
