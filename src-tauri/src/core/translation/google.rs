@@ -33,7 +33,7 @@ impl Translator for GoogleFreeProvider {
 
         let response = self
             .client
-            .get("https://translate.googleapis.com/translate_a/single")
+            .post("https://translate.googleapis.com/translate_a/single")
             .query(&[
                 ("client", "gtx"),
                 ("sl", sl),
@@ -41,20 +41,35 @@ impl Translator for GoogleFreeProvider {
                 ("dt", "t"),
                 ("dt", "bd"),
                 ("dt", "rm"),
-                ("q", &query.text),
             ])
+            .form(&[("q", &query.text)])
             .send()
             .await?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
+            if status.as_u16() == 429
+                || body.contains("automated queries")
+                || body.contains("We're sorry")
+            {
+                return Err(ProviderError::RateLimit(
+                    "Google 翻译访问受限（频率过高或需配置网络代理）".to_string(),
+                ));
+            }
             return Err(ProviderError::Execution(format!(
-                "Google translate failed with status {status}: {body}"
+                "Google translate failed ({status})"
             )));
         }
 
-        let json: Value = response.json().await.map_err(|e| {
+        let body_text = response.text().await.unwrap_or_default();
+        if body_text.trim_start().starts_with('<') {
+            return Err(ProviderError::RateLimit(
+                "Google 翻译触发人机验证（可能需要代理或稍后重试）".to_string(),
+            ));
+        }
+
+        let json: Value = serde_json::from_str(&body_text).map_err(|e| {
             ProviderError::Parse(format!("Failed to parse Google response JSON: {e}"))
         })?;
 

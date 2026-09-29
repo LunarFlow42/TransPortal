@@ -73,10 +73,19 @@ impl Translator for YoudaoFreeProvider {
             .await
             .map_err(|e| ProviderError::Parse(format!("Failed to parse Youdao JSON: {e}")))?;
 
-        let error_code = json["errorCode"].as_str().unwrap_or("");
+        let error_code = json["errorCode"]
+            .as_str()
+            .map(|s| s.to_string())
+            .or_else(|| json["errorCode"].as_i64().map(|n| n.to_string()))
+            .unwrap_or_default();
         if !error_code.is_empty() && error_code != "0" {
+            let msg = match error_code.as_str() {
+                "50" | "411" => "有道翻译访问频率过高，请稍后再试",
+                "108" => "有道翻译应用 ID 或密钥无效",
+                _ => "有道翻译服务请求异常",
+            };
             return Err(ProviderError::Execution(format!(
-                "Youdao error code {error_code}"
+                "{msg}（错误码 {error_code}）"
             )));
         }
 

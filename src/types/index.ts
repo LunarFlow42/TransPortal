@@ -265,6 +265,7 @@ export interface OcrStatus {
 }
 
 export type ProviderType =
+  | 'bing_free'
   | 'google_free'
   | 'youdao_free'
   | 'tencent_free'

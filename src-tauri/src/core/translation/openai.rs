@@ -50,8 +50,13 @@ impl OpenAiCompatibleProvider {
             .base_url
             .as_deref()
             .unwrap_or("https://api.openai.com/v1")
+            .trim()
             .trim_end_matches('/');
-        format!("{base}/chat/completions")
+        if base.ends_with("/chat/completions") {
+            base.to_string()
+        } else {
+            format!("{base}/chat/completions")
+        }
     }
 
     fn build_system_prompt(&self, target_lang: &str) -> String {
@@ -133,10 +138,26 @@ impl OpenAiCompatibleProvider {
     }
 }
 
+fn natural_lang_name(tag: &str) -> &str {
+    match tag {
+        "zh-CN" | "zh-Hans" | "zh" => "Simplified Chinese (简体中文)",
+        "zh-TW" | "zh-Hant" | "zh-HK" => "Traditional Chinese (繁體中文)",
+        "en" => "English",
+        "ja" => "Japanese",
+        "ko" => "Korean",
+        "fr" => "French",
+        "de" => "German",
+        "es" => "Spanish",
+        "ru" => "Russian",
+        other => other,
+    }
+}
+
 #[async_trait]
 impl Translator for OpenAiCompatibleProvider {
     async fn translate(&self, query: &TranslateQuery) -> Result<TranslateResult, ProviderError> {
-        let target_lang = query.target_lang.as_deref().unwrap_or("Chinese");
+        let target_tag = query.target_lang.as_deref().unwrap_or("zh-CN");
+        let target_lang = natural_lang_name(target_tag);
         let system_prompt = self.build_system_prompt(target_lang);
         let model = self.config.model.as_deref().unwrap_or("gpt-4o-mini");
         let url = self.endpoint_url();
@@ -197,7 +218,7 @@ impl Translator for OpenAiCompatibleProvider {
             original_text: query.text.clone(),
             translated_text: translated,
             detected_source_lang: query.source_lang.clone(),
-            target_lang: target_lang.to_string(),
+            target_lang: target_tag.to_string(),
             details: None,
             provider_name: format!("OpenAI({})", model),
         })
@@ -208,7 +229,8 @@ impl Translator for OpenAiCompatibleProvider {
         query: &TranslateQuery,
         channel: tauri::ipc::Channel<StreamChunk>,
     ) -> Result<(), ProviderError> {
-        let target_lang = query.target_lang.as_deref().unwrap_or("Chinese");
+        let target_tag = query.target_lang.as_deref().unwrap_or("zh-CN");
+        let target_lang = natural_lang_name(target_tag);
         let system_prompt = self.build_system_prompt(target_lang);
         let model = self.config.model.as_deref().unwrap_or("gpt-4o-mini");
         let url = self.endpoint_url();
@@ -287,5 +309,48 @@ impl Translator for OpenAiCompatibleProvider {
         });
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_endpoint_url_normalization() {
+        let p1 = OpenAiCompatibleProvider::new(OpenAiConfig {
+            base_url: Some("https://api.openai.com/v1".into()),
+            ..Default::default()
+        });
+        assert_eq!(
+            p1.endpoint_url(),
+            "https://api.openai.com/v1/chat/completions"
+        );
+
+        let p2 = OpenAiCompatibleProvider::new(OpenAiConfig {
+            base_url: Some("https://api.deepseek.com/v1/chat/completions".into()),
+            ..Default::default()
+        });
+        assert_eq!(
+            p2.endpoint_url(),
+            "https://api.deepseek.com/v1/chat/completions"
+        );
+
+        let p3 = OpenAiCompatibleProvider::new(OpenAiConfig {
+            base_url: Some("https://api.deepseek.com/v1/chat/completions/".into()),
+            ..Default::default()
+        });
+        assert_eq!(
+            p3.endpoint_url(),
+            "https://api.deepseek.com/v1/chat/completions"
+        );
+    }
+
+    #[test]
+    fn test_natural_lang_name() {
+        assert_eq!(natural_lang_name("zh-CN"), "Simplified Chinese (简体中文)");
+        assert_eq!(natural_lang_name("zh-TW"), "Traditional Chinese (繁體中文)");
+        assert_eq!(natural_lang_name("en"), "English");
+        assert_eq!(natural_lang_name("ja"), "Japanese");
     }
 }

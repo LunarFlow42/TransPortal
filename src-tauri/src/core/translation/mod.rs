@@ -4,12 +4,14 @@ use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
 
+pub mod bing;
 pub mod google;
 pub mod lang;
 pub mod openai;
 pub mod tencent;
 pub mod youdao;
 
+pub use bing::BingFreeProvider;
 pub use google::GoogleFreeProvider;
 pub use lang::resolve_target_lang;
 pub use openai::{OpenAiCompatibleProvider, OpenAiConfig};
@@ -137,6 +139,7 @@ pub type ProviderFactory = fn(Option<OpenAiConfig>) -> Arc<dyn Translator>;
 /// the command layer never needs to change.
 pub fn registry() -> &'static [(&'static str, ProviderFactory)] {
     &[
+        ("bing_free", |_config| Arc::new(BingFreeProvider::new())),
         ("google_free", |_config| Arc::new(GoogleFreeProvider::new())),
         ("youdao_free", |_config| Arc::new(YoudaoFreeProvider::new())),
         ("tencent_free", |_config| {

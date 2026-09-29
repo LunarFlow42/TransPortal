@@ -41,6 +41,7 @@ const THEME_OPTIONS = [
 ];
 
 const PROVIDER_OPTIONS = [
+  { value: 'bing_free', label: 'Bing Free 微软翻译' },
   { value: 'google_free', label: 'Google Free' },
   { value: 'youdao_free', label: 'Youdao Free 有道翻译' },
   { value: 'tencent_free', label: 'Tencent Free 腾讯翻译君' },
