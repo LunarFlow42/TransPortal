@@ -36,6 +36,15 @@ fn key_down(key: VIRTUAL_KEY) -> bool {
     (unsafe { GetAsyncKeyState(i32::from(key.0)) } as u16 & 0x8000) != 0
 }
 
+fn key_matches_ink(vk: u32, ink_vk: u32) -> bool {
+    match ink_vk {
+        0x11 => matches!(vk, 0x11 | 0xa2 | 0xa3),
+        0x12 => matches!(vk, 0x12 | 0xa4 | 0xa5),
+        0x10 => matches!(vk, 0x10 | 0xa0 | 0xa1),
+        _ => vk == ink_vk,
+    }
+}
+
 unsafe extern "system" fn keyboard_hook(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     if code >= 0 {
         // SAFETY: WH_KEYBOARD_LL supplies a valid structure for nonnegative codes.
@@ -68,15 +77,20 @@ unsafe extern "system" fn keyboard_hook(code: i32, wparam: WPARAM, lparam: LPARA
             }
 
             let ink_vk = INK_KEY.load(Ordering::Relaxed);
-            if ink_vk != 0 && key.vkCode == ink_vk {
-                if down {
-                    INK_KEY_DOWN.set(true);
-                } else if up && INK_KEY_DOWN.replace(false) {
-                    EVENTS.with_borrow(|sender| {
-                        if let Some(sender) = sender {
-                            let _ = sender.try_send(GestureEvent::InkTranslate { window });
-                        }
-                    });
+            if ink_vk != 0 {
+                if key_matches_ink(key.vkCode, ink_vk) {
+                    if down {
+                        INK_KEY_DOWN.set(true);
+                    } else if up && INK_KEY_DOWN.replace(false) {
+                        EVENTS.with_borrow(|sender| {
+                            if let Some(sender) = sender {
+                                let _ = sender.try_send(GestureEvent::InkTranslate { window });
+                            }
+                        });
+                    }
+                } else if down {
+                    // Any other key press invalidates the pure ink gesture (e.g. Alt+Tab, Ctrl+C).
+                    INK_KEY_DOWN.set(false);
                 }
             }
         }
@@ -132,6 +146,9 @@ impl GestureSource for KeyboardHook {
         let vk = match key {
             Some(InkKey::Backquote) => 0xC0, // VK_OEM_3
             Some(InkKey::CapsLock) => 0x14,  // VK_CAPITAL
+            Some(InkKey::Control) => 0x11,   // VK_CONTROL
+            Some(InkKey::Alt) => 0x12,       // VK_MENU
+            Some(InkKey::Shift) => 0x10,     // VK_SHIFT
             Some(InkKey::Function(number)) => 0x6F + u32::from(number), // VK_F1 = 0x70
             None => 0,
         };

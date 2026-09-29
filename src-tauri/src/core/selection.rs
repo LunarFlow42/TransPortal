@@ -218,7 +218,7 @@ impl SelectionService {
         let target = self
             .platform
             .foreground()
-            .filter(|target| target.window == window)?;
+            .filter(|target| target.window == window);
         if baseline == 0 {
             return Some(self.record(
                 failure("无法确认本次复制内容，请重新选择文字后重试。"),
@@ -226,8 +226,11 @@ impl SelectionService {
             ));
         }
         let start = Instant::now();
-        while start.elapsed() < Duration::from_millis(900) {
-            if self.platform.foreground().as_ref() != Some(&target) {
+        while start.elapsed() < Duration::from_millis(500) {
+            if let (Some(target), Some(current)) = (&target, self.platform.foreground())
+                && current.window != target.window
+                && current.process != target.process
+            {
                 return None;
             }
             let revision = self.clipboard.revision();
@@ -245,11 +248,30 @@ impl SelectionService {
                         replace_token: None,
                         bounds: None,
                     },
-                    Some(target),
+                    target,
                 ));
             }
             std::thread::sleep(Duration::from_millis(15));
         }
+
+        // Fallback: If sequence number didn't change (e.g. host app debounced the 2nd
+        // copy or baseline was sampled after the sequence incremented),
+        // read whatever is currently on the clipboard.
+        if let Ok(text) = app.clipboard().read_text()
+            && !text.trim().is_empty()
+        {
+            return Some(self.record(
+                CaptureOutcome {
+                    text: text.trim().into(),
+                    method: CaptureMethod::Clipboard,
+                    error: None,
+                    replace_token: None,
+                    bounds: None,
+                },
+                target,
+            ));
+        }
+
         Some(self.record(
             failure("本次复制未提供新文字，请重新选择文字后再双按 C。"),
             None,

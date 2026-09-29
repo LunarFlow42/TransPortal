@@ -29,6 +29,9 @@ pub enum InkKey {
     /// The `` ` `` / `~` key.
     Backquote,
     CapsLock,
+    Control,
+    Alt,
+    Shift,
     /// F1–F12.
     Function(u8),
 }
@@ -39,6 +42,9 @@ impl InkKey {
         match key.trim().to_ascii_lowercase().as_str() {
             "~" | "`" => Some(Self::Backquote),
             "capslock" | "caps_lock" => Some(Self::CapsLock),
+            "control" | "ctrl" => Some(Self::Control),
+            "alt" => Some(Self::Alt),
+            "shift" => Some(Self::Shift),
             other => other
                 .strip_prefix('f')
                 .and_then(|number| number.parse::<u8>().ok())
@@ -68,6 +74,10 @@ mod tests {
         assert_eq!(InkKey::parse("`"), Some(InkKey::Backquote));
         assert_eq!(InkKey::parse(" CapsLock "), Some(InkKey::CapsLock));
         assert_eq!(InkKey::parse("caps_lock"), Some(InkKey::CapsLock));
+        assert_eq!(InkKey::parse("Control"), Some(InkKey::Control));
+        assert_eq!(InkKey::parse("ctrl"), Some(InkKey::Control));
+        assert_eq!(InkKey::parse("Alt"), Some(InkKey::Alt));
+        assert_eq!(InkKey::parse("Shift"), Some(InkKey::Shift));
         assert_eq!(InkKey::parse("F1"), Some(InkKey::Function(1)));
         assert_eq!(InkKey::parse("f12"), Some(InkKey::Function(12)));
         for disabled in ["", "none", "f0", "f13", "f", "fx", "a"] {

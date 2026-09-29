@@ -48,6 +48,7 @@ pub fn start(app: &AppHandle) {
                     {
                         last_text = trimmed.to_string();
                         let _ = app.emit_to(SHELL_LABEL, CLIPBOARD_TEXT_EVENT, trimmed);
+                        crate::core::shortcut::show_shell_with_anchor(&app, None, true);
                     }
                 }
             };
