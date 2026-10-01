@@ -11,13 +11,16 @@ import {
   Minimize2,
   Pin,
   RefreshCw,
+  RotateCcw,
   Settings,
   X,
   Sparkles,
+  ZoomIn,
 } from 'lucide-react';
 import { Button, IconButton, Surface } from './ui';
 import { InteractiveSentence } from './InteractiveSentence';
 import { useAppStore } from '../store/useAppStore';
+import { useImageZoomPan } from '../hooks/useImageZoomPan';
 import { saveSettings } from '../store/persistence';
 import { startWindowDrag } from '../utils/drag';
 import { openSettingsWindow } from '../utils/windows';
@@ -45,7 +48,22 @@ export const OcrCardView: React.FC<{ event: OcrEvent }> = ({ event }) => {
 
   const [copiedOriginal, setCopiedOriginal] = useState(false);
   const [copiedTranslation, setCopiedTranslation] = useState(false);
-  const [zoomActual, setZoomActual] = useState(false);
+
+  const {
+    isDragging: isZoomDragging,
+    isZoomed,
+    zoomPercent,
+    containerRef: zoomContainerRef,
+    resetZoom,
+    setScale: setZoomScale,
+    onWheel: onZoomWheel,
+    onMouseDown: onZoomMouseDown,
+    onMouseMove: onZoomMouseMove,
+    onMouseUp: onZoomMouseUp,
+    onMouseLeave: onZoomMouseLeave,
+    onDoubleClick: onZoomDoubleClick,
+    transformStyle: zoomTransformStyle,
+  } = useImageZoomPan();
 
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const copyOriginalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -276,30 +294,75 @@ export const OcrCardView: React.FC<{ event: OcrEvent }> = ({ event }) => {
                   {event.picture.width} × {event.picture.height}
                 </span>
               )}
+              {isZoomed && (
+                <button
+                  type="button"
+                  onClick={resetZoom}
+                  title="点击复位为适应窗口 (双击图片也可复位)"
+                  className="flex items-center gap-0.5 rounded bg-[var(--surface-3)] px-1 py-0.5 text-[10px] font-mono text-[var(--accent-b)] hover:bg-[var(--accent-b)]/20 transition-colors cursor-pointer"
+                >
+                  <RotateCcw className="h-2.5 w-2.5" />
+                  <span>{zoomPercent}</span>
+                </button>
+              )}
               <IconButton
-                title={zoomActual ? '适应窗口' : '原始尺寸'}
-                onClick={() => setZoomActual(!zoomActual)}
+                title={isZoomed ? '复位为适应窗口 (双击图片也可复位)' : '放大查看 (支持鼠标滚轮自由缩放/拖拽)'}
+                onClick={() => {
+                  if (isZoomed) {
+                    resetZoom();
+                  } else {
+                    setZoomScale(1.8);
+                  }
+                }}
               >
-                {zoomActual ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
+                {isZoomed ? (
+                  <Minimize2 className="h-3 w-3 text-[var(--accent-b)]" />
+                ) : (
+                  <Maximize2 className="h-3 w-3" />
+                )}
               </IconButton>
             </div>
           </div>
 
           {event.picture ? (
-            <div className="relative flex-1 min-h-0 overflow-auto rounded-[var(--r-inner)] border border-[var(--stroke)] bg-[var(--surface-2)]/60 flex items-center justify-center p-1.5 shadow-inner">
-              <canvas
-                ref={canvasRef}
-                aria-label={ocrPictureOriginal ? '原始截图' : '文字原位替换后的译图'}
-                className={cn(
-                  'rounded transition-all duration-200 select-none pointer-events-auto',
-                  zoomActual
-                    ? 'max-w-none w-auto h-auto cursor-zoom-out'
-                    : 'max-w-full max-h-full object-contain cursor-zoom-in',
-                )}
-                style={{ display: 'block' }}
-                onClick={() => setZoomActual(!zoomActual)}
-                title={zoomActual ? '点击缩放为窗口大小' : '点击放大为 100% 原始大小'}
-              />
+            <div
+              ref={zoomContainerRef}
+              onWheel={onZoomWheel}
+              onMouseDown={onZoomMouseDown}
+              onMouseMove={onZoomMouseMove}
+              onMouseUp={onZoomMouseUp}
+              onMouseLeave={onZoomMouseLeave}
+              onDoubleClick={onZoomDoubleClick}
+              className={cn(
+                'relative flex-1 min-h-0 overflow-hidden rounded-[var(--r-inner)] border border-[var(--stroke)] bg-[var(--surface-2)]/60 flex items-center justify-center p-1.5 shadow-inner select-none',
+                isZoomDragging ? 'cursor-grabbing' : isZoomed ? 'cursor-grab' : 'cursor-zoom-in',
+              )}
+              title={isZoomed ? '滚轮缩放 · 拖拽平移 · 双击复位' : '滚轮放大 · 拖拽平移'}
+            >
+              <div
+                style={zoomTransformStyle}
+                className="max-w-full max-h-full flex items-center justify-center"
+              >
+                <canvas
+                  ref={canvasRef}
+                  aria-label={ocrPictureOriginal ? '原始截图' : '文字原位替换后的译图'}
+                  className="max-w-full max-h-full object-contain rounded select-none pointer-events-auto"
+                  style={{ display: 'block' }}
+                />
+              </div>
+
+              {isZoomed && (
+                <div
+                  onClick={resetZoom}
+                  title="点击一键复位（双击图片也可复位）"
+                  className="absolute bottom-2 left-2 z-10 flex items-center gap-1 rounded bg-[var(--surface-1)]/90 px-1.5 py-0.5 shadow-md border border-[var(--stroke)] text-[10px] font-mono text-[var(--text)] hover:text-[var(--accent-b)] transition-colors cursor-pointer backdrop-blur-sm"
+                >
+                  <ZoomIn className="h-3 w-3 text-[var(--accent-b)]" />
+                  <span>{zoomPercent}</span>
+                  <RotateCcw className="h-2.5 w-2.5 opacity-60 ml-0.5" />
+                </div>
+              )}
+
               {pictureBusy && !ocrPictureOriginal && (
                 <div className="absolute inset-0 flex items-center justify-center bg-black/30 backdrop-blur-[1px] rounded-[var(--r-inner)] pointer-events-none">
                   <div className="flex items-center gap-1.5 bg-[var(--surface-1)]/90 px-2.5 py-1 rounded-full shadow text-[11px] text-[var(--text)]">

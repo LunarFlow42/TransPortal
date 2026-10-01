@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { save } from '@tauri-apps/plugin-dialog';
-import { Copy, Download, Languages, LoaderCircle } from 'lucide-react';
+import { Copy, Download, Languages, LoaderCircle, RotateCcw, ZoomIn } from 'lucide-react';
 import { Button } from './ui';
 import { useAppStore } from '../store/useAppStore';
+import { useImageZoomPan } from '../hooks/useImageZoomPan';
 import { renderPicture } from '../utils/picture';
 import { suppressAutoHide } from '../utils/autoHide';
 import type { OcrPicture, PictureTranslation } from '../types';
@@ -22,7 +23,23 @@ export const PictureView: React.FC<Props> = ({ picture, translation, busy, error
   const canvas = useRef<HTMLCanvasElement>(null);
   const original = useAppStore((state) => state.ocrPictureOriginal);
   const toggleOriginal = useAppStore((state) => state.toggleOcrPictureOriginal);
-  const [zoom, setZoom] = useState(false);
+
+  const {
+    isDragging: isZoomDragging,
+    isZoomed,
+    zoomPercent,
+    containerRef: zoomContainerRef,
+    resetZoom,
+    setScale: setZoomScale,
+    onWheel: onZoomWheel,
+    onMouseDown: onZoomMouseDown,
+    onMouseMove: onZoomMouseMove,
+    onMouseUp: onZoomMouseUp,
+    onMouseLeave: onZoomMouseLeave,
+    onDoubleClick: onZoomDoubleClick,
+    transformStyle: zoomTransformStyle,
+  } = useImageZoomPan();
+
   const [editing, setEditing] = useState(true);
   const [texts, setTexts] = useState(picture.blocks.map((block) => block.text));
   const [notice, setNotice] = useState<string | null>(null);
@@ -63,11 +80,64 @@ export const PictureView: React.FC<Props> = ({ picture, translation, busy, error
       <Button size="sm" variant={original ? 'primary' : 'subtle'} onClick={toggleOriginal} title="快捷键 Tab：短按切换，长按透视原图">
         {original ? '查看译图 (Tab)' : '查看原图 (Tab)'}
       </Button>
-      <Button size="sm" variant="subtle" onClick={() => setZoom(!zoom)}>{zoom ? '适应窗口' : '100% 大小'}</Button>
+      <Button
+        size="sm"
+        variant="subtle"
+        onClick={() => {
+          if (isZoomed) {
+            resetZoom();
+          } else {
+            setZoomScale(1.8);
+          }
+        }}
+        title="支持滚轮缩放与鼠标拖拽平移，双击一键复位"
+      >
+        {isZoomed ? '适应窗口' : '放大查看'}
+      </Button>
+      {isZoomed && (
+        <button
+          type="button"
+          onClick={resetZoom}
+          title="点击复位为适应窗口 (双击图片也可复位)"
+          className="flex items-center gap-1 rounded bg-[var(--surface-3)] px-1.5 py-0.5 text-[10px] font-mono text-[var(--accent-b)] hover:bg-[var(--accent-b)]/20 transition-colors cursor-pointer"
+        >
+          <RotateCcw className="h-2.5 w-2.5" />
+          <span>{zoomPercent}</span>
+        </button>
+      )}
       <span className="ml-auto text-[10px] text-[var(--faint)]">{picture.width} × {picture.height} · {picture.blocks.length} 段</span>
     </div>
-    <div className="max-h-[330px] overflow-auto rounded-lg border border-[var(--stroke)] bg-[var(--surface-2)]">
-      <canvas ref={canvas} aria-label={original ? '原始截图' : '文字原位替换后的译图'} style={{ width: zoom ? picture.width : '100%', display: 'block' }} />
+    <div
+      ref={zoomContainerRef}
+      onWheel={onZoomWheel}
+      onMouseDown={onZoomMouseDown}
+      onMouseMove={onZoomMouseMove}
+      onMouseUp={onZoomMouseUp}
+      onMouseLeave={onZoomMouseLeave}
+      onDoubleClick={onZoomDoubleClick}
+      className={`relative max-h-[360px] min-h-[160px] overflow-hidden rounded-lg border border-[var(--stroke)] bg-[var(--surface-2)] flex items-center justify-center p-2 shadow-inner select-none ${
+        isZoomDragging ? 'cursor-grabbing' : isZoomed ? 'cursor-grab' : 'cursor-zoom-in'
+      }`}
+      title={isZoomed ? '滚轮缩放 · 拖拽平移 · 双击复位' : '滚轮放大 · 拖拽平移'}
+    >
+      <div style={zoomTransformStyle} className="max-w-full max-h-full flex items-center justify-center">
+        <canvas
+          ref={canvas}
+          aria-label={original ? '原始截图' : '文字原位替换后的译图'}
+          style={{ maxWidth: '100%', maxHeight: '340px', objectFit: 'contain', display: 'block' }}
+        />
+      </div>
+      {isZoomed && (
+        <div
+          onClick={resetZoom}
+          title="点击一键复位（双击图片也可复位）"
+          className="absolute bottom-2 left-2 z-10 flex items-center gap-1 rounded bg-[var(--surface-1)]/90 px-1.5 py-0.5 shadow-md border border-[var(--stroke)] text-[10px] font-mono text-[var(--text)] hover:text-[var(--accent-b)] transition-colors cursor-pointer backdrop-blur-sm"
+        >
+          <ZoomIn className="h-3 w-3 text-[var(--accent-b)]" />
+          <span>{zoomPercent}</span>
+          <RotateCcw className="h-2.5 w-2.5 opacity-60 ml-0.5" />
+        </div>
+      )}
     </div>
     <div className="flex flex-wrap items-center gap-2">
       {onTranslate && <>
