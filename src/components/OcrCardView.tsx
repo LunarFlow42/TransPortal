@@ -4,6 +4,7 @@ import { dismissShell } from '../hooks/useWindowAnimation';
 import {
   Check,
   Copy,
+  GripVertical,
   Languages,
   LoaderCircle,
   Maximize2,
@@ -17,11 +18,12 @@ import {
 import { Button, IconButton, Surface } from './ui';
 import { InteractiveSentence } from './InteractiveSentence';
 import { useAppStore } from '../store/useAppStore';
+import { saveSettings } from '../store/persistence';
 import { startWindowDrag } from '../utils/drag';
 import { openSettingsWindow } from '../utils/windows';
 import { renderPicture } from '../utils/picture';
 import { cn } from '../utils/cn';
-import type { OcrEvent, TranslateResult } from '../types';
+import type { OcrEvent, ProviderType, TranslateResult } from '../types';
 
 const TARGET_LANG_OPTIONS = [
   { value: 'zh-CN', label: '简体中文' },
@@ -64,6 +66,7 @@ export const OcrCardView: React.FC<{ event: OcrEvent }> = ({ event }) => {
   const pinned = useAppStore((state) => state.pinned);
   const togglePinned = useAppStore((state) => state.togglePinned);
   const provider = useAppStore((state) => state.provider);
+  const setProvider = useAppStore((state) => state.setProvider);
   const openaiConfig = useAppStore((state) => state.openaiConfig);
 
   const translateText = useCallback(async (textToTranslate: string, target: string) => {
@@ -164,17 +167,18 @@ export const OcrCardView: React.FC<{ event: OcrEvent }> = ({ event }) => {
   };
 
   return (
-    <Surface className="w-full p-4 text-[var(--text)] flex flex-col gap-3.5 select-none overflow-hidden h-full max-h-[92vh]">
+    <Surface className="w-full text-[var(--text)] flex flex-col select-none overflow-hidden h-full max-h-[92vh] p-0">
       {/* 顶部标题栏 & 控制区域 */}
       <div
         onMouseDown={startWindowDrag}
-        className="flex cursor-move items-center justify-between border-b border-[var(--stroke)] pb-2.5 shrink-0"
+        className="flex cursor-grab active:cursor-grabbing items-center justify-between border-b border-[var(--stroke)] px-3.5 py-2 bg-[var(--surface-2)]/65 shadow-[inset_0_1px_0_var(--highlight)] backdrop-blur-sm shrink-0 select-none"
       >
-        <div className="flex items-center gap-2 text-xs font-medium">
+        <div className="flex items-center gap-1.5 text-xs font-medium">
+          <GripVertical className="h-3.5 w-3.5 text-[var(--muted)] opacity-40 hover:opacity-90 transition-opacity" />
           <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]" />
           <span>截图对照翻译</span>
           {event.language && (
-            <span className="rounded bg-[var(--surface-2)] px-1.5 py-0.5 text-[10px] font-mono text-[var(--muted)]">
+            <span className="rounded bg-[var(--surface-3)] px-1.5 py-0.5 text-[10px] font-mono text-[var(--muted)]">
               {event.language}
             </span>
           )}
@@ -193,7 +197,7 @@ export const OcrCardView: React.FC<{ event: OcrEvent }> = ({ event }) => {
               aria-label="目标语言"
               value={targetLang}
               onChange={(e) => handleTargetLangChange(e.target.value)}
-              className="cursor-pointer rounded border border-[var(--stroke)] bg-[var(--surface-2)] px-2 py-0.5 text-[11px] text-[var(--text)] focus-ring outline-none"
+              className="cursor-pointer rounded border border-[var(--stroke)] bg-[var(--surface-3)] px-1.5 py-0.5 text-[11px] text-[var(--text)] focus-ring outline-none"
             >
               {TARGET_LANG_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -202,6 +206,26 @@ export const OcrCardView: React.FC<{ event: OcrEvent }> = ({ event }) => {
               ))}
             </select>
           </div>
+
+          {/* 翻译引擎切换下拉 */}
+          <select
+            aria-label="翻译引擎"
+            value={provider}
+            onChange={(e) => {
+              const next = e.target.value as ProviderType;
+              setProvider(next);
+              void saveSettings({ provider: next });
+              void translateText(event.text, targetLang);
+            }}
+            className="cursor-pointer rounded border border-[var(--stroke)] bg-[var(--surface-3)] px-1.5 py-0.5 text-[11px] font-mono text-[var(--muted)] hover:text-[var(--text)] focus-ring outline-none transition-colors"
+            title="切换翻译引擎"
+          >
+            <option value="bing_free">Bing</option>
+            <option value="google_free">Google</option>
+            <option value="youdao_free">有道</option>
+            <option value="tencent_free">腾讯</option>
+            <option value="openai">OpenAI</option>
+          </select>
 
           <IconButton
             title="重新翻译"
@@ -230,7 +254,7 @@ export const OcrCardView: React.FC<{ event: OcrEvent }> = ({ event }) => {
       </div>
 
       {/* 主体左图右文双栏布局 */}
-      <div className="flex flex-1 min-h-0 gap-3.5 overflow-hidden">
+      <div className="flex flex-1 min-h-0 gap-3.5 overflow-hidden p-3.5">
         {/* 左栏：截图原图与覆写译图预览区 */}
         <div className="w-[42%] max-w-[340px] shrink-0 flex flex-col gap-2 min-h-0 border-r border-[var(--stroke)] pr-3.5">
           <div className="flex items-center justify-between text-[11px] text-[var(--muted)] shrink-0">

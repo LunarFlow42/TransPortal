@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   Copy,
   Download,
+  GripVertical,
   Maximize2,
   Minimize2,
   Pin,
@@ -18,12 +19,13 @@ import {
 import { InteractiveSentence } from './InteractiveSentence';
 import { ReplaceSelectionButton } from './ReplaceSelectionButton';
 import { useAppStore } from '../store/useAppStore';
+import { saveSettings } from '../store/persistence';
 import { startWindowDrag } from '../utils/drag';
 import { openSettingsWindow } from '../utils/windows';
 import { cn } from '../utils/cn';
 import { playPronunciation, stopPronunciation } from '../utils/audio';
 import { recallScrollTop, rememberScrollTop } from '../utils/scrollMemory';
-import type { LookupNode } from '../types';
+import type { LookupNode, ProviderType } from '../types';
 
 /** Split an enriched phonetic string like `英 /uk/ 美 /us/` into labelled parts. */
 function splitPhonetic(phonetic: string): { label: string; value: string }[] | null {
@@ -153,6 +155,7 @@ export const LookupCard: React.FC<LookupCardProps> = ({
   const runBackTranslation = useAppStore((state) => state.runBackTranslation);
   const startStreamTranslation = useAppStore((state) => state.startStreamTranslation);
   const provider = useAppStore((state) => state.provider);
+  const setProvider = useAppStore((state) => state.setProvider);
 
   const [copied, setCopied] = useState(false);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
@@ -311,20 +314,27 @@ export const LookupCard: React.FC<LookupCardProps> = ({
     <div
       style={{ fontSize: `${fontSize}px` }}
       className={cn(
-        'surface surface-hairline relative w-full overflow-hidden rounded-[var(--r-card)] text-[var(--text)]',
-        compact ? 'p-3.5' : 'p-4',
-        fillHeight && 'h-full flex flex-col',
+        'surface surface-hairline relative w-full overflow-hidden rounded-[var(--r-card)] text-[var(--text)] flex flex-col',
+        fillHeight && 'h-full',
       )}
     >
       {/* ------------------------------------------------ header */}
       <div
         onMouseDown={isTop ? startWindowDrag : undefined}
         className={cn(
-          'flex items-center justify-between gap-2 border-b border-[var(--stroke)] pb-2',
-          isTop && 'cursor-move',
+          'flex shrink-0 items-center justify-between gap-2 border-b border-[var(--stroke)] px-3 py-1.5 bg-[var(--surface-2)]/65 shadow-[inset_0_1px_0_var(--highlight)] backdrop-blur-sm select-none',
+          isTop ? 'cursor-grab active:cursor-grabbing' : 'cursor-default',
         )}
       >
         <div className="flex min-w-0 items-center gap-1.5">
+          {isTop && (
+            <div
+              className="flex shrink-0 items-center text-[var(--muted)] opacity-40 hover:opacity-90 transition-opacity"
+              title="按住拖拽窗口"
+            >
+              <GripVertical className="h-3.5 w-3.5" />
+            </div>
+          )}
           {(total > 1 || Boolean(ocr)) && (
             <IconButton title={ocr && total === 1 ? "返回截图对照" : "Back"} onClick={handleBack}>
               <ChevronLeft className="h-4 w-4" />
@@ -332,7 +342,7 @@ export const LookupCard: React.FC<LookupCardProps> = ({
           )}
           <Breadcrumb stack={stack} />
           {total > 1 && (
-            <span className="shrink-0 rounded-full bg-[var(--surface-2)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--muted)]">
+            <span className="shrink-0 rounded-full bg-[var(--surface-3)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--muted)]">
               {depth}/{total}
             </span>
           )}
@@ -346,10 +356,27 @@ export const LookupCard: React.FC<LookupCardProps> = ({
                   void startStreamTranslation(node.text, node.id);
                 }}
                 title="点击切换目标语言 (中/英)"
-                className="flex items-center gap-1 rounded bg-[var(--surface-2)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--muted)] hover:bg-[var(--hover)] hover:text-[var(--text)] transition-colors border border-[var(--stroke)]"
+                className="flex items-center gap-1 rounded bg-[var(--surface-3)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--muted)] hover:bg-[var(--hover)] hover:text-[var(--text)] transition-colors border border-[var(--stroke)]"
               >
                 <span>{targetLanguage.startsWith('zh') ? '自动 ⇄ 中' : '自动 ⇄ En'}</span>
               </button>
+              <select
+                value={provider}
+                onChange={(e) => {
+                  const nextProvider = e.target.value as ProviderType;
+                  setProvider(nextProvider);
+                  void saveSettings({ provider: nextProvider });
+                  void startStreamTranslation(node.text, node.id);
+                }}
+                className="h-5 cursor-pointer rounded bg-[var(--surface-3)] px-1.5 py-0 font-mono text-[10px] text-[var(--muted)] hover:text-[var(--text)] outline-none border border-[var(--stroke)] transition-colors"
+                title="切换翻译引擎"
+              >
+                <option value="bing_free">Bing</option>
+                <option value="google_free">Google</option>
+                <option value="youdao_free">有道</option>
+                <option value="tencent_free">腾讯</option>
+                <option value="openai">OpenAI</option>
+              </select>
               {provider === 'openai' && (
                 <select
                   value={aiPromptTemplate}
@@ -358,7 +385,7 @@ export const LookupCard: React.FC<LookupCardProps> = ({
                     setAiPromptTemplate(val);
                     void startStreamTranslation(node.text, node.id);
                   }}
-                  className="h-5 cursor-pointer rounded bg-[var(--surface-2)] px-1 py-0 font-mono text-[10px] text-[var(--muted)] hover:text-[var(--text)] outline-none border border-[var(--stroke)]"
+                  className="h-5 cursor-pointer rounded bg-[var(--surface-3)] px-1 py-0 font-mono text-[10px] text-[var(--muted)] hover:text-[var(--text)] outline-none border border-[var(--stroke)]"
                   title="AI 提示词模板"
                 >
                   <option value="direct">直译</option>
@@ -402,9 +429,10 @@ export const LookupCard: React.FC<LookupCardProps> = ({
         </div>
       </div>
 
-      {stackIndex === 0 && <ReplaceSelectionButton node={node} />}
+      <div className={cn('flex flex-col flex-1 min-h-0', compact ? 'p-3' : 'p-3.5')}>
+        {stackIndex === 0 && <ReplaceSelectionButton node={node} />}
 
-      {/* ------------------------------------------------ body */}
+        {/* ------------------------------------------------ body */}
       {node.kind === 'sentence' ? (
         <div
           ref={scrollRef}
@@ -587,6 +615,7 @@ export const LookupCard: React.FC<LookupCardProps> = ({
           )}
         </div>
       )}
+      </div>
     </div>
   );
 };

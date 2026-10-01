@@ -409,9 +409,40 @@ pub async fn generate_examples(
     crate::core::dictionary::examples::generate(&word, openai_config).await
 }
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
+pub static SHELL_RESUME_AFTER_SETTINGS: AtomicBool = AtomicBool::new(false);
+
 #[tauri::command]
 pub async fn open_settings_window(app: AppHandle) -> Result<(), String> {
+    let was_shell_visible =
+        if let Some(shell) = app.get_webview_window(crate::core::shell::SHELL_LABEL) {
+            let visible = shell.is_visible().unwrap_or(false);
+            if visible {
+                let _ = shell.hide();
+            }
+            visible
+        } else {
+            false
+        };
+    if was_shell_visible {
+        SHELL_RESUME_AFTER_SETTINGS.store(true, Ordering::SeqCst);
+    }
     crate::open_or_focus_settings(&app)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn close_settings_window(app: AppHandle) -> Result<(), String> {
+    if let Some(settings) = app.get_webview_window("settings") {
+        let _ = settings.hide();
+    }
+    if SHELL_RESUME_AFTER_SETTINGS.swap(false, Ordering::SeqCst) {
+        crate::core::shell::present(&app, false, |w| {
+            let _ = w.show();
+            let _ = w.set_focus();
+        });
+    }
     Ok(())
 }
 

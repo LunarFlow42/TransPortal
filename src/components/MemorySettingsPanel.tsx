@@ -8,7 +8,7 @@ function formatMb(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function MemorySettingsPanel() {
+export function MemorySettingsPanel({ bare = false }: { bare?: boolean } = {}) {
   const [report, setReport] = useState<MemoryReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [trimming, setTrimming] = useState(false);
@@ -48,16 +48,10 @@ export function MemorySettingsPanel() {
     setTrimming(false);
   };
 
-  return (
-    <section className="flex flex-col gap-2">
-      <div className="flex items-center gap-1.5 px-0.5 text-xs font-semibold text-[var(--text)]">
-        <Cpu className="h-3.5 w-3.5 text-[var(--accent-b)]" />
-        <span>System & Memory 系统与性能</span>
-      </div>
-
-      <Surface variant="inner" className="flex flex-col gap-3 p-3">
-        <div className="flex items-center justify-between">
-          <div className="flex flex-col gap-0.5">
+  const content = (
+    <Surface variant="inner" className="flex flex-col gap-3 p-3">
+      <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-0.5">
             <span className="text-[13px] font-medium text-[var(--text)]">
               进程树物理内存 (Working Set)
             </span>
@@ -123,6 +117,17 @@ export function MemorySettingsPanel() {
           </Button>
         </div>
       </Surface>
-    </section>
-  );
-}
+    );
+
+    if (bare) return content;
+
+    return (
+      <section className="flex flex-col gap-2">
+        <div className="flex items-center gap-1.5 px-0.5 text-xs font-semibold text-[var(--text)]">
+          <Cpu className="h-3.5 w-3.5 text-[var(--accent-b)]" />
+          <span>System & Memory 系统与性能</span>
+        </div>
+        {content}
+      </section>
+    );
+  }

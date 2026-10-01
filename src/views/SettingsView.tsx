@@ -19,13 +19,17 @@ import {
   Search,
   MousePointerClick,
   AppWindow,
+  ChevronDown,
+  Sliders,
+  Cpu,
+  ShieldCheck,
 } from 'lucide-react';
 import { useBootstrap } from '../hooks/useBootstrap';
-import { useHideOnBlur } from '../hooks/useHideOnBlur';
 import { useShortcutStatus } from '../hooks/useShortcutStatus';
 import { saveSettings } from '../store/persistence';
 import { useAppStore } from '../store/useAppStore';
 import { startWindowDrag } from '../utils/drag';
+import { closeSettingsWindow } from '../utils/windows';
 import { DictionaryPanel } from '../components/DictionaryPanel';
 import { OcrSettingsPanel } from '../components/OcrSettingsPanel';
 import { IntegrityPanel } from '../components/IntegrityPanel';
@@ -120,6 +124,62 @@ const IN_WINDOW_SHORTCUTS = [
   { key: 'Esc', desc: '退出识别 / 清除 / 隐藏窗口' },
 ];
 
+export type SettingsTab = 'general' | 'translation' | 'shortcuts' | 'advanced';
+
+const TABS: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
+  { id: 'general', label: '常规', icon: <Palette className="h-3.5 w-3.5" /> },
+  { id: 'translation', label: '翻译与识别', icon: <Languages className="h-3.5 w-3.5" /> },
+  { id: 'shortcuts', label: '快捷键与手势', icon: <Keyboard className="h-3.5 w-3.5" /> },
+  { id: 'advanced', label: '高级与诊断', icon: <Sliders className="h-3.5 w-3.5" /> },
+];
+
+interface CollapsibleSectionProps {
+  label: string;
+  icon?: React.ReactNode;
+  subtitle?: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}
+
+const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
+  label,
+  icon,
+  subtitle,
+  defaultOpen = false,
+  children,
+}) => {
+  const [open, setOpen] = useState(defaultOpen);
+
+  return (
+    <div className="rounded-[var(--r-outer)] border border-[var(--stroke)] bg-[var(--surface-1)]/40 overflow-hidden transition-all">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center justify-between px-3.5 py-2.5 text-left hover:bg-[var(--surface-2)]/60 transition-colors cursor-pointer select-none"
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          {icon && <span className="text-[var(--accent-b)] shrink-0">{icon}</span>}
+          <div className="flex flex-col min-w-0">
+            <span className="text-[13px] font-semibold text-[var(--text)]">{label}</span>
+            {subtitle && <span className="text-[10px] text-[var(--muted)] truncate">{subtitle}</span>}
+          </div>
+        </div>
+        <ChevronDown
+          className={cn(
+            'h-4 w-4 text-[var(--muted)] shrink-0 transition-transform duration-200',
+            open && 'rotate-180 text-[var(--text)]',
+          )}
+        />
+      </button>
+      {open && (
+        <div className="border-t border-[var(--stroke)] p-2.5 bg-[var(--surface-1)]/20 animate-in fade-in-50 duration-150">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+};
+
 /**
  * `#/settings` — the dedicated borderless settings window.
  *
@@ -166,10 +226,10 @@ export const SettingsView: React.FC = () => {
   const [recordingAction, setRecordingAction] = useState<ShortcutActionId | null>(null);
   const [autostart, setAutostart] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState<SettingsTab>('general');
 
   const { report, error: shortcutError, retrying, retry } = useShortcutStatus();
 
-  useHideOnBlur(!recordingAction);
   const settingsReady = useBootstrap(true);
 
   // Hide window on close to enable instant 0ms reopening without rebuilding WebView2.
@@ -177,7 +237,7 @@ export const SettingsView: React.FC = () => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !recordingAction) {
         event.preventDefault();
-        void getCurrentWindow().hide();
+        void closeSettingsWindow();
       }
     };
     window.addEventListener('keydown', onKeyDown);
@@ -262,6 +322,31 @@ export const SettingsView: React.FC = () => {
     return terms.some((t) => t.toLowerCase().includes(q));
   };
 
+  const isSearching = Boolean(searchQuery.trim());
+
+  const matchAppearance = isSearching && isMatch(['appearance', '外观', '界面', 'theme', '主题', 'opacity', '透明度', '动效', '动画', '过渡', '平滑', 'transition', 'animation', 'font', '字号', 'crosshairs', '对齐']);
+  const matchStartup = isSearching && isMatch(['startup', '开机启动', '自启', 'launch']);
+  const matchProvider = isSearching && isMatch(['provider', '翻译', 'engine', 'openai', 'youdao', 'google', 'tencent', 'target', '语言', '有道', '腾讯', 'bing', '微软']);
+  const matchOcr = isSearching && isMatch(['ocr', '文字识别', 'windows ocr', 'onnx', 'paddle', '语言', '引擎', '原图', '译图', '图片展示', '覆写']);
+  const matchShortcuts = isSearching && isMatch(['global', 'shortcuts', '全局', '快捷键', '热键', '划词', '替换', 'ocr', '截图', '提取文字', '静默', '输入翻译']);
+  const matchGestures = isSearching && isMatch(['gestures', 'monitoring', '手势', '监听', '落墨', '划选', '复制', 'ctrl+c+c', '剪贴板', 'clipboard', 'ink']);
+  const matchDict = isSearching && isMatch(['dictionary', '词典', '发音', 'audio', 'pronounce', 'ecdict']);
+  const matchInWindow = isSearching && isMatch(['in-window', 'window', '软件快捷键', '内置', '窗口快捷键', 'tab', 'ctrl+a', 'ctrl+r', '置顶']);
+  const matchMemory = isSearching && isMatch(['memory', '系统', '性能', '内存', '释放', 'ram', 'clean', 'working set']);
+  const matchIntegrity = isSearching && isMatch(['integrity', '完整性', '健康', '检测', 'checks', 'diagnostic', 'sha256', 'hash']);
+
+  const anyMatch =
+    matchAppearance ||
+    matchStartup ||
+    matchProvider ||
+    matchOcr ||
+    matchShortcuts ||
+    matchGestures ||
+    matchDict ||
+    matchInWindow ||
+    matchMemory ||
+    matchIntegrity;
+
   return (
     <div className="h-screen w-screen bg-transparent p-2">
       <div className="window-root surface-hairline relative flex h-full w-full flex-col overflow-hidden rounded-[var(--r-win)] text-[var(--text)]">
@@ -281,7 +366,7 @@ export const SettingsView: React.FC = () => {
             </IconButton>
             <IconButton
               title="Close"
-              onClick={() => void getCurrentWindow().hide()}
+              onClick={() => void closeSettingsWindow()}
               className="hover:bg-rose-500/90 hover:text-white"
             >
               <X className="h-3.5 w-3.5" />
@@ -295,7 +380,8 @@ export const SettingsView: React.FC = () => {
           </p>
         )}
 
-        <div className="flex flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden p-4">
+        {/* 固定顶栏：全局搜索与 4-Tab 分段切换 */}
+        <div className="flex shrink-0 flex-col gap-2.5 border-b border-[var(--stroke)] px-4 pt-3 pb-2.5 bg-[var(--surface-1)]/20">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-2.5 h-3.5 w-3.5 text-[var(--muted)]" />
             <input
@@ -307,7 +393,47 @@ export const SettingsView: React.FC = () => {
             />
           </div>
 
-          {isMatch(['appearance', '外观', '界面', 'theme', '主题', 'opacity', '透明度', '动效', '动画', '过渡', '平滑', 'transition', 'animation', 'font', '字号', 'crosshairs', '对齐']) && (
+          {isSearching ? (
+            <div className="flex items-center justify-between px-1 text-xs text-[var(--muted)]">
+              <span>全局搜索匹配项</span>
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="text-[var(--accent-b)] hover:underline cursor-pointer"
+              >
+                清空搜索并返回标签页
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-4 gap-1 rounded-[var(--r-ctrl)] bg-[var(--surface-2)]/60 p-1 border border-[var(--stroke)]">
+              {TABS.map((t) => {
+                const isActive = activeTab === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setActiveTab(t.id)}
+                    className={cn(
+                      'flex items-center justify-center gap-1.5 rounded-[var(--r-inner)] py-1.5 text-xs font-medium transition-all select-none cursor-pointer',
+                      isActive
+                        ? 'bg-[var(--surface-3)] text-[var(--text)] shadow-sm font-semibold'
+                        : 'text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--surface-1)]/50',
+                    )}
+                  >
+                    {t.icon}
+                    <span>{t.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden p-4">
+
+          {/* ====== TAB 1: 常规 (General) ====== */}
+          {/* 外观与界面 */}
+          {(isSearching ? matchAppearance : activeTab === 'general') && (
             <Section label="Appearance 外观与界面" icon={<Palette className="h-3.5 w-3.5" />}>
               <Surface variant="inner" className="flex flex-col gap-2.5 p-3">
                 <div className="flex items-center gap-3">
@@ -386,7 +512,23 @@ export const SettingsView: React.FC = () => {
             </Section>
           )}
 
-          {isMatch(['provider', '翻译', 'engine', 'openai', 'youdao', 'google', 'tencent', 'target', '语言', '有道', '腾讯']) && (
+          {/* 开机启动 */}
+          {(isSearching ? matchStartup : activeTab === 'general') && (
+            <Section label="Startup 开机启动" icon={<Power className="h-3.5 w-3.5" />}>
+              <Surface variant="inner" className="flex items-center justify-between gap-3 p-3">
+                <span className="text-[13px]">开机自动运行 TransPortal</span>
+                <Switch
+                  checked={autostart}
+                  onChange={() => void toggleAutostart()}
+                  label="Autostart"
+                />
+              </Surface>
+            </Section>
+          )}
+
+          {/* ====== TAB 2: 翻译与识别 (Translation & OCR) ====== */}
+          {/* 翻译引擎 */}
+          {(isSearching ? matchProvider : activeTab === 'translation') && (
             <Section label="Translation Provider 翻译引擎" icon={<Languages className="h-3.5 w-3.5" />}>
               <Surface variant="inner" className="flex flex-col gap-2.5 p-3">
                 <div className="flex items-center gap-3">
@@ -448,14 +590,21 @@ export const SettingsView: React.FC = () => {
                   </>
                 ) : (
                   <p className="text-[10px] text-[var(--faint)]">
-                    免密钥接口，开箱即用；有道 / 腾讯均支持自动识别源语言。
+                    免密钥接口，开箱即用；Bing / Google / 有道 / 腾讯 均支持自动识别源语言。
                   </p>
                 )}
               </Surface>
             </Section>
           )}
 
-          {isMatch(['global', 'shortcuts', '全局', '快捷键', '热键', '划词', '替换', 'ocr', '截图', '提取文字', '静默', '输入翻译']) && (
+          {/* OCR 引擎与语言包 */}
+          {(isSearching ? matchOcr : activeTab === 'translation') && (
+            <OcrSettingsPanel disabled={!settingsReady} />
+          )}
+
+          {/* ====== TAB 3: 快捷键与手势 (Shortcuts & Gestures) ====== */}
+          {/* 全局快捷键 */}
+          {(isSearching ? matchShortcuts : activeTab === 'shortcuts') && (
             <Section label="Global Shortcuts 全局快捷键" icon={<Keyboard className="h-3.5 w-3.5" />}>
               <Surface variant="inner" className="flex flex-col gap-3 p-3">
                 <div className="flex flex-col gap-2.5">
@@ -544,7 +693,8 @@ export const SettingsView: React.FC = () => {
             </Section>
           )}
 
-          {isMatch(['gestures', 'monitoring', '手势', '监听', '落墨', '划选', '复制', 'ctrl+c+c', '剪贴板', 'clipboard', 'ink']) && (
+          {/* 手势与监听 */}
+          {(isSearching ? matchGestures : activeTab === 'shortcuts') && (
             <Section label="Gestures & Monitoring 手势与监听" icon={<MousePointerClick className="h-3.5 w-3.5" />}>
               <Surface variant="inner" className="flex flex-col gap-3 p-3">
                 {/* 剪贴板监听翻译 */}
@@ -613,49 +763,9 @@ export const SettingsView: React.FC = () => {
             </Section>
           )}
 
-          {isMatch(['in-window', 'window', '软件快捷键', '内置', '窗口快捷键', 'tab', 'ctrl+a', 'ctrl+r', '置顶']) && (
-            <Section label="In-Window Shortcuts 软件快捷键" icon={<AppWindow className="h-3.5 w-3.5" />}>
-              <Surface variant="inner" className="flex flex-col gap-2 p-3">
-                <p className="text-[11px] text-[var(--muted)] mb-1">
-                  焦点处于查词/翻译浮层窗口内时的便捷键盘操作：
-                </p>
-                <div className="grid grid-cols-2 gap-2">
-                  {IN_WINDOW_SHORTCUTS.map((sc) => (
-                    <div
-                      key={sc.key}
-                      className="flex items-center justify-between gap-2 min-w-0 rounded-[var(--r-inner)] border border-[var(--stroke)] bg-[var(--surface-1)]/40 px-2.5 py-1.5 text-xs"
-                    >
-                      <span className="min-w-0 flex-1 truncate text-[var(--muted)] text-[11px]" title={sc.desc}>
-                        {sc.desc}
-                      </span>
-                      <kbd className="shrink-0 rounded-[4px] border border-[var(--stroke)] bg-[var(--surface-2)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--text)]">
-                        {sc.key}
-                      </kbd>
-                    </div>
-                  ))}
-                </div>
-              </Surface>
-            </Section>
-          )}
-
-          {isMatch(['ocr', '文字识别', 'windows ocr', 'onnx', 'paddle', '语言', '引擎', '原图', '译图', '图片展示', '覆写']) && (
-            <OcrSettingsPanel disabled={!settingsReady} />
-          )}
-
-          {isMatch(['startup', '开机启动', '自启', 'launch']) && (
-            <Section label="Startup 开机启动" icon={<Power className="h-3.5 w-3.5" />}>
-              <Surface variant="inner" className="flex items-center justify-between gap-3 p-3">
-                <span className="text-[13px]">开机自动运行 TransPortal</span>
-                <Switch
-                  checked={autostart}
-                  onChange={() => void toggleAutostart()}
-                  label="Autostart"
-                />
-              </Surface>
-            </Section>
-          )}
-
-          {isMatch(['dictionary', '词典', '发音', 'audio', 'pronounce', 'ecdict']) && (
+          {/* ====== TAB 4: 高级与诊断 (Advanced & Diagnostics) ====== */}
+          {/* 本地与在线词典 */}
+          {(isSearching ? matchDict : activeTab === 'advanced') && (
             <Section label="Dictionary 本地与在线词典" icon={<BookOpen className="h-3.5 w-3.5" />}>
               <Surface variant="inner" className="flex flex-col gap-3 p-3">
                 <div className="flex items-center justify-between gap-3 border-b border-[var(--stroke)] pb-2.5">
@@ -679,12 +789,74 @@ export const SettingsView: React.FC = () => {
             </Section>
           )}
 
-          {isMatch(['memory', '系统', '性能', '内存', '释放', 'ram', 'clean', 'working set']) && (
-            <MemorySettingsPanel />
+          {/* 手风琴折叠 1: 软件内置快捷键一览 */}
+          {(isSearching ? matchInWindow : activeTab === 'advanced') && (
+            <CollapsibleSection
+              label="In-Window Shortcuts 浮层内置快捷键"
+              icon={<AppWindow className="h-3.5 w-3.5" />}
+              subtitle="浮层聚焦时的便捷键盘操作（Ctrl+A, Tab, Esc 等）"
+              defaultOpen={isSearching}
+            >
+              <Surface variant="inner" className="flex flex-col gap-2 p-3">
+                <p className="text-[11px] text-[var(--muted)] mb-1">
+                  焦点处于查词/翻译浮层窗口内时的便捷键盘操作：
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  {IN_WINDOW_SHORTCUTS.map((sc) => (
+                    <div
+                      key={sc.key}
+                      className="flex items-center justify-between gap-2 min-w-0 rounded-[var(--r-inner)] border border-[var(--stroke)] bg-[var(--surface-1)]/40 px-2.5 py-1.5 text-xs"
+                    >
+                      <span className="min-w-0 flex-1 truncate text-[var(--muted)] text-[11px]" title={sc.desc}>
+                        {sc.desc}
+                      </span>
+                      <kbd className="shrink-0 rounded-[4px] border border-[var(--stroke)] bg-[var(--surface-2)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--text)]">
+                        {sc.key}
+                      </kbd>
+                    </div>
+                  ))}
+                </div>
+              </Surface>
+            </CollapsibleSection>
           )}
 
-          {isMatch(['integrity', '健康', '检测', 'checks', 'diagnostic']) && (
-            <IntegrityPanel />
+          {/* 手风琴折叠 2: 系统性能与内存管理 */}
+          {(isSearching ? matchMemory : activeTab === 'advanced') && (
+            <CollapsibleSection
+              label="System & Memory 系统性能与内存管理"
+              icon={<Cpu className="h-3.5 w-3.5" />}
+              subtitle="主程序与 WebView2 进程树物理内存监控与即时释放"
+              defaultOpen={isSearching}
+            >
+              <MemorySettingsPanel bare />
+            </CollapsibleSection>
+          )}
+
+          {/* 手风琴折叠 3: 程序完整性校验 */}
+          {(isSearching ? matchIntegrity : activeTab === 'advanced') && (
+            <CollapsibleSection
+              label="Program Integrity 程序完整性校验"
+              icon={<ShieldCheck className="h-3.5 w-3.5" />}
+              subtitle="主执行文件 SHA-256 哈希比对与安全防篡改自检"
+              defaultOpen={isSearching}
+            >
+              <IntegrityPanel bare />
+            </CollapsibleSection>
+          )}
+
+          {/* 搜索无结果提示 */}
+          {isSearching && !anyMatch && (
+            <div className="flex flex-col items-center justify-center py-10 text-center text-xs text-[var(--muted)]">
+              <Search className="h-6 w-6 opacity-40 mb-2" />
+              <p>未找到与 "{searchQuery}" 相关的设置项</p>
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="mt-2 text-[var(--accent-b)] hover:underline cursor-pointer"
+              >
+                清除搜索
+              </button>
+            </div>
           )}
 
           <p className="mt-auto text-center text-[10px] text-[var(--faint)]">

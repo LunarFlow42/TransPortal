@@ -1,20 +1,32 @@
 import { invoke } from '@tauri-apps/api/core';
 import { LogicalSize } from '@tauri-apps/api/dpi';
 import { currentMonitor, getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
-import { suppressAutoHide } from './autoHide';
 
 /**
  * Open or bring the dedicated settings window to the front dynamically.
- *
- * Suppresses the overlay's auto-hide first so focusing the settings window
- * does not dismiss the overlay that triggered it.
+ * Backend automatically hides the shell overlay while settings is open.
  */
 export async function openSettingsWindow(): Promise<void> {
-  suppressAutoHide();
   try {
     await invoke('open_settings_window');
   } catch (error) {
     console.error('Failed to open settings window:', error);
+  }
+}
+
+/**
+ * Close or hide the dedicated settings window, automatically restoring
+ * the shell overlay if it was open prior to opening settings.
+ */
+export async function closeSettingsWindow(): Promise<void> {
+  try {
+    await invoke('close_settings_window');
+  } catch {
+    try {
+      await getCurrentWindow().hide();
+    } catch (error) {
+      console.error('Failed to close settings window:', error);
+    }
   }
 }
 

@@ -53,10 +53,19 @@ pub fn open_or_focus_settings<R: tauri::Runtime>(
 
         PlatformWindow::configure_transparent_window(&window);
         let win_clone = window.clone();
+        let app_handle = app.clone();
         window.on_window_event(move |event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
                 let _ = win_clone.hide();
+                if commands::SHELL_RESUME_AFTER_SETTINGS
+                    .swap(false, std::sync::atomic::Ordering::SeqCst)
+                {
+                    core::shell::present(&app_handle, false, |w| {
+                        let _ = w.show();
+                        let _ = w.set_focus();
+                    });
+                }
             }
         });
         let _ = window.set_focus();
@@ -236,6 +245,7 @@ pub fn run() {
             commands::replace_captured_selection,
             commands::generate_examples,
             commands::open_settings_window,
+            commands::close_settings_window,
             commands::resize_and_clamp_window,
             commands::hide_shell,
             commands::set_window_theme,

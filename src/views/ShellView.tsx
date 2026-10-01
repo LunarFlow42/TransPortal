@@ -22,8 +22,10 @@ import { startWindowDrag } from '../utils/drag';
 import { openSettingsWindow, resizeAndClampWindow } from '../utils/windows';
 import { suppressAutoHide } from '../utils/autoHide';
 import { stopPronunciation } from '../utils/audio';
+import { ResizeHandles } from '../components/ResizeHandles';
+import { saveSettings } from '../store/persistence';
 import { cn } from '../utils/cn';
-import type { CaptureOutcome, Density } from '../types';
+import type { CaptureOutcome, Density, ProviderType } from '../types';
 
 /** Window footprint per top-card density. */
 const WINDOW_SIZES: Record<Density, { width: number; height: number }> = {
@@ -438,6 +440,9 @@ export const ShellView: React.FC = () => {
         transition: 'none',
       };
 
+  const provider = useAppStore((state) => state.provider);
+  const setProvider = useAppStore((state) => state.setProvider);
+
   return (
     <div
       style={animationStyle}
@@ -446,6 +451,7 @@ export const ShellView: React.FC = () => {
         hasContent ? 'justify-start' : 'justify-center',
       )}
     >
+      <ResizeHandles onResizeStart={() => { isManualResizingRef.current = true; }} />
       {showShortcutNotice ? (
         <StartupShortcutNotice issues={shortcutIssues} retrying={shortcuts.retrying} error={shortcuts.error}
           onRetry={() => void shortcuts.retry()} onDismiss={() => setDismissedShortcuts(issueKey)} />
@@ -465,8 +471,27 @@ export const ShellView: React.FC = () => {
         <Surface className="w-full px-5 py-5 text-center">
           <div
             onMouseDown={startWindowDrag}
-            className="flex cursor-move items-center justify-end pb-1"
+            className="flex cursor-grab active:cursor-grabbing items-center justify-between pb-1"
           >
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] text-[var(--muted)]">引擎:</span>
+              <select
+                value={provider}
+                onChange={(e) => {
+                  const next = e.target.value as ProviderType;
+                  setProvider(next);
+                  void saveSettings({ provider: next });
+                }}
+                className="h-5 cursor-pointer rounded bg-[var(--surface-2)] px-1.5 py-0 font-mono text-[10px] text-[var(--muted)] hover:text-[var(--text)] outline-none border border-[var(--stroke)] transition-colors"
+                title="切换翻译引擎"
+              >
+                <option value="bing_free">Bing</option>
+                <option value="google_free">Google</option>
+                <option value="youdao_free">有道</option>
+                <option value="tencent_free">腾讯</option>
+                <option value="openai">OpenAI</option>
+              </select>
+            </div>
             <IconButton title="Settings" onClick={() => void openSettingsWindow()}>
               <Settings className="h-3.5 w-3.5" />
             </IconButton>
