@@ -295,7 +295,7 @@ export const SettingsView: React.FC = () => {
           </p>
         )}
 
-        <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-4">
+        <div className="flex flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden p-4">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-2.5 h-3.5 w-3.5 text-[var(--muted)]" />
             <input
@@ -470,7 +470,7 @@ export const SettingsView: React.FC = () => {
                         className="flex flex-col gap-1 rounded-[var(--r-inner)] border border-[var(--stroke)] bg-[var(--surface-1)]/40 p-2.5"
                       >
                         <div className="flex items-center justify-between gap-3">
-                          <div className="flex flex-col gap-0.5">
+                          <div className="flex flex-1 min-w-0 flex-col gap-0.5">
                             <div className="flex items-center gap-2">
                               <span className="text-[13px] font-medium text-[var(--text)]">
                                 {item.label}
@@ -481,12 +481,12 @@ export const SettingsView: React.FC = () => {
                                 </span>
                               )}
                             </div>
-                            <span className="text-[11px] text-[var(--muted)]">
+                            <span className="text-[11px] text-[var(--muted)] leading-relaxed">
                               {item.description}
                             </span>
                           </div>
 
-                          <div className="w-36 shrink-0">
+                          <div className="w-32 shrink-0">
                             <Input
                               type="text"
                               readOnly
@@ -499,7 +499,7 @@ export const SettingsView: React.FC = () => {
                               onKeyDown={(e) => onShortcutKeyDown(item.id, e)}
                               placeholder="点击录制"
                               className={cn(
-                                'text-center font-mono text-xs cursor-pointer select-none',
+                                'w-full text-center font-mono text-xs cursor-pointer select-none',
                                 isRecording
                                   ? 'border-[rgba(99,102,241,0.75)] shadow-[0_0_0_3px_rgba(99,102,241,0.22)]'
                                   : 'hover:border-[var(--stroke-hover)]',
@@ -549,7 +549,7 @@ export const SettingsView: React.FC = () => {
               <Surface variant="inner" className="flex flex-col gap-3 p-3">
                 {/* 剪贴板监听翻译 */}
                 <div className="flex items-center justify-between gap-3">
-                  <div className="flex flex-col gap-0.5">
+                  <div className="flex flex-1 min-w-0 flex-col gap-0.5">
                     <div className="flex items-center gap-2">
                       <span className="text-[13px] font-medium text-[var(--text)]">
                         剪贴板监听翻译
@@ -569,7 +569,7 @@ export const SettingsView: React.FC = () => {
 
                 {/* 落墨翻译按键 */}
                 <div className="flex items-center justify-between gap-3 border-t border-[var(--stroke)] pt-2.5">
-                  <div className="flex flex-col gap-0.5">
+                  <div className="flex flex-1 min-w-0 flex-col gap-0.5">
                     <div className="flex items-center gap-2">
                       <span className="text-[13px] font-medium text-[var(--text)]">
                         落墨取词翻译
@@ -580,7 +580,7 @@ export const SettingsView: React.FC = () => {
                       按住单键划选鼠标，松开按键瞬间快速触发取词与翻译。
                     </p>
                   </div>
-                  <div className="w-36 shrink-0">
+                  <div className="w-32 shrink-0">
                     <Select
                       ariaLabel="落墨翻译单键"
                       value={inkTranslateKey}
@@ -592,7 +592,7 @@ export const SettingsView: React.FC = () => {
 
                 {/* 快捷翻译双击复制开关 */}
                 <div className="flex items-center justify-between gap-3 border-t border-[var(--stroke)] pt-2.5">
-                  <div className="flex flex-col gap-0.5">
+                  <div className="flex flex-1 min-w-0 flex-col gap-0.5">
                     <div className="flex items-center gap-2">
                       <span className="text-[13px] font-medium text-[var(--text)]">
                         快捷翻译 (Ctrl+C+C)
@@ -623,10 +623,12 @@ export const SettingsView: React.FC = () => {
                   {IN_WINDOW_SHORTCUTS.map((sc) => (
                     <div
                       key={sc.key}
-                      className="flex items-center justify-between rounded-[var(--r-inner)] border border-[var(--stroke)] bg-[var(--surface-1)]/40 px-2.5 py-1.5 text-xs"
+                      className="flex items-center justify-between gap-2 min-w-0 rounded-[var(--r-inner)] border border-[var(--stroke)] bg-[var(--surface-1)]/40 px-2.5 py-1.5 text-xs"
                     >
-                      <span className="text-[var(--muted)] text-[11px]">{sc.desc}</span>
-                      <kbd className="rounded-[4px] border border-[var(--stroke)] bg-[var(--surface-2)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--text)]">
+                      <span className="min-w-0 flex-1 truncate text-[var(--muted)] text-[11px]" title={sc.desc}>
+                        {sc.desc}
+                      </span>
+                      <kbd className="shrink-0 rounded-[4px] border border-[var(--stroke)] bg-[var(--surface-2)] px-1.5 py-0.5 font-mono text-[11px] text-[var(--text)]">
                         {sc.key}
                       </kbd>
                     </div>
