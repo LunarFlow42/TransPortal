@@ -131,7 +131,7 @@ export const PictureView: React.FC<Props> = ({ picture, translation, busy, error
         <div
           onClick={resetZoom}
           title="点击一键复位（双击图片也可复位）"
-          className="absolute bottom-2 left-2 z-10 flex items-center gap-1 rounded bg-[var(--surface-1)]/90 px-1.5 py-0.5 shadow-md border border-[var(--stroke)] text-[10px] font-mono text-[var(--text)] hover:text-[var(--accent-b)] transition-colors cursor-pointer backdrop-blur-sm"
+          className="absolute bottom-2 left-2 z-10 flex items-center gap-1 rounded bg-[var(--popover-bg)] px-1.5 py-0.5 shadow-md border border-[var(--stroke)] text-[10px] font-mono text-[var(--text)] hover:text-[var(--accent-b)] transition-colors cursor-pointer backdrop-blur-sm"
         >
           <ZoomIn className="h-3 w-3 text-[var(--accent-b)]" />
           <span>{zoomPercent}</span>

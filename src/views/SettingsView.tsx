@@ -150,18 +150,35 @@ const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
 }) => {
   const [open, setOpen] = useState(defaultOpen);
 
+  useEffect(() => {
+    if (defaultOpen) {
+      setOpen(true);
+    }
+  }, [defaultOpen]);
+
   return (
-    <div className="rounded-[var(--r-outer)] border border-[var(--stroke)] bg-[var(--surface-1)]/40 overflow-hidden transition-all">
-      <button
-        type="button"
+    <div className="rounded-[var(--r-card)] border border-[var(--stroke)] bg-[var(--surface-2)] overflow-hidden transition-all shadow-sm">
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between px-3.5 py-2.5 text-left hover:bg-[var(--surface-2)]/60 transition-colors cursor-pointer select-none"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setOpen(!open);
+          }
+        }}
+        className="flex w-full items-center justify-between p-3.5 text-left hover:bg-[var(--surface-3)] transition-colors cursor-pointer select-none focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent-b)]"
       >
-        <div className="flex items-center gap-2 min-w-0">
-          {icon && <span className="text-[var(--accent-b)] shrink-0">{icon}</span>}
-          <div className="flex flex-col min-w-0">
-            <span className="text-[13px] font-semibold text-[var(--text)]">{label}</span>
-            {subtitle && <span className="text-[10px] text-[var(--muted)] truncate">{subtitle}</span>}
+        <div className="flex items-center gap-3 min-w-0">
+          {icon && (
+            <span className="flex h-7 w-7 items-center justify-center rounded-[var(--r-inner)] bg-[var(--surface-3)] text-[var(--accent-b)] shrink-0">
+              {icon}
+            </span>
+          )}
+          <div className="flex flex-col min-w-0 text-left">
+            <span className="text-[13px] font-semibold text-[var(--text)] leading-snug">{label}</span>
+            {subtitle && <span className="text-[11px] text-[var(--muted)] leading-tight">{subtitle}</span>}
           </div>
         </div>
         <ChevronDown
@@ -170,9 +187,9 @@ const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
             open && 'rotate-180 text-[var(--text)]',
           )}
         />
-      </button>
+      </div>
       {open && (
-        <div className="border-t border-[var(--stroke)] p-2.5 bg-[var(--surface-1)]/20 animate-in fade-in-50 duration-150">
+        <div className="border-t border-[var(--stroke)] p-3 bg-[var(--surface-2)]/40">
           {children}
         </div>
       )}
@@ -381,7 +398,7 @@ export const SettingsView: React.FC = () => {
         )}
 
         {/* 固定顶栏：全局搜索与 4-Tab 分段切换 */}
-        <div className="flex shrink-0 flex-col gap-2.5 border-b border-[var(--stroke)] px-4 pt-3 pb-2.5 bg-[var(--surface-1)]/20">
+        <div className="flex shrink-0 flex-col gap-2.5 border-b border-[var(--stroke)] px-4 pt-3 pb-2.5 bg-[var(--surface-2)]/30">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-2.5 h-3.5 w-3.5 text-[var(--muted)]" />
             <input
@@ -389,7 +406,7 @@ export const SettingsView: React.FC = () => {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="搜索设置项、快捷键或功能..."
-              className="w-full rounded-[var(--r-ctrl)] border border-[var(--stroke)] bg-[var(--surface-1)] pl-8 pr-3 py-1.5 text-xs text-[var(--text)] placeholder-[var(--faint)] outline-none transition-colors focus:border-[var(--accent-b)] focus:bg-[var(--surface-2)]"
+              className="w-full rounded-[var(--r-ctrl)] border border-[var(--stroke)] bg-[var(--surface-2)] pl-8 pr-3 py-1.5 text-xs text-[var(--text)] placeholder-[var(--faint)] outline-none transition-colors focus:border-[var(--accent-b)] focus:bg-[var(--surface-3)]"
             />
           </div>
 
@@ -417,7 +434,7 @@ export const SettingsView: React.FC = () => {
                       'flex items-center justify-center gap-1.5 rounded-[var(--r-inner)] py-1.5 text-xs font-medium transition-all select-none cursor-pointer',
                       isActive
                         ? 'bg-[var(--surface-3)] text-[var(--text)] shadow-sm font-semibold'
-                        : 'text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--surface-1)]/50',
+                        : 'text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--surface-3)]',
                     )}
                   >
                     {t.icon}
@@ -616,7 +633,7 @@ export const SettingsView: React.FC = () => {
                     return (
                       <div
                         key={item.id}
-                        className="flex flex-col gap-1 rounded-[var(--r-inner)] border border-[var(--stroke)] bg-[var(--surface-1)]/40 p-2.5"
+                        className="flex flex-col gap-1 rounded-[var(--r-inner)] border border-[var(--stroke)] bg-[var(--surface-2)] p-2.5"
                       >
                         <div className="flex items-center justify-between gap-3">
                           <div className="flex flex-1 min-w-0 flex-col gap-0.5">
@@ -805,7 +822,7 @@ export const SettingsView: React.FC = () => {
                   {IN_WINDOW_SHORTCUTS.map((sc) => (
                     <div
                       key={sc.key}
-                      className="flex items-center justify-between gap-2 min-w-0 rounded-[var(--r-inner)] border border-[var(--stroke)] bg-[var(--surface-1)]/40 px-2.5 py-1.5 text-xs"
+                      className="flex items-center justify-between gap-2 min-w-0 rounded-[var(--r-inner)] border border-[var(--stroke)] bg-[var(--surface-2)] px-2.5 py-1.5 text-xs"
                     >
                       <span className="min-w-0 flex-1 truncate text-[var(--muted)] text-[11px]" title={sc.desc}>
                         {sc.desc}

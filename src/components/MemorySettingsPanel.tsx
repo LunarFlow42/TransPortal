@@ -76,14 +76,14 @@ export function MemorySettingsPanel({ bare = false }: { bare?: boolean } = {}) {
         </div>
 
         <div className="grid grid-cols-2 gap-2 text-xs">
-          <div className="flex flex-col gap-0.5 rounded-[var(--r-inner)] border border-[var(--stroke)] bg-[var(--surface-1)]/40 p-2">
+          <div className="flex flex-col gap-0.5 rounded-[var(--r-inner)] border border-[var(--stroke)] bg-[var(--surface-2)] p-2">
             <span className="text-[10px] text-[var(--faint)]">Rust 主程序内存</span>
             <span className="font-mono font-medium text-[var(--text)]">
               {report ? formatMb(report.main_working_set_bytes) : '--'}
             </span>
           </div>
 
-          <div className="flex flex-col gap-0.5 rounded-[var(--r-inner)] border border-[var(--stroke)] bg-[var(--surface-1)]/40 p-2">
+          <div className="flex flex-col gap-0.5 rounded-[var(--r-inner)] border border-[var(--stroke)] bg-[var(--surface-2)] p-2">
             <span className="text-[10px] text-[var(--faint)]">总私有提交 (Commit)</span>
             <span className="font-mono font-medium text-[var(--text)]">
               {report ? formatMb(report.total_private_bytes) : '--'}

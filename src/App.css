@@ -12,6 +12,7 @@
   --r-card: 12px;
   --r-inner: 10px;
   --r-ctrl: 9px;
+  --r-outer: 12px;
 
   --accent-a: #6366f1;
   --accent-b: #22d3ee;
@@ -19,6 +20,7 @@
   /* Overlay glass alpha is user-configurable; the RGB triple stays per-theme. */
   --surface-rgb: 20 20 25;
   --surface-alpha: 0.72;
+  --surface-1: rgba(255, 255, 255, 0.03);
   --surface-2: rgba(255, 255, 255, 0.05);
   --surface-3: rgba(255, 255, 255, 0.08);
   --stroke: rgba(255, 255, 255, 0.1);
@@ -42,11 +44,18 @@
 }
 
 [data-theme="light"] {
+  --r-win: 14px;
+  --r-card: 12px;
+  --r-inner: 10px;
+  --r-ctrl: 9px;
+  --r-outer: 12px;
+
   --accent-a: #6366f1;
   --accent-b: #0891b2;
 
   --surface-rgb: 255 255 255;
   --surface-alpha: 0.72;
+  --surface-1: rgba(15, 23, 42, 0.02);
   --surface-2: rgba(15, 23, 42, 0.035);
   --surface-3: rgba(15, 23, 42, 0.06);
   --stroke: rgba(15, 23, 42, 0.1);

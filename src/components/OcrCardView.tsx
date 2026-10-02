@@ -355,7 +355,7 @@ export const OcrCardView: React.FC<{ event: OcrEvent }> = ({ event }) => {
                 <div
                   onClick={resetZoom}
                   title="点击一键复位（双击图片也可复位）"
-                  className="absolute bottom-2 left-2 z-10 flex items-center gap-1 rounded bg-[var(--surface-1)]/90 px-1.5 py-0.5 shadow-md border border-[var(--stroke)] text-[10px] font-mono text-[var(--text)] hover:text-[var(--accent-b)] transition-colors cursor-pointer backdrop-blur-sm"
+                  className="absolute bottom-2 left-2 z-10 flex items-center gap-1 rounded bg-[var(--popover-bg)] px-1.5 py-0.5 shadow-md border border-[var(--stroke)] text-[10px] font-mono text-[var(--text)] hover:text-[var(--accent-b)] transition-colors cursor-pointer backdrop-blur-sm"
                 >
                   <ZoomIn className="h-3 w-3 text-[var(--accent-b)]" />
                   <span>{zoomPercent}</span>
@@ -365,7 +365,7 @@ export const OcrCardView: React.FC<{ event: OcrEvent }> = ({ event }) => {
 
               {pictureBusy && !ocrPictureOriginal && (
                 <div className="absolute inset-0 flex items-center justify-center bg-black/30 backdrop-blur-[1px] rounded-[var(--r-inner)] pointer-events-none">
-                  <div className="flex items-center gap-1.5 bg-[var(--surface-1)]/90 px-2.5 py-1 rounded-full shadow text-[11px] text-[var(--text)]">
+                  <div className="flex items-center gap-1.5 bg-[var(--popover-bg)] px-2.5 py-1 rounded-full shadow text-[11px] text-[var(--text)]">
                     <LoaderCircle className="h-3 w-3 animate-spin text-[var(--accent-b)]" />
                     <span>覆写翻译中…</span>
                   </div>
