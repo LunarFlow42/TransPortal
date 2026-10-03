@@ -12,8 +12,6 @@ import type {
   OpenAiConfig,
   ProviderType,
   StreamChunk,
-  AnkiConfig,
-  AnkiStatus,
   CaptureOutcome,
   PersistedSettings,
   ThemeMode,
@@ -25,6 +23,7 @@ import type {
   TextIntent,
   PictureTranslation,
   MonitorUpdate,
+  MonitorOptions,
 } from '../types';
 
 /** Monotonic ids for stack frames. */
@@ -64,9 +63,6 @@ interface AppState {
   // Provider & Config
   provider: ProviderType;
   openaiConfig: OpenAiConfig;
-  ankiConfig: AnkiConfig;
-  ankiStatus: AnkiStatus;
-  ankiMessage: string | null;
   hotkey: string;
   ocrCardHotkey: string;
   ocrPictureHotkey: string;
@@ -97,7 +93,6 @@ interface AppState {
   // Config actions
   setProvider: (provider: ProviderType) => void;
   setOpenaiConfig: (config: Partial<OpenAiConfig>) => void;
-  setAnkiConfig: (config: Partial<AnkiConfig>) => void;
   setHotkey: (hotkey: string) => Promise<boolean>;
   setShortcut: (action: ShortcutActionId, accelerator: string) => Promise<boolean>;
   setDoubleCopyEnabled: (enabled: boolean) => Promise<boolean>;
@@ -146,7 +141,6 @@ interface AppState {
   // Workflows
   startStreamTranslation: (text: string, nodeId: number) => Promise<void>;
   fetchWordExamples: (word: string, nodeId: number) => Promise<void>;
-  syncToAnki: (contextSentence?: string) => Promise<boolean>;
   exportTsv: (contextSentence?: string) => void;
 }
 
@@ -178,13 +172,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     model: 'gpt-4o-mini',
     temperature: 0.3,
   },
-  ankiConfig: {
-    endpoint: 'http://127.0.0.1:8765',
-    deckName: 'Default',
-    modelName: 'Basic',
-  },
-  ankiStatus: 'idle',
-  ankiMessage: null,
   hotkey: 'Alt+Q',
   ocrCardHotkey: 'Alt+Shift+X',
   ocrPictureHotkey: 'Alt+S',
@@ -219,8 +206,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   setProvider: (provider) => set({ provider }),
   setOpenaiConfig: (config) =>
     set((state) => ({ openaiConfig: { ...state.openaiConfig, ...config } })),
-  setAnkiConfig: (config) =>
-    set((state) => ({ ankiConfig: { ...state.ankiConfig, ...config } })),
   setShortcut: async (action, accelerator) => {
     try {
       await invoke('set_shortcut', { action, accelerator });
@@ -371,7 +356,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => ({
       provider: settings.provider ?? state.provider,
       openaiConfig: settings.openaiConfig ?? state.openaiConfig,
-      ankiConfig: settings.ankiConfig ?? state.ankiConfig,
       hotkey: settings.hotkey ?? state.hotkey,
       ocrCardHotkey: settings.ocrCardHotkey ?? state.ocrCardHotkey,
       ocrPictureHotkey: settings.ocrPictureHotkey ?? state.ocrPictureHotkey,
@@ -505,8 +489,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { provider, openaiConfig, ocrTarget } = get();
     set({ errorMessage: null });
     try {
-      await invoke('begin_auto_ocr', { options: { provider, openai_config: provider === 'openai' ? openaiConfig : null,
-        target_lang: ocrTarget, interval_ms: intervalMs } });
+      const options: MonitorOptions = {
+        provider,
+        openai_config: provider === 'openai' ? openaiConfig : null,
+        target_lang: ocrTarget,
+        interval_ms: intervalMs,
+      };
+      await invoke('begin_auto_ocr', { options });
     } catch (error) { set({ errorMessage: String(error) }); }
   },
 
@@ -527,8 +516,6 @@ export const useAppStore = create<AppState>((set, get) => ({
         lookupStack: [],
         ocr: null,
         errorMessage: null,
-        ankiStatus: 'idle',
-        ankiMessage: null,
         history,
         historyIndex: -1,
         backTranslation: null,
@@ -605,8 +592,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       return {
         lookupStack: stack,
         errorMessage: null,
-        ankiStatus: 'idle',
-        ankiMessage: null,
       };
     });
 
@@ -659,8 +644,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       ocrPictureError: null,
       ocrPictureOriginal: isOriginal,
       errorMessage: null,
-      ankiStatus: 'idle',
-      ankiMessage: null,
     });
   },
 
@@ -761,59 +744,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  syncToAnki: async (contextSentence?: string) => {
-    const { ankiConfig, lookupStack } = get();
-    const node = lookupStack[lookupStack.length - 1];
-    if (!node) return false;
-
-    const word = node.wordData?.word || node.text;
-
-    set({ ankiStatus: 'syncing', ankiMessage: 'Connecting to Anki...' });
-
-    const phonetic = node.wordData?.phonetic || '';
-    const meaning =
-      node.wordData?.definitions
-        .map((d) => `<b>${d.pos}</b> ${d.meanings.join('; ')}`)
-        .join('<br>') ||
-      node.translation ||
-      '';
-    const sentence = contextSentence || node.originText || node.wordData?.examples[0]?.en || '';
-
-    const frontHtml = `
-      <div style="font-size: 24px; font-weight: bold; color: #3b82f6;">${word}</div>
-      ${phonetic ? `<div style="color: #64748b; font-style: italic;">${phonetic}</div>` : ''}
-      ${sentence ? `<div style="margin-top: 10px; font-size: 14px; color: #475569;">"${sentence}"</div>` : ''}
-    `.trim();
-
-    const backHtml = `
-      <div style="font-size: 16px; line-height: 1.6;">${meaning}</div>
-    `.trim();
-
-    try {
-      await invoke<number>('anki_add_note', {
-        note: {
-          endpoint: ankiConfig.endpoint,
-          deckName: ankiConfig.deckName,
-          modelName: ankiConfig.modelName,
-          front: frontHtml,
-          back: backHtml,
-          tags: ['TransPortal', 'AutoSynced'],
-          allowDuplicate: false,
-        },
-      });
-
-      set({ ankiStatus: 'success', ankiMessage: `Card added to ${ankiConfig.deckName}!` });
-      setTimeout(() => set({ ankiStatus: 'idle', ankiMessage: null }), 3000);
-      return true;
-    } catch (err: unknown) {
-      set({
-        ankiStatus: 'error',
-        ankiMessage: `Anki error: ${err instanceof Error ? err.message : String(err)}`,
-      });
-      return false;
-    }
-  },
-
   exportTsv: (contextSentence?: string) => {
     const { lookupStack } = get();
     const node = lookupStack[lookupStack.length - 1];
@@ -838,7 +768,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `${word}_anki.tsv`);
+    link.setAttribute('download', `${word}_vocabulary.tsv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

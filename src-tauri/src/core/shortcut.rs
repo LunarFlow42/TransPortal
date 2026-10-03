@@ -13,7 +13,6 @@ use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 pub const STATUS_EVENT: &str = "transportal://shortcut-status";
-pub const RECORD_EVENT: &str = "transportal://shortcut-recorded";
 pub const SELECTION_EVENT: &str = "transportal://selection";
 
 const UNSUPPORTED: &str = "当前平台不支持此快捷键功能。";
@@ -151,7 +150,6 @@ struct BindingState {
     bindings: BTreeMap<ShortcutAction, Binding>,
     ready: bool,
     revision: u64,
-    recording: bool,
 }
 impl Default for BindingState {
     fn default() -> Self {
@@ -159,7 +157,6 @@ impl Default for BindingState {
         Self {
             ready: false,
             revision: 0,
-            recording: false,
             bindings: ACTIONS
                 .into_iter()
                 .map(|action| {
@@ -388,9 +385,6 @@ pub fn restore(app: &AppHandle, config: ShortcutConfig) -> Result<ShortcutConfig
     Ok(config)
 }
 
-pub fn set_selection_hotkey(app: &AppHandle, accelerator: &str) -> Result<(), String> {
-    set_shortcut(app, ShortcutAction::Selection, accelerator)
-}
 pub fn set_double_copy_enabled(app: &AppHandle, enabled: bool) {
     let _ = set_shortcut(
         app,
@@ -459,43 +453,7 @@ pub fn retry(app: &AppHandle) -> ShortcutReport {
     status(app)
 }
 
-pub fn set_recording(app: &AppHandle, recording: bool) {
-    app.state::<ShortcutBindings>()
-        .state
-        .lock()
-        .unwrap()
-        .recording = recording;
-}
-pub fn recording(app: &AppHandle) -> bool {
-    app.state::<ShortcutBindings>()
-        .state
-        .lock()
-        .unwrap()
-        .recording
-        && app
-            .get_webview_window("settings")
-            .is_some_and(|window| window.is_focused().unwrap_or(false))
-}
-fn record(app: &AppHandle, value: &str) -> bool {
-    if !recording(app) {
-        return false;
-    }
-    let _ = app.emit_to("settings", RECORD_EVENT, value);
-    true
-}
 fn trigger(app: &AppHandle, action: ShortcutAction) {
-    let value = app
-        .state::<ShortcutBindings>()
-        .state
-        .lock()
-        .unwrap()
-        .bindings[&action]
-        .status
-        .active
-        .clone();
-    if record(app, value.as_deref().unwrap_or("")) {
-        return;
-    }
     if let Some(settings) = app.get_webview_window("settings") {
         let _ = settings.hide();
     }
@@ -623,9 +581,6 @@ pub async fn on_replace_selection(app: &AppHandle) {
 /// Only reached when the user explicitly bound the OS snip chord to an OCR
 /// action; the default bindings use the built-in region selector instead.
 pub fn on_system_snip(app: &AppHandle, revision: u32) {
-    if record(app, "Win+Shift+S") {
-        return;
-    }
     let action = app
         .state::<ShortcutBindings>()
         .state
@@ -659,9 +614,6 @@ pub fn on_hotkey(app: &AppHandle) {
     show_shell_with_anchor(app, outcome.bounds.as_ref(), true);
 }
 pub fn on_double_copy(app: &AppHandle, revision: u32, window: usize) {
-    if record(app, "Ctrl+C+C") {
-        return;
-    }
     let enabled = app
         .state::<ShortcutBindings>()
         .state

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { dismissShell } from '../hooks/useWindowAnimation';
 import {
@@ -46,6 +46,16 @@ export const OcrCardView: React.FC<{ event: OcrEvent }> = ({ event }) => {
   const [zoomActual, setZoomActual] = useState(false);
 
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
+  const copyOriginalTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const copyTranslationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyOriginalTimerRef.current) clearTimeout(copyOriginalTimerRef.current);
+      if (copyTranslationTimerRef.current) clearTimeout(copyTranslationTimerRef.current);
+    };
+  }, []);
+
   const ocrPictureOriginal = useAppStore((state) => state.ocrPictureOriginal);
   const toggleOcrPictureOriginal = useAppStore((state) => state.toggleOcrPictureOriginal);
   const pictureTranslation = useAppStore((state) => state.ocrPictureTranslation);
@@ -64,7 +74,7 @@ export const OcrCardView: React.FC<{ event: OcrEvent }> = ({ event }) => {
       const result = await invoke<TranslateResult>('translate_text', {
         query: { text: textToTranslate, target_lang: target },
         provider,
-        openai_config: provider === 'openai' ? openaiConfig : null,
+        openaiConfig: provider === 'openai' ? openaiConfig : null,
       });
       setTranslation(result.translated_text);
     } catch (err) {
@@ -120,7 +130,11 @@ export const OcrCardView: React.FC<{ event: OcrEvent }> = ({ event }) => {
     try {
       await invoke('plugin:clipboard-manager|write_text', { text: event.text });
       setCopiedOriginal(true);
-      setTimeout(() => setCopiedOriginal(false), 2000);
+      if (copyOriginalTimerRef.current) clearTimeout(copyOriginalTimerRef.current);
+      copyOriginalTimerRef.current = setTimeout(() => {
+        setCopiedOriginal(false);
+        copyOriginalTimerRef.current = null;
+      }, 2000);
     } catch (err) {
       console.error('Failed to copy original text:', err);
     }
@@ -131,7 +145,11 @@ export const OcrCardView: React.FC<{ event: OcrEvent }> = ({ event }) => {
     try {
       await invoke('plugin:clipboard-manager|write_text', { text: translation });
       setCopiedTranslation(true);
-      setTimeout(() => setCopiedTranslation(false), 2000);
+      if (copyTranslationTimerRef.current) clearTimeout(copyTranslationTimerRef.current);
+      copyTranslationTimerRef.current = setTimeout(() => {
+        setCopiedTranslation(false);
+        copyTranslationTimerRef.current = null;
+      }, 2000);
     } catch (err) {
       console.error('Failed to copy translation:', err);
     }

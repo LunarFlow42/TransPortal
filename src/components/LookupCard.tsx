@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { dismissShell } from '../hooks/useWindowAnimation';
-import { Button, IconButton, Pill } from './ui';
+import { IconButton, Pill } from './ui';
 import {
   ArrowLeftRight,
   BookOpen,
@@ -14,7 +14,6 @@ import {
   Settings,
   Volume2,
   X,
-  Zap,
 } from 'lucide-react';
 import { InteractiveSentence } from './InteractiveSentence';
 import { ReplaceSelectionButton } from './ReplaceSelectionButton';
@@ -142,10 +141,7 @@ export const LookupCard: React.FC<LookupCardProps> = ({
   const setDensity = useAppStore((state) => state.setDensity);
   const togglePinned = useAppStore((state) => state.togglePinned);
   const pinned = useAppStore((state) => state.pinned);
-  const syncToAnki = useAppStore((state) => state.syncToAnki);
   const exportTsv = useAppStore((state) => state.exportTsv);
-  const ankiStatus = useAppStore((state) => state.ankiStatus);
-  const ankiMessage = useAppStore((state) => state.ankiMessage);
   const autoPronounce = useAppStore((state) => state.autoPronounce);
   const ocr = useAppStore((state) => state.ocr);
   const fontSize = useAppStore((state) => state.fontSize);
@@ -164,6 +160,7 @@ export const LookupCard: React.FC<LookupCardProps> = ({
   const isTopRef = useRef(isTop);
   isTopRef.current = isTop;
   const hasAutoPronouncedRef = useRef(false);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Restore the previous scroll offset when this frame becomes the top card.
   useEffect(() => {
@@ -183,6 +180,7 @@ export const LookupCard: React.FC<LookupCardProps> = ({
   useEffect(
     () => () => {
       if (isTopRef.current) stopPronunciation();
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
     },
     [],
   );
@@ -226,7 +224,11 @@ export const LookupCard: React.FC<LookupCardProps> = ({
     const text = wordData ? `${displayWord}\n${node.translation}` : node.translation;
     await navigator.clipboard.writeText(text.trim());
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = setTimeout(() => {
+      setCopied(false);
+      copyTimerRef.current = null;
+    }, 2000);
   };
 
   const handlePronounce = () => {
@@ -371,27 +373,9 @@ export const LookupCard: React.FC<LookupCardProps> = ({
 
         <div className="flex shrink-0 items-center gap-0.5">
           {node.kind === 'word' ? (
-            <>
-              <Button
-                size="sm"
-                variant={ankiStatus === 'error' ? 'danger' : 'primary'}
-                onClick={() => void syncToAnki()}
-                disabled={ankiStatus === 'syncing'}
-                title="Sync to Anki deck"
-              >
-                <Zap className="h-3 w-3" />
-                <span>
-                  {ankiStatus === 'syncing'
-                    ? 'Syncing...'
-                    : ankiStatus === 'success'
-                      ? 'Synced!'
-                      : 'Anki'}
-                </span>
-              </Button>
-              <IconButton title="Export TSV" onClick={() => exportTsv()}>
-                <Download className="h-3.5 w-3.5" />
-              </IconButton>
-            </>
+            <IconButton title="Export TSV" onClick={() => exportTsv()}>
+              <Download className="h-3.5 w-3.5" />
+            </IconButton>
           ) : (
             <>
               <IconButton
@@ -419,19 +403,6 @@ export const LookupCard: React.FC<LookupCardProps> = ({
       </div>
 
       {stackIndex === 0 && <ReplaceSelectionButton node={node} />}
-
-      {ankiMessage && (
-        <div
-          className={cn(
-            'mt-2 rounded-[var(--r-ctrl)] px-2.5 py-1 text-[11px]',
-            ankiStatus === 'error'
-              ? 'border border-rose-500/30 bg-rose-500/20 text-rose-300'
-              : 'border border-emerald-500/30 bg-emerald-500/20 text-emerald-300',
-          )}
-        >
-          {ankiMessage}
-        </div>
-      )}
 
       {/* ------------------------------------------------ body */}
       {node.kind === 'sentence' ? (
@@ -540,7 +511,7 @@ export const LookupCard: React.FC<LookupCardProps> = ({
             {wordData?.tags?.map((tag) => <Pill key={tag}>{tag}</Pill>)}
           </div>
 
-          {/* Origin context (also the Anki example) */}
+          {/* Origin context (source sentence) */}
           {node.originText && (
             <div className="flex items-start gap-2 rounded-[var(--r-inner)] bg-[var(--surface-2)] px-2.5 py-1.5 text-[11px]">
               <span className="shrink-0 text-[var(--faint)]">出处</span>

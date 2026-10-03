@@ -2,14 +2,12 @@ use crate::core::dictionary::eccedict::{self, DictProgress};
 use crate::core::dictionary::{DictEntry, ExampleSentence};
 use crate::core::dictionary::{DictStatus, LookupService, SourceInfo};
 use crate::core::intent::{IntentResult, classify_intent};
-use crate::core::selection::CaptureOutcome;
 use crate::core::translation::{
     StreamChunk, TranslateQuery, TranslateResult, Translator, openai::OpenAiConfig,
 };
 use crate::platform::system::SystemOps;
 use crate::platform::window::WindowOps;
 use crate::platform::{PlatformSystem, PlatformWindow};
-use serde::Serialize;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -102,12 +100,6 @@ pub fn set_dict_source_order(
     service.set_source_order(&ids)
 }
 
-/// Replace only the selection shortcut; OCR shortcuts remain registered.
-#[tauri::command]
-pub fn set_hotkey(accelerator: String, app: AppHandle) -> Result<(), String> {
-    crate::core::shortcut::set_selection_hotkey(&app, &accelerator)
-}
-
 /// Configure any global shortcut action individually.
 #[tauri::command]
 pub fn set_shortcut(
@@ -167,16 +159,6 @@ pub async fn ocr_status(app: AppHandle) -> Result<crate::core::ocr::OcrStatus, S
     })
     .await
     .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub async fn set_ocr_language(language: Option<String>, app: AppHandle) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        app.state::<crate::core::ocr::OcrService>()
-            .set_language(language)
-    })
-    .await
-    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -380,17 +362,6 @@ pub async fn download_eccedict(
     .await
 }
 
-/// Capture the current foreground selection (UIA, then clipboard fallback).
-#[tauri::command]
-pub async fn capture_selection(app: AppHandle) -> Result<CaptureOutcome, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        app.state::<crate::core::selection::SelectionService>()
-            .capture(&app)
-    })
-    .await
-    .map_err(|error| error.to_string())
-}
-
 #[tauri::command]
 pub fn set_double_copy_enabled(enabled: bool, app: AppHandle) {
     crate::core::shortcut::set_double_copy_enabled(&app, enabled);
@@ -420,52 +391,10 @@ pub async fn replace_captured_selection(
     .map_err(|error| error.to_string())?
 }
 
-/// Physical cursor position, used to place the shell bubble.
-#[derive(Debug, Clone, Serialize)]
-pub struct CursorPosition {
-    pub x: f64,
-    pub y: f64,
-}
-
-/// Return the current cursor position in physical screen coordinates across all monitors.
-#[tauri::command]
-pub fn get_cursor_position(app: AppHandle) -> Option<CursorPosition> {
-    if let Some((x, y)) = PlatformWindow::get_global_cursor_pos() {
-        return Some(CursorPosition {
-            x: x as f64,
-            y: y as f64,
-        });
-    }
-    app.get_webview_window("shell")
-        .and_then(|window| window.cursor_position().ok())
-        .map(|position| CursorPosition {
-            x: position.x,
-            y: position.y,
-        })
-}
-
 /// Sets whether the shell overlay window is pinned in place.
 #[tauri::command]
 pub fn set_window_pinned(pinned: bool) {
     crate::core::shortcut::set_pinned(pinned);
-}
-
-/// Probe AnkiConnect and return its API version.
-#[tauri::command]
-pub async fn anki_test_connection(endpoint: String) -> Result<i64, String> {
-    crate::core::anki::version(&endpoint).await
-}
-
-/// List Anki deck names.
-#[tauri::command]
-pub async fn anki_list_decks(endpoint: String) -> Result<Vec<String>, String> {
-    crate::core::anki::deck_names(&endpoint).await
-}
-
-/// Add a note (word + phonetic + original context sentence) to Anki.
-#[tauri::command]
-pub async fn anki_add_note(note: crate::core::anki::AnkiNoteRequest) -> Result<i64, String> {
-    crate::core::anki::add_note(&note).await
 }
 
 /// Generate example sentences for a word via the configured LLM.

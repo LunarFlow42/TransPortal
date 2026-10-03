@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { dismissShell } from '../hooks/useWindowAnimation';
 import { LoaderCircle, Pause, Play, ScanText, Square, X } from 'lucide-react';
@@ -16,11 +16,17 @@ const STAGES: Record<MonitorUpdate['stage'], string> = {
 export function AutoOcrPanel({ event }: { event: MonitorUpdate }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
   const command = async (name: string, args: Record<string, unknown>) => {
     setBusy(true); setError(null);
     try { await invoke(name, args); }
-    catch (error) { setError(String(error)); }
-    finally { setBusy(false); }
+    catch (error) { if (mountedRef.current) setError(String(error)); }
+    finally { if (mountedRef.current) setBusy(false); }
   };
   const close = async () => {
     await command('stop_auto_ocr', { discard: true });

@@ -20,7 +20,7 @@
 - **查词来源全部可配置**：Youdao（在线，默认首选）、Google（在线）、本地 ECCEDICT（可选），支持启用/禁用/排序，带命中状态与延迟；在线结果有内存 LRU缓存。
 - **离线词库**：`redb` 存储 ECCEDICT，支持一键下载全量 `ecdict.csv`（带进度）或手动导入；`scripts/eccedict/build_enriched_csv.py` 可把 fork 的英美音标/标签 `.ddb` 合并回 CSV。
 - **例句下钻**：交互式分词、点击生词原地切换、历史前进/后退。
-- **Anki 同步**：Rust 侧 JSON-RPC 直连 AnkiConnect（8765），携带划词原句。
+- **生词导出**：一键导出 TSV 格式生词（含音标、释义及原句上下文），支持导入各类生词本。
 - **LLM 例句增强**：配置 OpenAI 兼容引擎后异步生成地道例句。
 
 ## 开发
@@ -59,7 +59,7 @@ src-tauri/src/
     selection.rs      取词编排与原地替换令牌
     shortcut.rs       全局热键、按平台能力启用、窗口定位
     clipboard_monitor.rs  剪贴板翻译
-    shell.rs intent.rs anki.rs integrity.rs
+    shell.rs intent.rs integrity.rs
   platform/           操作系统接口（WindowOps / SelectionOps / ClipboardOps / GestureSource / DesktopCapture / SystemOps）
     mod.rs            Backend + Capabilities，唯一的平台切换点
     placement.rs imaging.rs key_sequence.rs   可移植纯逻辑（所有平台编译并测试）

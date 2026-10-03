@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { dismissShell } from '../hooks/useWindowAnimation';
 import { ArrowRightLeft, LoaderCircle } from 'lucide-react';
@@ -12,6 +12,12 @@ export function ReplaceSelectionButton({ node }: { node: LookupNode }) {
   const capture = useAppStore((state) => state.capture);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
   if (!capture?.replace_token || capture.text.trim() !== node.text.trim()) return null;
   const token = capture.replace_token;
   const replace = async () => {
@@ -30,8 +36,11 @@ export function ReplaceSelectionButton({ node }: { node: LookupNode }) {
         useAppStore.setState({ capture: { ...capture, replace_token: null } });
         void dismissShell({ force: true, immediate: true });
       }
-    } catch (error) { setError(String(error)); }
-    finally { setBusy(false); }
+    } catch (error) {
+      if (mountedRef.current) setError(String(error));
+    } finally {
+      if (mountedRef.current) setBusy(false);
+    }
   };
   return <div className="mt-2">
     <Button size="sm" disabled={busy || node.status === 'loading' || node.status === 'streaming'}

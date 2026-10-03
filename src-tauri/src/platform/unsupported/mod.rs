@@ -159,7 +159,7 @@ impl DesktopCapture for UnsupportedDesktop {
         Err("当前平台尚未支持屏幕区域自动翻译。".into())
     }
     fn capture(&self, _: ScreenRect) -> Result<image::RgbaImage, String> {
-        self.bounds().map(|_| unreachable!())
+        Err("当前平台尚未支持屏幕区域截图。".into())
     }
     fn exclude(&self, _: &tauri::WebviewWindow, _: bool) -> Result<(), String> {
         self.bounds().map(|_| ())
@@ -224,6 +224,16 @@ mod tests {
         let (events, _receiver) = std::sync::mpsc::sync_channel(1);
         assert!(UnsupportedGestures.observe(events).is_err());
         assert!(UnsupportedDesktop.bounds().is_err());
+        assert!(
+            UnsupportedDesktop
+                .capture(ScreenRect {
+                    x: 0,
+                    y: 0,
+                    width: 10,
+                    height: 10,
+                })
+                .is_err()
+        );
         assert!(UnsupportedWindow::get_global_cursor_pos().is_none());
         assert!(!UnsupportedSystem::enforce_release_hash());
         assert!(UnsupportedSystem::memory_usage().is_ok());

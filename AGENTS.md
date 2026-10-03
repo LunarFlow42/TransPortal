@@ -75,7 +75,7 @@ CI runs clippy and tests on `ubuntu-24.04`. Full Linux packaging (`.deb` / `.rpm
 - In `src-tauri/`: `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test`
 - Packages: `APPIMAGE_EXTRACT_AND_RUN=1 pnpm tauri build` (output in `src-tauri/target/release/bundle/{deb,rpm,appimage}`)
 - From Windows, `cargo tree --target x86_64-unknown-linux-gnu -i windows@0.58.0` must print nothing.
-- All network I/O lives in Rust (Youdao/Google dictionary, providers, Anki). The webview CSP is locked down; do not add `fetch()` to remote hosts in the frontend.
+- All network I/O lives in Rust (Youdao/Google dictionary, providers). The webview CSP is locked down; do not add `fetch()` to remote hosts in the frontend.
 - Frontend windows are addressed by hash route: `#/shell` (overlay) and `#/settings` (settings window). `SettingsView` is the persistence writer (`useBootstrap(true)`); `ShellView` is a reader (`useBootstrap(false)`).
 
 ## Data

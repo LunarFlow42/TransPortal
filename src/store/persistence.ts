@@ -21,7 +21,6 @@ export async function loadSettings(): Promise<Partial<PersistedSettings>> {
   const [
     provider,
     openaiConfig,
-    ankiConfig,
     hotkey,
     ocrCardHotkey,
     ocrPictureHotkey,
@@ -48,7 +47,6 @@ export async function loadSettings(): Promise<Partial<PersistedSettings>> {
   ] = await Promise.all([
     store.get<PersistedSettings['provider']>('provider'),
     store.get<PersistedSettings['openaiConfig']>('openaiConfig'),
-    store.get<PersistedSettings['ankiConfig']>('ankiConfig'),
     store.get<PersistedSettings['hotkey']>('hotkey'),
     store.get<PersistedSettings['ocrCardHotkey']>('ocrCardHotkey'),
     store.get<PersistedSettings['ocrPictureHotkey']>('ocrPictureHotkey'),
@@ -77,7 +75,6 @@ export async function loadSettings(): Promise<Partial<PersistedSettings>> {
   return {
     provider,
     openaiConfig,
-    ankiConfig,
     hotkey,
     ocrCardHotkey,
     ocrPictureHotkey,

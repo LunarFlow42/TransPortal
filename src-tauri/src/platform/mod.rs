@@ -25,7 +25,7 @@ pub mod selection;
 pub mod system;
 pub mod window;
 
-#[cfg(target_os = "linux")]
+#[cfg(any(test, target_os = "linux"))]
 mod linux;
 #[cfg(any(test, not(target_os = "windows")))]
 pub mod unsupported;
@@ -134,6 +134,11 @@ mod tests {
             exercise::<unsupported::UnsupportedBackend>(),
             Capabilities::NONE
         );
+    }
+
+    #[test]
+    fn linux_backend_provides_every_contract() {
+        assert_eq!(exercise::<linux::LinuxBackend>(), Capabilities::NONE);
     }
 
     #[cfg(target_os = "windows")]

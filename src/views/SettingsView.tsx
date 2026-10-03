@@ -113,7 +113,6 @@ const IN_WINDOW_SHORTCUTS = [
   { key: 'Ctrl+A', desc: '打开设置窗口 (非输入焦点时)' },
   { key: 'Tab', desc: '原图与翻译后图片切换 (短按切换 / 长按透视)' },
   { key: 'Ctrl+Shift+T', desc: '固定 / 取消置顶当前浮层' },
-  { key: 'Ctrl+Shift+S', desc: '同步当前词条到 Anki 生词本' },
   { key: 'Ctrl+R', desc: '重新识别 / 重新翻译当前文本' },
   { key: 'Ctrl+P', desc: '历史记录：查看上一条' },
   { key: 'Ctrl+N', desc: '历史记录：查看下一条' },
@@ -185,9 +184,15 @@ export const SettingsView: React.FC = () => {
   }, [recordingAction]);
 
   useEffect(() => {
+    let disposed = false;
     void autostartIsEnabled()
-      .then(setAutostart)
+      .then((enabled) => {
+        if (!disposed) setAutostart(enabled);
+      })
       .catch((error) => console.error('autostart check failed:', error));
+    return () => {
+      disposed = true;
+    };
   }, []);
 
   const toggleAutostart = async () => {
@@ -607,7 +612,7 @@ export const SettingsView: React.FC = () => {
             </Section>
           )}
 
-          {isMatch(['in-window', 'window', '软件快捷键', '内置', '窗口快捷键', 'tab', 'ctrl+a', 'ctrl+r', 'anki', '置顶']) && (
+          {isMatch(['in-window', 'window', '软件快捷键', '内置', '窗口快捷键', 'tab', 'ctrl+a', 'ctrl+r', '置顶']) && (
             <Section label="In-Window Shortcuts 软件快捷键" icon={<AppWindow className="h-3.5 w-3.5" />}>
               <Surface variant="inner" className="flex flex-col gap-2 p-3">
                 <p className="text-[11px] text-[var(--muted)] mb-1">

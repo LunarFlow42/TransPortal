@@ -16,13 +16,26 @@ export function MemorySettingsPanel() {
 
   const loadUsage = async () => {
     setLoading(true);
-    const data = await fetchMemoryUsage();
-    setReport(data);
-    setLoading(false);
+    try {
+      const data = await fetchMemoryUsage();
+      setReport(data);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
-    void loadUsage();
+    let disposed = false;
+    setLoading(true);
+    void fetchMemoryUsage().then((data) => {
+      if (!disposed) {
+        setReport(data);
+        setLoading(false);
+      }
+    });
+    return () => {
+      disposed = true;
+    };
   }, []);
 
   const handleTrim = async () => {

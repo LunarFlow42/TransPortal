@@ -79,6 +79,8 @@ export const ShellView: React.FC = () => {
   const [measuredContentHeight, setMeasuredContentHeight] = useState<number | null>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [manualInput, setManualInput] = useState('');
+  const [notice, setNotice] = useState<string | null>(null);
+  const noticeTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const tabPressTimeRef = React.useRef<number | null>(null);
   const tabInitialStateRef = React.useRef<boolean>(false);
 
@@ -91,19 +93,33 @@ export const ShellView: React.FC = () => {
   useAutoOcrEvents();
 
   useEffect(() => {
+    let focusTimer: ReturnType<typeof setTimeout> | null = null;
     const unlistenFocus = listen('transportal://focus-input', () => {
       useAppStore.getState().clearLookup();
       setManualInput('');
-      setTimeout(() => inputRef.current?.focus(), 50);
+      if (focusTimer) clearTimeout(focusTimer);
+      focusTimer = setTimeout(() => inputRef.current?.focus(), 50);
     });
     const unlistenClip = listen<string>('transportal://clipboard-text', (event) => {
       if (event.payload?.trim()) {
         void useAppStore.getState().processText(event.payload.trim());
       }
     });
+    const unlistenNotice = listen<string>('transportal://notice', (event) => {
+      if (event.payload) {
+        setNotice(event.payload);
+        if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+        noticeTimerRef.current = setTimeout(() => {
+          setNotice(null);
+        }, 4000);
+      }
+    });
     return () => {
+      if (focusTimer) clearTimeout(focusTimer);
+      if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
       void unlistenFocus.then((dispose) => dispose());
       void unlistenClip.then((dispose) => dispose());
+      void unlistenNotice.then((dispose) => dispose());
     };
   }, []);
 
@@ -283,12 +299,6 @@ export const ShellView: React.FC = () => {
       if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 't') {
         event.preventDefault();
         store.togglePinned();
-        return;
-      }
-
-      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 's') {
-        event.preventDefault();
-        void store.syncToAnki();
         return;
       }
 
@@ -554,6 +564,19 @@ export const ShellView: React.FC = () => {
             <line x1="7" y1="4" x2="4" y2="7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
             <line x1="7" y1="7" x2="7" y2="7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
           </svg>
+        </div>
+      )}
+
+      {notice && (
+        <div className="fixed top-2 z-50 flex max-w-[90%] items-center gap-1.5 rounded-[var(--r-ctrl)] border border-amber-500/40 bg-amber-950/90 px-3 py-1.5 text-xs text-amber-200 shadow-lg backdrop-blur-md">
+          <span>{notice}</span>
+          <button
+            type="button"
+            onClick={() => setNotice(null)}
+            className="ml-1 text-amber-400/70 hover:text-amber-200 cursor-pointer"
+          >
+            ×
+          </button>
         </div>
       )}
 

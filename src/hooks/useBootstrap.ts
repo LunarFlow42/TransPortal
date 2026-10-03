@@ -194,7 +194,6 @@ export function useBootstrap(persist: boolean) {
         if (state.openaiConfig !== previous.openaiConfig) {
           patch.openaiConfig = state.openaiConfig;
         }
-        if (state.ankiConfig !== previous.ankiConfig) patch.ankiConfig = state.ankiConfig;
         if (state.hotkey !== previous.hotkey) patch.hotkey = state.hotkey;
         if (state.ocrCardHotkey !== previous.ocrCardHotkey) patch.ocrCardHotkey = state.ocrCardHotkey;
         if (state.ocrPictureHotkey !== previous.ocrPictureHotkey) patch.ocrPictureHotkey = state.ocrPictureHotkey;

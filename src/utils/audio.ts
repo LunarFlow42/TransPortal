@@ -40,7 +40,7 @@ export function stopPronunciation(): void {
  */
 export function playPronunciation(
   word: string,
-  audioUrl: string | undefined,
+  audioUrl: string | null | undefined,
   onEnd: () => void,
 ): void {
   stopPronunciation();

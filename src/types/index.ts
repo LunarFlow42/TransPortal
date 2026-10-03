@@ -22,16 +22,16 @@ export interface TranslationDetail {
 export interface TranslateResult {
   original_text: string;
   translated_text: string;
-  detected_source_lang?: string;
+  detected_source_lang?: string | null;
   target_lang: string;
-  details?: TranslationDetail[];
+  details?: TranslationDetail[] | null;
   provider_name: string;
 }
 
 export interface StreamChunk {
   text: string;
   is_done: boolean;
-  error?: string;
+  error?: string | null;
 }
 
 export interface PosDefinition {
@@ -46,11 +46,11 @@ export interface ExampleSentence {
 
 export interface DictEntry {
   word: string;
-  phonetic?: string;
-  audio_url?: string;
+  phonetic?: string | null;
+  audio_url?: string | null;
   definitions: PosDefinition[];
   english_definitions?: PosDefinition[];
-  exchange?: string;
+  exchange?: string | null;
   tags: string[];
   examples: ExampleSentence[];
   source?: string;
@@ -109,7 +109,7 @@ export interface LookupNode {
   wordData: DictEntry | null;
   translation: string;
   status: LookupStatus;
-  /** Sentence/example this frame was opened from (also feeds Anki context). */
+  /** Sentence/example this frame was opened from (source context). */
   originText?: string;
   /** Word clicked in `originText`; the parent frame highlights it. */
   originWord?: string;
@@ -281,18 +281,9 @@ export interface OpenAiConfig {
   prompt_template?: 'direct' | 'academic' | 'code' | 'casual' | string;
 }
 
-export interface AnkiConfig {
-  endpoint: string;
-  deckName: string;
-  modelName: string;
-}
-
-export type AnkiStatus = 'idle' | 'syncing' | 'success' | 'error';
-
 export interface PersistedSettings {
   provider: ProviderType;
   openaiConfig: OpenAiConfig;
-  ankiConfig: AnkiConfig;
   hotkey: string;
   ocrCardHotkey?: string;
   ocrPictureHotkey?: string;
@@ -333,3 +324,11 @@ export interface TrimResult {
   trimmed_bytes: number;
   process_count: number;
 }
+
+export interface MonitorOptions {
+  provider: string;
+  openai_config?: OpenAiConfig | null;
+  target_lang: string;
+  interval_ms: number;
+}
+
