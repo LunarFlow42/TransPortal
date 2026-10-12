@@ -8,5 +8,6 @@
 
 # Reproducible OCR binaries/models prepared from resources/ocr/manifest.json.
 /resources/ocr/ppocr-v4-fp32-ort-1.22.0/
+/resources/ocr/ppocr-v5-fp32-ort-1.22.0/
 /resources/ocr-bundle/*
 !/resources/ocr-bundle/README.md

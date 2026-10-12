@@ -76,4 +76,12 @@ pub trait WindowOps {
         center: bool,
         no_activate: bool,
     ) -> Result<(), String>;
+
+    /// Returns the handle of the external OS window currently in the foreground, if any.
+    fn get_foreground_window() -> Option<usize>;
+
+    /// Restores a previously saved native window (e.g. exclusive fullscreen games)
+    /// to the foreground. If the window was minimized (`IsIconic`), it is restored
+    /// with `SW_RESTORE` before calling `SetForegroundWindow`.
+    fn restore_foreground_window(handle: usize);
 }

@@ -61,7 +61,7 @@ export function useMemoryManager(enabled = true) {
 
     return () => {
       cancelIdleTimer();
-      void unlisten.then((dispose) => dispose());
+      void unlisten.then((dispose) => dispose()).catch(() => {});
     };
   }, [enabled]);
 }

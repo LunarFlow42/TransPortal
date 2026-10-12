@@ -564,8 +564,19 @@ pub async fn on_replace_selection(app: &AppHandle) {
                     .replace(&app_clone, token, &translated)
             })
             .await;
-            if let Err(e) = replace_res {
-                let _ = app.emit_to("shell", "transportal://notice", format!("替换失败：{e}"));
+            match replace_res {
+                Ok(Err(err)) => {
+                    let _ =
+                        app.emit_to("shell", "transportal://notice", format!("替换失败：{err}"));
+                }
+                Err(join_err) => {
+                    let _ = app.emit_to(
+                        "shell",
+                        "transportal://notice",
+                        format!("替换任务执行失败：{join_err}"),
+                    );
+                }
+                Ok(Ok(())) => {}
             }
         }
         Err(err) => {

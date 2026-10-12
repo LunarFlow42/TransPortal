@@ -325,6 +325,15 @@ pub fn cancel_region(id: Option<u64>, app: AppHandle) {
 }
 
 #[tauri::command]
+pub fn show_region_window(app: AppHandle) -> Result<(), String> {
+    let service = app.state::<crate::core::ocr::region::RegionService>();
+    if service.selection().is_some() {
+        crate::core::ocr::region::RegionService::show_window(&app)?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn benchmark_ocr(app: AppHandle) -> Result<u64, String> {
     app.state::<crate::core::ocr::OcrService>().benchmark()
 }
@@ -475,4 +484,43 @@ pub fn get_memory_usage() -> Result<crate::platform::system::MemoryReport, Strin
 #[tauri::command]
 pub fn trim_memory() -> Result<crate::platform::system::TrimResult, String> {
     PlatformSystem::trim_memory()
+}
+
+#[tauri::command]
+pub fn get_capture_diagnostics() -> Option<crate::platform::desktop::CaptureDiagnostics> {
+    crate::platform::desktop::get_last_diagnostics()
+}
+
+#[tauri::command]
+pub async fn test_screen_capture(
+    delay_secs: u32,
+) -> Result<crate::platform::desktop::CaptureDiagnostics, String> {
+    if delay_secs > 0 {
+        tokio::time::sleep(std::time::Duration::from_secs(delay_secs as u64)).await;
+    }
+    let desktop = crate::platform::desktop();
+    let bounds = desktop.bounds()?;
+    let _ = desktop.capture(bounds)?;
+    crate::platform::desktop::get_last_diagnostics().ok_or_else(|| "未能生成诊断记录".into())
+}
+
+#[tauri::command]
+pub async fn open_capture_debug_image(app: AppHandle) -> Result<String, String> {
+    let mut temp = std::env::temp_dir();
+    temp.push("transportal_last_capture.png");
+    for _ in 0..10 {
+        if temp.exists() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    if !temp.exists() {
+        return Err("未找到已保存的调试截图图片，请先触发一次截屏。".into());
+    }
+    let path_str = temp.to_string_lossy().into_owned();
+    use tauri_plugin_opener::OpenerExt;
+    app.opener()
+        .open_path(&path_str, None::<&str>)
+        .map_err(|e| format!("打开图片失败: {e}"))?;
+    Ok(path_str)
 }

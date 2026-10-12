@@ -185,7 +185,7 @@ export const OcrCardView: React.FC<{ event: OcrEvent }> = ({ event }) => {
   };
 
   return (
-    <Surface className="w-full text-[var(--text)] flex flex-col select-none overflow-hidden h-full max-h-[92vh] p-0">
+    <Surface className="w-full text-[var(--text)] flex flex-col select-none overflow-hidden h-full p-0">
       {/* 顶部标题栏 & 控制区域 */}
       <div
         onMouseDown={startWindowDrag}

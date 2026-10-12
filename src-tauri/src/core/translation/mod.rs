@@ -21,7 +21,9 @@ pub use youdao::YoudaoFreeProvider;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TranslateQuery {
     pub text: String,
+    #[serde(alias = "sourceLang")]
     pub source_lang: Option<String>,
+    #[serde(alias = "targetLang")]
     pub target_lang: Option<String>,
 }
 

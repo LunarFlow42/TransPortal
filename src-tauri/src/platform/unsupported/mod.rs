@@ -90,6 +90,14 @@ impl WindowOps for UnsupportedWindow {
     ) -> Result<(), String> {
         window::place_window_smartly(window, anchor_bounds, center, no_activate)
     }
+
+    fn get_foreground_window() -> Option<usize> {
+        window::get_foreground_window()
+    }
+
+    fn restore_foreground_window(handle: usize) {
+        window::restore_foreground_window(handle);
+    }
 }
 
 /// No global keyboard observation.

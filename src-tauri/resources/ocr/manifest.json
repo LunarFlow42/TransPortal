@@ -1,32 +1,32 @@
 {
-  "id": "ppocr-v4-fp32-ort-1.22.0",
-  "model_family": "PP-OCRv4 mobile",
+  "id": "ppocr-v5-fp32-ort-1.22.0",
+  "model_family": "PP-OCRv5 mobile",
   "precision": "FP32",
   "runtime_version": "1.22.0",
-  "source": "https://github.com/RapidAI/RapidOCR/blob/4a3070f304467e6d426e78a82afea5cb1181f305/python/rapidocr/default_models.yaml",
+  "source": "https://github.com/RapidAI/RapidOCR/blob/main/python/rapidocr/default_models.yaml",
   "models": [
     {
-      "name": "ch_PP-OCRv4_det_mobile.onnx",
-      "bytes": 4745517,
-      "sha256": "d2a7720d45a54257208b1e13e36a8479894cb74155a5efe29462512d42f49da9",
+      "name": "ch_PP-OCRv5_det_mobile.onnx",
+      "bytes": 4819576,
+      "sha256": "4d97c44a20d30a81aad087d6a396b08f786c4635742afc391f6621f5c6ae78ae",
       "urls": [
-        "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.9.2/onnx/PP-OCRv4/det/ch_PP-OCRv4_det_mobile.onnx"
+        "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.10.0/onnx/PP-OCRv5/det/ch_PP-OCRv5_det_mobile.onnx"
       ]
     },
     {
-      "name": "ch_ppocr_mobile_v2.0_cls_mobile.onnx",
-      "bytes": 585532,
-      "sha256": "e47acedf663230f8863ff1ab0e64dd2d82b838fceb5957146dab185a89d6215c",
+      "name": "ch_PP-LCNet_x0_25_textline_ori_cls_mobile.onnx",
+      "bytes": 1018508,
+      "sha256": "54379ae5174d026780215fc748a7f31910dee36818e63d49e17dc598ecc82df7",
       "urls": [
-        "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.9.2/onnx/PP-OCRv4/cls/ch_ppocr_mobile_v2.0_cls_mobile.onnx"
+        "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.10.0/onnx/PP-OCRv5/cls/ch_PP-LCNet_x0_25_textline_ori_cls_mobile.onnx"
       ]
     },
     {
-      "name": "ch_PP-OCRv4_rec_mobile.onnx",
-      "bytes": 10857958,
-      "sha256": "48fc40f24f6d2a207a2b1091d3437eb3cc3eb6b676dc3ef9c37384005483683b",
+      "name": "ch_PP-OCRv5_rec_mobile.onnx",
+      "bytes": 16631306,
+      "sha256": "5825fc7ebf84ae7a412be049820b4d86d77620f204a041697b0494669b1742c5",
       "urls": [
-        "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.9.2/onnx/PP-OCRv4/rec/ch_PP-OCRv4_rec_mobile.onnx"
+        "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.10.0/onnx/PP-OCRv5/rec/ch_PP-OCRv5_rec_mobile.onnx"
       ]
     }
   ],

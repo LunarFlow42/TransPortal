@@ -92,7 +92,7 @@ impl SelectionOps for WindowsSelection {
         unsafe {
             let mut process = 0;
             GetWindowThreadProcessId(window, Some(&mut process));
-            if !IsWindow(window).as_bool() || process != source.process {
+            if !IsWindow(Some(window)).as_bool() || process != source.process {
                 return Err("原窗口已关闭，请重新选中文字。".into());
             }
         }

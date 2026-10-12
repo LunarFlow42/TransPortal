@@ -11,6 +11,6 @@ export function useAutoOcrEvents() {
     const unlisten = listen<MonitorUpdate>('transportal://auto-ocr', ({ payload }) => apply(payload));
     void unlisten.then(() => invoke<MonitorUpdate>('auto_ocr_latest')).then(apply)
       .catch((error) => console.error('automatic OCR subscription failed:', error));
-    return () => { disposed = true; void unlisten.then((dispose) => dispose()); };
+    return () => { disposed = true; void unlisten.then((dispose) => dispose()).catch(() => {}); };
   }, []);
 }

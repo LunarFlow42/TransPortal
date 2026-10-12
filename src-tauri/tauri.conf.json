@@ -28,7 +28,21 @@
         "center": true,
         "visible": true,
         "skipTaskbar": true,
-        "focus": true
+        "focus": true,
+        "noRedirectionBitmap": true
+      },
+      {
+        "label": "ocr-region",
+        "title": "TransPortal Region",
+        "url": "index.html#/ocr-region",
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "shadow": false,
+        "visible": false,
+        "skipTaskbar": true,
+        "resizable": false,
+        "noRedirectionBitmap": true
       }
     ],
     "security": {

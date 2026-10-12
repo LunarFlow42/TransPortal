@@ -5,6 +5,7 @@ pub mod assets;
 pub mod monitor;
 pub mod onnx;
 pub mod picture;
+pub mod ppocr;
 pub mod region;
 pub mod registry;
 mod workflow;

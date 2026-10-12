@@ -53,7 +53,7 @@ export interface DictEntry {
   exchange?: string | null;
   tags: string[];
   examples: ExampleSentence[];
-  source?: string;
+  source: string;
 }
 
 export type DictSourceKind = 'online' | 'local';
@@ -332,4 +332,41 @@ export interface MonitorOptions {
   target_lang: string;
   interval_ms: number;
 }
+
+export interface WindowProbeInfo {
+  hwnd: number;
+  title: string;
+  className: string;
+  processId: number;
+  processName: string;
+  rect: ScreenRect;
+  isVisible: boolean;
+  isIconic: boolean;
+  containsTarget: boolean;
+}
+
+export interface TierLog {
+  tier: string;
+  attempted: boolean;
+  success: boolean;
+  frame0LatencyMs?: number;
+  frame1LatencyMs?: number;
+  framesDrained: number;
+  stagingCopyMs?: number;
+  isAllBlack: boolean;
+  error?: string;
+  durationMs: number;
+}
+
+export interface CaptureDiagnostics {
+  timestamp: string;
+  targetRegion: ScreenRect;
+  foregroundWindow?: WindowProbeInfo;
+  monitorRect?: ScreenRect;
+  tiers: TierLog[];
+  finalBackend: string;
+  totalDurationMs: number;
+  savedImagePath?: string;
+}
+
 

@@ -119,9 +119,9 @@ export const ShellView: React.FC = () => {
     return () => {
       if (focusTimer) clearTimeout(focusTimer);
       if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
-      void unlistenFocus.then((dispose) => dispose());
-      void unlistenClip.then((dispose) => dispose());
-      void unlistenNotice.then((dispose) => dispose());
+      void unlistenFocus.then((dispose) => dispose()).catch(() => {});
+      void unlistenClip.then((dispose) => dispose()).catch(() => {});
+      void unlistenNotice.then((dispose) => dispose()).catch(() => {});
     };
   }, []);
 
@@ -129,10 +129,8 @@ export const ShellView: React.FC = () => {
     if (e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
-    // Starting the drag blurs the webview before Rust can report the sizing
-    // loop, so hold auto-hide from the press itself. The promise resolves
-    // once the OS loop starts, not when it ends; Rust reports the real
-    // start/end via `transportal://shell-size-move` / `shell-resizing`.
+    // Mark manual resizing immediately so auto-resize effects don't race
+    isManualResizingRef.current = true;
     suppressAutoHide();
     void getCurrentWindow()
       .startResizeDragging('SouthEast')
@@ -203,8 +201,8 @@ export const ShellView: React.FC = () => {
     });
 
     return () => {
-      void unlistenResizing.then((dispose) => dispose());
-      void unlistenResized.then((dispose) => dispose());
+      void unlistenResizing.then((dispose) => dispose()).catch(() => {});
+      void unlistenResized.then((dispose) => dispose()).catch(() => {});
     };
   }, []);
 
@@ -213,7 +211,7 @@ export const ShellView: React.FC = () => {
       applyCapture(event.payload);
     });
     return () => {
-      void unlisten.then((dispose) => dispose());
+      void unlisten.then((dispose) => dispose()).catch(() => {});
     };
   }, [applyCapture]);
 

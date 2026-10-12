@@ -19,7 +19,7 @@ struct ClipboardLock;
 impl ClipboardLock {
     fn open(owner: HWND) -> Result<Self, String> {
         for _ in 0..20 {
-            if unsafe { OpenClipboard(owner) }.is_ok() {
+            if unsafe { OpenClipboard(Some(owner)) }.is_ok() {
                 return Ok(Self);
             }
             std::thread::sleep(Duration::from_millis(15));
@@ -148,7 +148,7 @@ impl ClipboardRestore {
         for format in &mut self.formats {
             // All STGMEDIUM handle union members share the same handle bits.
             let handle = unsafe { HANDLE(format.medium.u.hGlobal.0) };
-            unsafe { SetClipboardData(format.format, handle) }
+            unsafe { SetClipboardData(format.format, Some(handle)) }
                 .map_err(|error| format!("无法恢复剪贴板格式 {}：{error}", format.format))?;
             format.transferred = true;
         }

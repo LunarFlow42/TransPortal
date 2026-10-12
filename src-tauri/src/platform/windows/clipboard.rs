@@ -109,9 +109,9 @@ impl ClipboardOps for WindowsClipboard {
                 0,
                 0,
                 0,
-                HWND_MESSAGE,
+                Some(HWND_MESSAGE),
                 None,
-                hinstance,
+                Some(hinstance.into()),
                 None,
             );
 

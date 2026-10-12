@@ -36,37 +36,37 @@ export const ResizeHandles: React.FC<ResizeHandlesProps> = ({ onResizeStart }) =
     <div className="pointer-events-auto">
       {/* 4 Edges */}
       <div
-        className="absolute inset-x-3 top-0 h-1.5 cursor-ns-resize z-50 select-none"
+        className="absolute inset-x-4 top-0 h-2 cursor-ns-resize z-50 select-none"
         onMouseDown={(e) => handleMouseDown('North', e)}
       />
       <div
-        className="absolute inset-x-3 bottom-0 h-1.5 cursor-ns-resize z-50 select-none"
+        className="absolute inset-x-4 bottom-0 h-2 cursor-ns-resize z-50 select-none"
         onMouseDown={(e) => handleMouseDown('South', e)}
       />
       <div
-        className="absolute inset-y-3 left-0 w-1.5 cursor-ew-resize z-50 select-none"
+        className="absolute inset-y-4 left-0 w-2 cursor-ew-resize z-50 select-none"
         onMouseDown={(e) => handleMouseDown('West', e)}
       />
       <div
-        className="absolute inset-y-3 right-0 w-1.5 cursor-ew-resize z-50 select-none"
+        className="absolute inset-y-4 right-0 w-2 cursor-ew-resize z-50 select-none"
         onMouseDown={(e) => handleMouseDown('East', e)}
       />
 
       {/* 4 Corners */}
       <div
-        className="absolute top-0 left-0 h-3 w-3 cursor-nwse-resize z-50 select-none"
+        className="absolute top-0 left-0 h-4 w-4 cursor-nwse-resize z-50 select-none"
         onMouseDown={(e) => handleMouseDown('NorthWest', e)}
       />
       <div
-        className="absolute top-0 right-0 h-3 w-3 cursor-nesw-resize z-50 select-none"
+        className="absolute top-0 right-0 h-4 w-4 cursor-nesw-resize z-50 select-none"
         onMouseDown={(e) => handleMouseDown('NorthEast', e)}
       />
       <div
-        className="absolute bottom-0 left-0 h-3 w-3 cursor-nesw-resize z-50 select-none"
+        className="absolute bottom-0 left-0 h-4 w-4 cursor-nesw-resize z-50 select-none"
         onMouseDown={(e) => handleMouseDown('SouthWest', e)}
       />
       <div
-        className="absolute bottom-0 right-0 h-3 w-3 cursor-nwse-resize z-50 select-none"
+        className="absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize z-50 select-none"
         onMouseDown={(e) => handleMouseDown('SouthEast', e)}
       />
     </div>

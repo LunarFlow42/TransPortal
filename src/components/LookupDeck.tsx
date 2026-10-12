@@ -25,7 +25,7 @@ export const LookupDeck: React.FC<LookupDeckProps> = ({ fillHeight = false }) =>
   const offset = stack.length - visible.length;
 
   return (
-    <div className={cn('relative w-full pt-3', fillHeight && 'h-full flex flex-col')}>
+    <div className={cn('relative w-full', fillHeight ? 'h-full flex flex-col' : 'pt-3')}>
       {visible.map((node, i) => {
         const depth = visible.length - 1 - i; // 0 = top frame
         const stackIndex = offset + i;

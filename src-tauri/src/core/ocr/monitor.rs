@@ -18,8 +18,11 @@ pub const MONITOR_EVENT: &str = "transportal://auto-ocr";
 #[derive(Clone, Deserialize)]
 pub struct MonitorOptions {
     pub provider: String,
+    #[serde(alias = "openaiConfig")]
     pub openai_config: Option<OpenAiConfig>,
+    #[serde(alias = "targetLang")]
     pub target_lang: String,
+    #[serde(alias = "intervalMs")]
     pub interval_ms: u64,
 }
 

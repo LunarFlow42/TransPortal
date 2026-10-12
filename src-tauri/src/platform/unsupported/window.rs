@@ -62,7 +62,7 @@ pub fn observe_size_move<R: tauri::Runtime>(
 
 pub fn place_window_smartly<R: tauri::Runtime>(
     window: &tauri::WebviewWindow<R>,
-    _anchor_bounds: Option<&crate::platform::selection::SelectionBounds>,
+    anchor_bounds: Option<&crate::platform::selection::SelectionBounds>,
     center: bool,
     _no_activate: bool,
 ) -> Result<(), String> {
@@ -74,31 +74,29 @@ pub fn place_window_smartly<R: tauri::Runtime>(
     if let Ok(Some(monitor)) = window.current_monitor() {
         let work_pos = monitor.position();
         let work_size = monitor.size();
-        let margin = (8.0 * scale_factor).round() as i32;
-
-        let (target_x, target_y) = if center {
-            (
-                work_pos.x + ((work_size.width as i32 - win_w) / 2),
-                work_pos.y + ((work_size.height as i32 - win_h) / 2),
-            )
-        } else {
-            let cursor = window.cursor_position().unwrap_or_default();
-            (
-                cursor.x as i32 + (12.0 * scale_factor).round() as i32,
-                cursor.y as i32 + (16.0 * scale_factor).round() as i32,
-            )
-        };
-
-        let clamped_x = target_x.clamp(
-            work_pos.x + margin,
-            (work_pos.x + work_size.width as i32 - win_w - margin).max(work_pos.x + margin),
+        let work = (
+            work_pos.x,
+            work_pos.y,
+            work_pos.x + work_size.width as i32,
+            work_pos.y + work_size.height as i32,
         );
-        let clamped_y = target_y.clamp(
-            work_pos.y + margin,
-            (work_pos.y + work_size.height as i32 - win_h - margin).max(work_pos.y + margin),
+
+        let (clamped_x, clamped_y) = crate::platform::placement::compute_smart_placement(
+            work,
+            (win_w, win_h),
+            scale_factor,
+            anchor_bounds,
+            None,
+            center,
         );
 
         let _ = window.set_position(tauri::PhysicalPosition::new(clamped_x, clamped_y));
     }
     Ok(())
 }
+
+pub fn get_foreground_window() -> Option<usize> {
+    None
+}
+
+pub fn restore_foreground_window(_handle: usize) {}

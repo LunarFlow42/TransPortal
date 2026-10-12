@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 export interface ImageZoomPanOptions {
   minScale?: number;
@@ -92,6 +92,41 @@ export function useImageZoomPan(options: ImageZoomPanOptions = {}): ImageZoomPan
     },
     [scale, offset, minScale, maxScale],
   );
+
+  // Native non-passive wheel listener allows e.preventDefault() in Chromium/WebView2
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const handleNativeWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const rect = el.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left - rect.width / 2;
+      const mouseY = e.clientY - rect.top - rect.height / 2;
+
+      const zoomFactor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+      const newScale = Math.min(maxScale, Math.max(minScale, scale * zoomFactor));
+
+      if (newScale === scale) return;
+
+      const scaleRatio = newScale / scale;
+      const newOffsetX = mouseX - (mouseX - offset.x) * scaleRatio;
+      const newOffsetY = mouseY - (mouseY - offset.y) * scaleRatio;
+
+      setScaleState(newScale);
+      setOffset({
+        x: Math.abs(newScale - 1.0) < 0.01 ? 0 : Math.round(newOffsetX),
+        y: Math.abs(newScale - 1.0) < 0.01 ? 0 : Math.round(newOffsetY),
+      });
+    };
+
+    el.addEventListener('wheel', handleNativeWheel, { passive: false });
+    return () => {
+      el.removeEventListener('wheel', handleNativeWheel);
+    };
+  }, [scale, offset, minScale, maxScale]);
 
   const onMouseDown = useCallback(
     (e: React.MouseEvent<HTMLElement>) => {

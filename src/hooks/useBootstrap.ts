@@ -134,6 +134,11 @@ export function useBootstrap(persist: boolean) {
 
       if (persist) {
         const {
+          provider,
+          openaiConfig,
+          theme,
+          overlayOpacity,
+          smoothTransitions,
           hotkey,
           ocrCardHotkey,
           ocrPictureHotkey,
@@ -154,6 +159,11 @@ export function useBootstrap(persist: boolean) {
           ocrPictureDefaultView,
         } = useAppStore.getState();
         await emit(SETTINGS_CHANGED_EVENT, {
+          provider,
+          openaiConfig,
+          theme,
+          overlayOpacity,
+          smoothTransitions,
           hotkey,
           ocrCardHotkey,
           ocrPictureHotkey,
@@ -243,7 +253,7 @@ export function useBootstrap(persist: boolean) {
 
       return () => {
         disposed = true;
-        void unlisten?.then((dispose) => dispose?.());
+        void unlisten?.then((dispose) => dispose?.()).catch(() => {});
       };
     }
 

@@ -58,25 +58,42 @@ export function RegionSelectView() {
     if (!selection) return;
     let active = true;
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas) {
+      void invoke('show_region_window');
+      return;
+    }
 
     canvas.width = selection.bounds.width;
     canvas.height = selection.bounds.height;
     const ctx = canvas.getContext('2d', { willReadFrequently: false });
-    if (!ctx) return;
+    if (!ctx) {
+      void invoke('show_region_window');
+      return;
+    }
 
     void invoke<ArrayBuffer>('get_frozen_pixels', { id: selection.id })
       .then((buffer) => {
-        if (!active || !buffer) return;
-        const pixels = new Uint8ClampedArray(buffer);
-        if (pixels.length !== selection.bounds.width * selection.bounds.height * 4) {
+        if (!active || !buffer) {
+          if (active) void invoke('show_region_window');
           return;
         }
-        const imgData = new ImageData(pixels, selection.bounds.width, selection.bounds.height);
-        ctx.putImageData(imgData, 0, 0);
+        const pixels = new Uint8ClampedArray(buffer);
+        if (pixels.length === selection.bounds.width * selection.bounds.height * 4) {
+          const imgData = new ImageData(pixels, selection.bounds.width, selection.bounds.height);
+          ctx.putImageData(imgData, 0, 0);
+        } else {
+          console.warn('Frozen pixels size mismatch:', pixels.length, selection.bounds);
+        }
+        requestAnimationFrame(() => {
+          if (!active) return;
+          void invoke('show_region_window');
+        });
       })
       .catch((e) => {
         console.warn('Failed to load raw frozen pixels:', e);
+        if (active) {
+          void invoke('show_region_window');
+        }
       });
 
     return () => {
@@ -138,8 +155,8 @@ export function RegionSelectView() {
       disposed = true;
       window.removeEventListener('keydown', escape);
       window.removeEventListener('contextmenu', onContextMenu);
-      void unlistenSelection.then((dispose) => dispose());
-      void unlistenReset.then((dispose) => dispose());
+      void unlistenSelection.then((dispose) => dispose()).catch(() => {});
+      void unlistenReset.then((dispose) => dispose()).catch(() => {});
     };
   }, []);
 
@@ -220,13 +237,15 @@ export function RegionSelectView() {
         />
       </>
     )}
-    {!rect && <div className="pointer-events-none absolute inset-0 bg-black/25" />}
-    {rect && <div className="pointer-events-none absolute border-2 border-cyan-300" style={{
+    {selection && !rect && <div className="pointer-events-none absolute inset-0 bg-black/25" />}
+    {selection && rect && <div className="pointer-events-none absolute border-2 border-cyan-300" style={{
       left: `${rect.x * 100}%`, top: `${rect.y * 100}%`, width: `${rect.width * 100}%`, height: `${rect.height * 100}%`,
       boxShadow: '0 0 0 99999px rgba(0,0,0,0.25)',
     }} />}
-    <div className="pointer-events-none absolute left-1/2 top-6 -translate-x-1/2 rounded-xl bg-black/85 px-5 py-3 text-sm text-white shadow-lg">
-      {error || (busy ? BUSY[purpose] : HINTS[purpose])}
-    </div>
+    {selection && (
+      <div className="pointer-events-none absolute left-1/2 top-6 -translate-x-1/2 rounded-xl bg-black/85 px-5 py-3 text-sm text-white shadow-lg">
+        {error || (busy ? BUSY[purpose] : HINTS[purpose])}
+      </div>
+    )}
   </div>;
 }

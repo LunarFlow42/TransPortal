@@ -19,10 +19,10 @@ import {
   Search,
   MousePointerClick,
   AppWindow,
-  ChevronDown,
   Sliders,
   Cpu,
   ShieldCheck,
+  Camera,
 } from 'lucide-react';
 import { useBootstrap } from '../hooks/useBootstrap';
 import { useShortcutStatus } from '../hooks/useShortcutStatus';
@@ -34,6 +34,8 @@ import { DictionaryPanel } from '../components/DictionaryPanel';
 import { OcrSettingsPanel } from '../components/OcrSettingsPanel';
 import { IntegrityPanel } from '../components/IntegrityPanel';
 import { MemorySettingsPanel } from '../components/MemorySettingsPanel';
+import { CaptureDiagnosticsPanel } from '../components/CaptureDiagnosticsPanel';
+import { ResizeHandles } from '../components/ResizeHandles';
 import { Button, IconButton, Input, Section, Select, Surface, Switch } from '../components/ui';
 import { cn } from '../utils/cn';
 import type { ProviderType, ShortcutActionId, ThemeMode } from '../types';
@@ -127,75 +129,11 @@ const IN_WINDOW_SHORTCUTS = [
 export type SettingsTab = 'general' | 'translation' | 'shortcuts' | 'advanced';
 
 const TABS: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
-  { id: 'general', label: '常规', icon: <Palette className="h-3.5 w-3.5" /> },
-  { id: 'translation', label: '翻译与识别', icon: <Languages className="h-3.5 w-3.5" /> },
-  { id: 'shortcuts', label: '快捷键与手势', icon: <Keyboard className="h-3.5 w-3.5" /> },
-  { id: 'advanced', label: '高级与诊断', icon: <Sliders className="h-3.5 w-3.5" /> },
+  { id: 'general', label: '常规', icon: <Palette className="h-4 w-4" /> },
+  { id: 'translation', label: '翻译与词典', icon: <Languages className="h-4 w-4" /> },
+  { id: 'shortcuts', label: '快捷键与手势', icon: <Keyboard className="h-4 w-4" /> },
+  { id: 'advanced', label: '高级与诊断', icon: <Sliders className="h-4 w-4" /> },
 ];
-
-interface CollapsibleSectionProps {
-  label: string;
-  icon?: React.ReactNode;
-  subtitle?: string;
-  defaultOpen?: boolean;
-  children: React.ReactNode;
-}
-
-const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
-  label,
-  icon,
-  subtitle,
-  defaultOpen = false,
-  children,
-}) => {
-  const [open, setOpen] = useState(defaultOpen);
-
-  useEffect(() => {
-    if (defaultOpen) {
-      setOpen(true);
-    }
-  }, [defaultOpen]);
-
-  return (
-    <div className="rounded-[var(--r-card)] border border-[var(--stroke)] bg-[var(--surface-2)] overflow-hidden transition-all shadow-sm">
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={() => setOpen(!open)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            setOpen(!open);
-          }
-        }}
-        className="flex w-full items-center justify-between p-3.5 text-left hover:bg-[var(--surface-3)] transition-colors cursor-pointer select-none focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--accent-b)]"
-      >
-        <div className="flex items-center gap-3 min-w-0">
-          {icon && (
-            <span className="flex h-7 w-7 items-center justify-center rounded-[var(--r-inner)] bg-[var(--surface-3)] text-[var(--accent-b)] shrink-0">
-              {icon}
-            </span>
-          )}
-          <div className="flex flex-col min-w-0 text-left">
-            <span className="text-[13px] font-semibold text-[var(--text)] leading-snug">{label}</span>
-            {subtitle && <span className="text-[11px] text-[var(--muted)] leading-tight">{subtitle}</span>}
-          </div>
-        </div>
-        <ChevronDown
-          className={cn(
-            'h-4 w-4 text-[var(--muted)] shrink-0 transition-transform duration-200',
-            open && 'rotate-180 text-[var(--text)]',
-          )}
-        />
-      </div>
-      {open && (
-        <div className="border-t border-[var(--stroke)] p-3 bg-[var(--surface-2)]/40">
-          {children}
-        </div>
-      )}
-    </div>
-  );
-};
 
 /**
  * `#/settings` — the dedicated borderless settings window.
@@ -350,7 +288,8 @@ export const SettingsView: React.FC = () => {
   const matchDict = isSearching && isMatch(['dictionary', '词典', '发音', 'audio', 'pronounce', 'ecdict']);
   const matchInWindow = isSearching && isMatch(['in-window', 'window', '软件快捷键', '内置', '窗口快捷键', 'tab', 'ctrl+a', 'ctrl+r', '置顶']);
   const matchMemory = isSearching && isMatch(['memory', '系统', '性能', '内存', '释放', 'ram', 'clean', 'working set']);
-  const matchIntegrity = isSearching && isMatch(['integrity', '完整性', '健康', '检测', 'checks', 'diagnostic', 'sha256', 'hash']);
+  const matchIntegrity = isSearching && isMatch(['integrity', '完整性', '健康', '检测', 'checks', 'sha256', 'hash']);
+  const matchCapture = isSearching && isMatch(['capture', 'screenshot', '截图', '诊断', 'wgc', 'dxgi', 'gdi', 'debug', '调试', '游戏', '全屏', 'pipeline', 'pipe']);
 
   const anyMatch =
     matchAppearance ||
@@ -362,11 +301,13 @@ export const SettingsView: React.FC = () => {
     matchDict ||
     matchInWindow ||
     matchMemory ||
-    matchIntegrity;
+    matchIntegrity ||
+    matchCapture;
 
   return (
-    <div className="h-screen w-screen bg-transparent p-2">
+    <div className="h-screen w-screen bg-transparent overflow-hidden">
       <div className="window-root surface-hairline relative flex h-full w-full flex-col overflow-hidden rounded-[var(--r-win)] text-[var(--text)]">
+        <ResizeHandles />
         <header
           onMouseDown={startWindowDrag}
           className="flex shrink-0 cursor-move items-center justify-between border-b border-[var(--stroke)] px-3.5 py-3"
@@ -397,56 +338,67 @@ export const SettingsView: React.FC = () => {
           </p>
         )}
 
-        {/* 固定顶栏：全局搜索与 4-Tab 分段切换 */}
-        <div className="flex shrink-0 flex-col gap-2.5 border-b border-[var(--stroke)] px-4 pt-3 pb-2.5 bg-[var(--surface-2)]/30">
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-2.5 h-3.5 w-3.5 text-[var(--muted)]" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="搜索设置项、快捷键或功能..."
-              className="w-full rounded-[var(--r-ctrl)] border border-[var(--stroke)] bg-[var(--surface-2)] pl-8 pr-3 py-1.5 text-xs text-[var(--text)] placeholder-[var(--faint)] outline-none transition-colors focus:border-[var(--accent-b)] focus:bg-[var(--surface-3)]"
-            />
-          </div>
-
-          {isSearching ? (
-            <div className="flex items-center justify-between px-1 text-xs text-[var(--muted)]">
-              <span>全局搜索匹配项</span>
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                className="text-[var(--accent-b)] hover:underline cursor-pointer"
-              >
-                清空搜索并返回标签页
-              </button>
+        {/* 主体两栏布局：左侧竖向导航侧边栏 + 右侧内容区 */}
+        <div className="flex flex-1 min-h-0 overflow-hidden">
+          {/* 左侧竖向导航栏 */}
+          <aside className="flex w-40 shrink-0 flex-col border-r border-[var(--stroke)] bg-[var(--surface-2)]/30 overflow-y-auto p-2.5 gap-1 select-none">
+            <div className="px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">
+              设置分类
             </div>
-          ) : (
-            <div className="grid grid-cols-4 gap-1 rounded-[var(--r-ctrl)] bg-[var(--surface-2)]/60 p-1 border border-[var(--stroke)]">
-              {TABS.map((t) => {
-                const isActive = activeTab === t.id;
-                return (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => setActiveTab(t.id)}
-                    className={cn(
-                      'flex items-center justify-center gap-1.5 rounded-[var(--r-inner)] py-1.5 text-xs font-medium transition-all select-none cursor-pointer',
-                      isActive
-                        ? 'bg-[var(--surface-3)] text-[var(--text)] shadow-sm font-semibold'
-                        : 'text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--surface-3)]',
-                    )}
-                  >
+            {TABS.map((t) => {
+              const isActive = !isSearching && activeTab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => {
+                    setActiveTab(t.id);
+                    if (isSearching) setSearchQuery('');
+                  }}
+                  className={cn(
+                    'flex items-center gap-2.5 rounded-[var(--r-ctrl)] px-2.5 py-2 text-xs font-medium transition-all text-left cursor-pointer',
+                    isActive
+                      ? 'bg-[var(--surface-3)] text-[var(--text)] shadow-sm font-semibold'
+                      : 'text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--surface-3)]/60',
+                  )}
+                >
+                  <span className={cn('shrink-0', isActive ? 'text-[var(--accent-b)]' : 'text-[var(--muted)]')}>
                     {t.icon}
-                    <span>{t.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
+                  </span>
+                  <span className="truncate">{t.label}</span>
+                </button>
+              );
+            })}
+          </aside>
 
-        <div className="flex flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden p-4">
+          {/* 右侧设置内容区 */}
+          <div className="flex flex-1 min-w-0 flex-col overflow-hidden">
+            {/* 顶栏：全局搜索 */}
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--stroke)] px-4 py-2.5 bg-[var(--surface-2)]/20">
+              <div className="relative flex-1">
+                <Search className="pointer-events-none absolute left-3 top-2.5 h-3.5 w-3.5 text-[var(--muted)]" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="搜索设置项、快捷键或功能..."
+                  className="w-full rounded-[var(--r-ctrl)] border border-[var(--stroke)] bg-[var(--surface-2)] pl-8 pr-3 py-1.5 text-xs text-[var(--text)] placeholder-[var(--faint)] outline-none transition-colors focus:border-[var(--accent-b)] focus:bg-[var(--surface-3)]"
+                />
+              </div>
+
+              {isSearching && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="shrink-0 text-xs text-[var(--accent-b)] hover:underline cursor-pointer"
+                >
+                  清除搜索
+                </button>
+              )}
+            </div>
+
+            {/* 滚动内容卡片区 */}
+            <div className="flex flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden p-4">
 
           {/* ====== TAB 1: 常规 (General) ====== */}
           {/* 外观与界面 */}
@@ -619,6 +571,31 @@ export const SettingsView: React.FC = () => {
             <OcrSettingsPanel disabled={!settingsReady} />
           )}
 
+          {/* 本地与在线词典 */}
+          {(isSearching ? matchDict : activeTab === 'translation') && (
+            <Section label="Dictionary 本地与在线词典" icon={<BookOpen className="h-3.5 w-3.5" />} className="shrink-0">
+              <Surface variant="inner" className="flex flex-col gap-3 p-3">
+                <div className="flex items-center justify-between gap-3 border-b border-[var(--stroke)] pb-2.5">
+                  <div className="flex flex-col gap-0.5">
+                    <div className="flex items-center gap-1.5 text-[13px] font-medium">
+                      <Volume2 className="h-3.5 w-3.5 text-[var(--accent-b)]" />
+                      <span>点击单词自动发音</span>
+                    </div>
+                    <p className="text-[10px] text-[var(--faint)]">
+                      在释义、例句或查词卡片中点击单词时，自动播放发音。
+                    </p>
+                  </div>
+                  <Switch
+                    checked={autoPronounce}
+                    onChange={() => setAutoPronounce(!autoPronounce)}
+                    label="点击单词自动发音"
+                  />
+                </div>
+                <DictionaryPanel />
+              </Surface>
+            </Section>
+          )}
+
           {/* ====== TAB 3: 快捷键与手势 (Shortcuts & Gestures) ====== */}
           {/* 全局快捷键 */}
           {(isSearching ? matchShortcuts : activeTab === 'shortcuts') && (
@@ -668,7 +645,7 @@ export const SettingsView: React.FC = () => {
                                 'w-full text-center font-mono text-xs cursor-pointer select-none',
                                 isRecording
                                   ? 'border-[rgba(99,102,241,0.75)] shadow-[0_0_0_3px_rgba(99,102,241,0.22)]'
-                                  : 'hover:border-[var(--stroke-hover)]',
+                                  : 'hover:border-[var(--stroke-strong)]',
                               )}
                             />
                           </div>
@@ -781,38 +758,12 @@ export const SettingsView: React.FC = () => {
           )}
 
           {/* ====== TAB 4: 高级与诊断 (Advanced & Diagnostics) ====== */}
-          {/* 本地与在线词典 */}
-          {(isSearching ? matchDict : activeTab === 'advanced') && (
-            <Section label="Dictionary 本地与在线词典" icon={<BookOpen className="h-3.5 w-3.5" />}>
-              <Surface variant="inner" className="flex flex-col gap-3 p-3">
-                <div className="flex items-center justify-between gap-3 border-b border-[var(--stroke)] pb-2.5">
-                  <div className="flex flex-col gap-0.5">
-                    <div className="flex items-center gap-1.5 text-[13px] font-medium">
-                      <Volume2 className="h-3.5 w-3.5 text-[var(--accent-b)]" />
-                      <span>点击单词自动发音</span>
-                    </div>
-                    <p className="text-[10px] text-[var(--faint)]">
-                      在释义、例句或查词卡片中点击单词时，自动播放发音。
-                    </p>
-                  </div>
-                  <Switch
-                    checked={autoPronounce}
-                    onChange={() => setAutoPronounce(!autoPronounce)}
-                    label="点击单词自动发音"
-                  />
-                </div>
-                <DictionaryPanel />
-              </Surface>
-            </Section>
-          )}
-
-          {/* 手风琴折叠 1: 软件内置快捷键一览 */}
+          {/* 浮层内置快捷键一览 */}
           {(isSearching ? matchInWindow : activeTab === 'advanced') && (
-            <CollapsibleSection
+            <Section
               label="In-Window Shortcuts 浮层内置快捷键"
               icon={<AppWindow className="h-3.5 w-3.5" />}
-              subtitle="浮层聚焦时的便捷键盘操作（Ctrl+A, Tab, Esc 等）"
-              defaultOpen={isSearching}
+              className="shrink-0"
             >
               <Surface variant="inner" className="flex flex-col gap-2 p-3">
                 <p className="text-[11px] text-[var(--muted)] mb-1">
@@ -834,31 +785,40 @@ export const SettingsView: React.FC = () => {
                   ))}
                 </div>
               </Surface>
-            </CollapsibleSection>
+            </Section>
           )}
 
-          {/* 手风琴折叠 2: 系统性能与内存管理 */}
+          {/* 系统性能与内存管理 */}
           {(isSearching ? matchMemory : activeTab === 'advanced') && (
-            <CollapsibleSection
+            <Section
               label="System & Memory 系统性能与内存管理"
               icon={<Cpu className="h-3.5 w-3.5" />}
-              subtitle="主程序与 WebView2 进程树物理内存监控与即时释放"
-              defaultOpen={isSearching}
+              className="shrink-0"
             >
               <MemorySettingsPanel bare />
-            </CollapsibleSection>
+            </Section>
           )}
 
-          {/* 手风琴折叠 3: 程序完整性校验 */}
+          {/* 程序完整性校验 */}
           {(isSearching ? matchIntegrity : activeTab === 'advanced') && (
-            <CollapsibleSection
+            <Section
               label="Program Integrity 程序完整性校验"
               icon={<ShieldCheck className="h-3.5 w-3.5" />}
-              subtitle="主执行文件 SHA-256 哈希比对与安全防篡改自检"
-              defaultOpen={isSearching}
+              className="shrink-0"
             >
               <IntegrityPanel bare />
-            </CollapsibleSection>
+            </Section>
+          )}
+
+          {/* 截图管线调试与诊断 */}
+          {(isSearching ? matchCapture : activeTab === 'advanced') && (
+            <Section
+              label="Capture Diagnostics 截图管线调试与诊断"
+              icon={<Camera className="h-3.5 w-3.5" />}
+              className="shrink-0"
+            >
+              <CaptureDiagnosticsPanel bare />
+            </Section>
           )}
 
           {/* 搜索无结果提示 */}
@@ -876,11 +836,13 @@ export const SettingsView: React.FC = () => {
             </div>
           )}
 
-          <p className="mt-auto text-center text-[10px] text-[var(--faint)]">
+          <p className="mt-auto shrink-0 text-center text-[10px] text-[var(--faint)]">
             Settings are saved automatically.
           </p>
         </div>
       </div>
     </div>
-  );
+  </div>
+</div>
+);
 };

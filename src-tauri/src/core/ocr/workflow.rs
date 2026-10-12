@@ -7,7 +7,8 @@ use super::{OCR_EVENT, OcrEngine, OcrEngineInfo, OcrEvent, OcrImage, OcrMode, Oc
 use crate::platform::clipboard::ClipboardOps;
 use crate::platform::clipboard::ClipboardOrigin;
 use crate::platform::gestures::{GestureEvent, GestureObserver, GestureSource};
-use crate::platform::{CAPABILITIES, PlatformClipboard, PlatformGestures};
+use crate::platform::window::WindowOps;
+use crate::platform::{CAPABILITIES, PlatformClipboard, PlatformGestures, PlatformWindow};
 use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, mpsc};
@@ -35,6 +36,7 @@ struct SessionState {
     next_id: u64,
     active: Option<OcrEvent>,
     latest: Option<OcrEvent>,
+    foreground: Option<usize>,
 }
 
 impl SessionState {
@@ -43,6 +45,7 @@ impl SessionState {
             return Err("已有截图正在处理，请完成或按 Esc 取消后重试。".into());
         }
         self.next_id += 1;
+        self.foreground = None;
         let event = OcrEvent {
             id: self.next_id,
             mode,
@@ -142,7 +145,14 @@ impl OcrService {
             .iter()
             .find(|engine| engine.id == config.engine)
             .cloned()
-            .expect("selected OCR engine remains registered");
+            .or_else(|| engines.first().cloned())
+            .unwrap_or_else(|| OcrEngineInfo {
+                id: config.engine.clone(),
+                label: "未知引擎".into(),
+                languages: Vec::new(),
+                available: false,
+                error: Some("未找到所配置的 OCR 识别引擎".into()),
+            });
         OcrStatus {
             supported: self.supported(),
             engine,
@@ -397,6 +407,12 @@ impl OcrService {
         crate::core::shell::hide_now(app);
         let region = app.state::<RegionService>();
         let selection = region.freeze(app, event.mode.into(), event.id, cancel)?;
+        if let Some(foreground) = region.get_saved_foreground(selection) {
+            let mut sessions = self.sessions.lock().unwrap();
+            if sessions.is_current(event.id) {
+                sessions.foreground = Some(foreground);
+            }
+        }
         if !self.is_current(event.id) {
             region.dismiss(app, |_, id| id == selection);
             let _ = region.exclude_windows(app, false);
@@ -426,6 +442,12 @@ impl OcrService {
         tauri::async_runtime::spawn_blocking(move || {
             let service = app.state::<OcrService>();
             let _ = app.state::<RegionService>().exclude_windows(&app, false);
+            if let Some(hwnd) = confirmed.foreground {
+                let mut sessions = service.sessions.lock().unwrap();
+                if sessions.is_current(confirmed.owner) {
+                    sessions.foreground = Some(hwnd);
+                }
+            }
             let active = service.sessions.lock().unwrap().active.clone();
             let Some(mut event) = active.filter(|event| event.id == confirmed.owner) else {
                 return;
@@ -528,15 +550,19 @@ impl OcrService {
         {
             let _ = region.exclude_windows(app, false);
         }
-        let (event, was_active) = {
+        let (event, was_active, foreground) = {
             let mut sessions = self.sessions.lock().unwrap();
             let was_active = sessions.active.is_some();
+            let foreground = sessions.foreground.take();
             let Some(mut event) = sessions.active.clone().or_else(|| {
                 sessions
                     .latest
                     .clone()
                     .filter(|event| event.stage == OcrStage::Ready)
             }) else {
+                if let Some(hwnd) = foreground {
+                    PlatformWindow::restore_foreground_window(hwnd);
+                }
                 return;
             };
             event.stage = OcrStage::Cancelled;
@@ -544,11 +570,14 @@ impl OcrService {
             event.text.clear();
             sessions.active = None;
             sessions.latest = Some(event.clone());
-            (event, was_active)
+            (event, was_active, foreground)
         };
         let _ = app.emit_to("shell", OCR_EVENT, &event);
         if was_active {
             Self::update_window(app, &event);
+        }
+        if let Some(hwnd) = foreground {
+            PlatformWindow::restore_foreground_window(hwnd);
         }
     }
 
@@ -557,6 +586,18 @@ impl OcrService {
     }
 
     fn publish(&self, app: &AppHandle, event: OcrEvent, show: bool) {
+        let foreground = if event.mode == OcrMode::Silent
+            && matches!(
+                event.stage,
+                OcrStage::Ready | OcrStage::Error | OcrStage::Cancelled
+            ) {
+            self.sessions.lock().unwrap().foreground.take()
+        } else {
+            None
+        };
+        if let Some(hwnd) = foreground {
+            PlatformWindow::restore_foreground_window(hwnd);
+        }
         if !self.sessions.lock().unwrap().update(event.clone()) {
             return;
         }
@@ -591,6 +632,10 @@ impl OcrService {
 
     fn finish_error(&self, app: &AppHandle, mut event: OcrEvent, error: String) {
         eprintln!("[ocr] session={} failed: {error}", event.id);
+        let foreground = self.sessions.lock().unwrap().foreground.take();
+        if let Some(hwnd) = foreground {
+            PlatformWindow::restore_foreground_window(hwnd);
+        }
         event.stage = OcrStage::Error;
         event.error = Some(error);
         self.publish(app, event, true);
@@ -736,7 +781,7 @@ impl OcrService {
         event.language = Some(result.language);
         event.picture = Some(OcrPicture::new(image, result.blocks)?);
 
-        {
+        let foreground = {
             let mut sessions = self.sessions.lock().unwrap();
             if !sessions.is_current(event.id) {
                 return Ok(());
@@ -762,6 +807,14 @@ impl OcrService {
                 }
             }
             sessions.update(event.clone());
+            if event.mode == OcrMode::Silent {
+                sessions.foreground.take()
+            } else {
+                None
+            }
+        };
+        if let Some(hwnd) = foreground {
+            PlatformWindow::restore_foreground_window(hwnd);
         }
         eprintln!(
             "[ocr] session={} engine={} language={} chars={} recognition_ms={}",
@@ -815,6 +868,17 @@ mod tests {
             assert!(!state.update(event));
             assert!(state.active.is_none());
         }
+    }
+
+    #[test]
+    fn session_state_tracks_and_clears_foreground_handle() {
+        let mut state = SessionState::default();
+        let _ = state.begin(OcrMode::Silent, "mock").unwrap();
+        state.foreground = Some(12345);
+        assert_eq!(state.foreground, Some(12345));
+        let taken = state.foreground.take();
+        assert_eq!(taken, Some(12345));
+        assert_eq!(state.foreground, None);
     }
 
     struct MockBilingualRetryEngine;

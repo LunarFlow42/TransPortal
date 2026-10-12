@@ -13,6 +13,7 @@ mod selection;
 mod size_move;
 mod system;
 mod uia;
+mod wgc;
 mod window;
 
 use super::selection::SelectionBounds;
@@ -96,5 +97,13 @@ impl WindowOps for WindowsWindow {
         no_activate: bool,
     ) -> Result<(), String> {
         window::place_window_smartly(window, anchor_bounds, center, no_activate)
+    }
+
+    fn get_foreground_window() -> Option<usize> {
+        window::get_foreground_window()
+    }
+
+    fn restore_foreground_window(handle: usize) {
+        window::restore_foreground_window(handle);
     }
 }

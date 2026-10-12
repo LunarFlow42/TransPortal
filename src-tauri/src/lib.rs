@@ -38,9 +38,9 @@ pub fn open_or_focus_settings<R: tauri::Runtime>(
             tauri::WebviewUrl::App("index.html#/settings".into()),
         )
         .title("TransPortal Settings")
-        .inner_size(480.0, 660.0)
-        .min_inner_size(420.0, 480.0)
-        .resizable(false)
+        .inner_size(640.0, 560.0)
+        .min_inner_size(560.0, 440.0)
+        .resizable(true)
         .decorations(false)
         .transparent(true)
         .shadow(false)
@@ -234,6 +234,7 @@ pub fn run() {
             commands::get_frozen_pixels,
             commands::confirm_region,
             commands::cancel_region,
+            commands::show_region_window,
             commands::benchmark_ocr,
             commands::pause_auto_ocr,
             commands::stop_auto_ocr,
@@ -251,7 +252,10 @@ pub fn run() {
             commands::set_window_theme,
             commands::get_memory_usage,
             commands::trim_memory,
-            commands::set_window_pinned
+            commands::set_window_pinned,
+            commands::get_capture_diagnostics,
+            commands::test_screen_capture,
+            commands::open_capture_debug_image
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

@@ -88,6 +88,7 @@ pub struct ConfirmedRegion {
     pub region: ScreenRect,
     pub bounds: ScreenRect,
     pub frozen: Arc<image::RgbaImage>,
+    pub foreground: Option<usize>,
 }
 
 impl ConfirmedRegion {
@@ -119,6 +120,7 @@ struct Pending {
     owner: u64,
     frozen: Arc<image::RgbaImage>,
     cancel: Cancellation,
+    foreground: Option<usize>,
 }
 
 #[derive(Default)]
@@ -167,7 +169,7 @@ impl RegionService {
     /// Keep our own overlay windows out of desktop captures.
     pub fn exclude_windows(&self, app: &AppHandle, enabled: bool) -> Result<(), String> {
         let mut result = Ok(());
-        for label in ["shell", "settings"] {
+        for label in ["shell", "settings", WINDOW_LABEL] {
             if let Some(window) = app.get_webview_window(label)
                 && let Err(error) = self.desktop.exclude(&window, enabled)
                 && enabled
@@ -176,6 +178,15 @@ impl RegionService {
             }
         }
         result
+    }
+
+    pub fn get_saved_foreground(&self, id: u64) -> Option<usize> {
+        let state = self.state.lock().unwrap();
+        state
+            .pending
+            .as_ref()
+            .filter(|p| p.selection.id == id)
+            .and_then(|p| p.foreground)
     }
 
     /// Blocking: grab the desktop in memory and stage it for selection.
@@ -187,17 +198,35 @@ impl RegionService {
         owner: u64,
         cancel: Cancellation,
     ) -> Result<u64, String> {
+        let foreground = PlatformWindow::get_foreground_window();
         crate::core::shell::hide_now(app);
-        // A one-shot snip only needs the overlay hidden; continuous monitoring
-        // must keep its own output out of every later capture.
-        if let Err(error) = self.exclude_windows(app, true)
-            && purpose == RegionPurpose::Monitor
-        {
-            return Err(error);
-        }
-        let bounds = self.desktop.bounds()?;
-        let image = self.desktop.capture(bounds)?;
+        // Exclude all overlay windows (including ocr-region) from capture
+        let _ = self.exclude_windows(app, true);
+        let bounds = match self.desktop.bounds() {
+            Ok(b) => b,
+            Err(e) => {
+                Self::hide_window(app);
+                if let Some(hwnd) = foreground {
+                    PlatformWindow::restore_foreground_window(hwnd);
+                }
+                return Err(e);
+            }
+        };
+        let image = match self.desktop.capture(bounds) {
+            Ok(img) => img,
+            Err(e) => {
+                Self::hide_window(app);
+                if let Some(hwnd) = foreground {
+                    PlatformWindow::restore_foreground_window(hwnd);
+                }
+                return Err(e);
+            }
+        };
         if cancel.is_cancelled() {
+            Self::hide_window(app);
+            if let Some(hwnd) = foreground {
+                PlatformWindow::restore_foreground_window(hwnd);
+            }
             return Err("已取消区域选择。".into());
         }
         let mut state = self.state.lock().unwrap();
@@ -213,20 +242,33 @@ impl RegionService {
             owner,
             frozen: Arc::new(image),
             cancel,
+            foreground,
         });
         Ok(id)
     }
 
     pub fn ensure_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String> {
         if let Some(window) = app.get_webview_window(WINDOW_LABEL) {
+            let _ = app.state::<RegionService>().desktop.exclude(&window, true);
+            PlatformWindow::configure_transparent_window(&window);
             Ok(window)
         } else {
+            let bounds = app
+                .state::<RegionService>()
+                .desktop
+                .bounds()
+                .unwrap_or(ScreenRect {
+                    x: 0,
+                    y: 0,
+                    width: 1920,
+                    height: 1080,
+                });
             let window = WebviewWindowBuilder::new(
                 app,
                 WINDOW_LABEL,
                 WebviewUrl::App(format!("index.html#/{WINDOW_LABEL}").into()),
             )
-            .title("选择屏幕区域")
+            .title("TransPortal Region")
             .decorations(false)
             .always_on_top(true)
             .skip_taskbar(true)
@@ -234,18 +276,28 @@ impl RegionService {
             .visible(false)
             .shadow(false)
             .transparent(true)
+            .no_redirection_bitmap(true)
+            .position(bounds.x as f64, bounds.y as f64)
+            .inner_size(bounds.width as f64, bounds.height as f64)
             .build()
             .map_err(|e| e.to_string())?;
             PlatformWindow::configure_transparent_window(&window);
+            let _ = app.state::<RegionService>().desktop.exclude(&window, true);
             Ok(window)
         }
     }
 
     pub fn prewarm(app: &AppHandle) {
-        let _ = Self::ensure_window(app);
+        if let Ok(window) = Self::ensure_window(app) {
+            let service = app.state::<RegionService>();
+            if let Ok(bounds) = service.desktop.bounds() {
+                let _ = window.set_position(PhysicalPosition::new(bounds.x, bounds.y));
+                let _ = window.set_size(PhysicalSize::new(bounds.width, bounds.height));
+            }
+        }
     }
 
-    /// Main thread only: size the selector over the desktop and display the transparent overlay immediately.
+    /// Main thread only: size the selector over the desktop and stage the transparent overlay.
     pub fn present(&self, app: &AppHandle, id: u64) -> Result<(), String> {
         let selection = {
             let state = self.state.lock().unwrap();
@@ -268,8 +320,26 @@ impl RegionService {
             .set_size(PhysicalSize::new(bounds.width, bounds.height))
             .map_err(|e| e.to_string())?;
         let _ = window.emit(SELECTION_EVENT, &selection);
-        window.show().map_err(|e| e.to_string())?;
-        window.set_focus().map_err(|e| e.to_string())?;
+        // Fallback: display the ocr-region window if the frontend
+        // doesn't trigger show_region_window within 350ms (prevents getting stuck on slow UI).
+        let app_handle = app.clone();
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(350)).await;
+            if app_handle
+                .state::<RegionService>()
+                .selection()
+                .is_some_and(|s| s.id == id)
+            {
+                let _ = Self::show_window(&app_handle);
+            }
+        });
+        Ok(())
+    }
+
+    pub fn show_window(app: &AppHandle) -> Result<(), String> {
+        if let Some(window) = app.get_webview_window(WINDOW_LABEL) {
+            window.show().map_err(|e| e.to_string())?;
+        }
         Ok(())
     }
 
@@ -289,13 +359,17 @@ impl RegionService {
                 .filter(|pending| pending.selection.id == id)
                 .ok_or("区域选择已过期。")?;
             if current.cancel.is_cancelled() {
+                let foreground = current.foreground;
                 state.pending = None;
+                if let Some(hwnd) = foreground {
+                    PlatformWindow::restore_foreground_window(hwnd);
+                }
                 return Err("区域选择已取消。".into());
             }
             if !current.selection.bounds.contains(&region) {
                 return Err("选区超出屏幕范围。".into());
             }
-            state.pending.take().unwrap()
+            state.pending.take().ok_or("区域选择已过期。")?
         };
         Self::hide_window(app);
         Ok(ConfirmedRegion {
@@ -304,6 +378,7 @@ impl RegionService {
             region,
             bounds: pending.selection.bounds,
             frozen: pending.frozen,
+            foreground: pending.foreground,
         })
     }
 
@@ -321,17 +396,23 @@ impl RegionService {
                 .as_ref()
                 .is_some_and(|pending| matches(pending.selection.purpose, pending.selection.id));
             if accept {
-                let pending = state.pending.take().unwrap();
-                pending.cancel.cancel();
-                Some((pending.selection.purpose, pending.owner))
+                state.pending.take().map(|pending| {
+                    pending.cancel.cancel();
+                    (pending.selection.purpose, pending.owner, pending.foreground)
+                })
             } else {
                 None
             }
         };
-        if dropped.is_some() {
+        if let Some((purpose, owner, foreground)) = dropped {
             Self::hide_window(app);
+            if let Some(hwnd) = foreground {
+                PlatformWindow::restore_foreground_window(hwnd);
+            }
+            Some((purpose, owner))
+        } else {
+            None
         }
-        dropped
     }
 
     pub fn hide_window(app: &AppHandle) {
@@ -513,6 +594,7 @@ mod tests {
             owner: 1,
             frozen: Arc::new(image),
             cancel,
+            foreground: None,
         });
         drop(state);
 

@@ -49,9 +49,9 @@ export function useHideOnBlur(active = true) {
     });
 
     return () => {
-      void unlistenFocus.then((dispose) => dispose());
-      void unlistenOutside.then((dispose) => dispose());
-      void unlistenSizeMove.then((dispose) => dispose());
+      void unlistenFocus.then((dispose) => dispose()).catch(() => {});
+      void unlistenOutside.then((dispose) => dispose()).catch(() => {});
+      void unlistenSizeMove.then((dispose) => dispose()).catch(() => {});
     };
   }, [active]);
 }

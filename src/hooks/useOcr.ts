@@ -30,7 +30,7 @@ export function useOcrEvents() {
     }).catch((error) => console.error('OCR event subscription failed:', error));
     return () => {
       disposed = true;
-      void unlisten.then((dispose) => dispose());
+      void unlisten.then((dispose) => dispose()).catch(() => {});
     };
   }, []);
 }
@@ -61,7 +61,7 @@ export function useOcrStatus() {
   useEffect(() => { void refresh(); }, [refresh, engine, language]);
   useEffect(() => {
     const unlisten = listen('transportal://ocr-assets-changed', () => { void refresh(); });
-    return () => { void unlisten.then((dispose) => dispose()); };
+    return () => { void unlisten.then((dispose) => dispose()).catch(() => {}); };
   }, [refresh]);
   useEffect(() => {
     let disposed = false;

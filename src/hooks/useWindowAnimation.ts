@@ -14,7 +14,7 @@ export interface DismissOptions {
 
 export interface ShellShownEvent {
   no_activate: boolean;
-  generation?: number;
+  generation: number;
 }
 
 export const SHELL_SHOWN_EVENT = 'transportal://shell-shown';
@@ -175,8 +175,8 @@ export function useWindowAnimation(): {
     });
 
     return () => {
-      void unlistenPromise.then((unlisten) => unlisten());
-      void unlistenFocus.then((unlisten) => unlisten());
+      void unlistenPromise.then((unlisten) => unlisten()).catch(() => {});
+      void unlistenFocus.then((unlisten) => unlisten()).catch(() => {});
     };
   }, []);
 

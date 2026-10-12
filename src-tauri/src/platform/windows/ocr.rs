@@ -69,7 +69,7 @@ fn normalize_chinese_alias(lower: &str) -> Option<&'static str> {
 }
 
 fn find_matching_language(
-    available: &windows::Foundation::Collections::IVectorView<Language>,
+    available: &windows_collections::IVectorView<Language>,
     requested: &str,
 ) -> Option<Language> {
     let clean = requested.trim().replace('_', "-");
@@ -250,7 +250,7 @@ impl OcrEngine for WindowsOcrEngine {
             to_bitmap(&image, width, height).map_err(|e| format!("无法准备 OCR 图片：{e}"))?;
         let result = engine
             .RecognizeAsync(&bitmap)
-            .and_then(|operation| operation.get())
+            .and_then(|operation| operation.join())
             .map_err(|e| format!("Windows OCR 识别失败：{e}"))?;
         // OcrResult.Text collapses line breaks. Keep line order for paragraphs,
         // code and copied text, rather than guessing at sentence boundaries.

@@ -2,11 +2,10 @@
 
 use super::assets::{OnnxAssets, manifest};
 use super::picture::OcrBlock;
+use super::ppocr::{PpOcrEngine as OcrLite, TextBlock};
 use super::{OcrEngine, OcrEngineInfo, OcrImage, OcrLanguage, RecognizedText};
 use ort::execution_providers::CPUExecutionProvider;
 use ort::session::builder::{GraphOptimizationLevel, SessionBuilder};
-use paddle_ocr_rs::ocr_lite::OcrLite;
-use paddle_ocr_rs::ocr_result::TextBlock;
 use std::ffi::CStr;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -57,7 +56,7 @@ impl OcrEngine for OnnxOcrEngine {
         let error = self.assets.resolve().err();
         Ok(OcrEngineInfo {
             id: ENGINE_ID.into(),
-            label: "ONNX · PP-OCRv4 FP32".into(),
+            label: "ONNX · PP-OCRv5 FP32".into(),
             languages: vec![OcrLanguage {
                 tag: MODEL_LANGUAGE.into(),
                 label: "简体中文 + English".into(),
@@ -320,7 +319,7 @@ fn ordered_result(blocks: Vec<TextBlock>) -> (String, Vec<OcrBlock>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use paddle_ocr_rs::ocr_result::Point;
+    use crate::core::ocr::ppocr::Point;
 
     #[test]
     fn screen_preprocessing_normalizes_dark_mode_and_preserves_transparent_text() {

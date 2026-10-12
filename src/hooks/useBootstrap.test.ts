@@ -79,6 +79,16 @@ describe('OCR settings startup', () => {
     await vi.waitFor(() => expect(lifecycle.initialized).toHaveBeenCalledWith(true));
     expect(invoke).toHaveBeenCalledWith('finish_startup_checks');
     expect(emit).toHaveBeenCalledWith('transportal://settings-changed', {
+      provider: 'google_free',
+      openaiConfig: {
+        api_key: '',
+        base_url: 'https://api.openai.com/v1',
+        model: 'gpt-4o-mini',
+        temperature: 0.3,
+      },
+      theme: 'system',
+      overlayOpacity: 0.72,
+      smoothTransitions: true,
       hotkey: 'Alt+Q',
       ocrCardHotkey: 'Alt+Shift+X',
       ocrPictureHotkey: 'Alt+S',

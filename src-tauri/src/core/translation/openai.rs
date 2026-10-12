@@ -1,19 +1,23 @@
 use super::{ProviderError, StreamChunk, TranslateQuery, TranslateResult, Translator};
 use async_trait::async_trait;
+use eventsource_stream::Eventsource;
 use futures_util::StreamExt;
 use reqwest::Client;
-use reqwest_eventsource::{Error as EventSourceError, Event, RequestBuilderExt};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::time::Duration;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OpenAiConfig {
+    #[serde(alias = "apiKey")]
     pub api_key: String,
+    #[serde(alias = "baseUrl")]
     pub base_url: Option<String>,
     pub model: Option<String>,
     pub temperature: Option<f32>,
+    #[serde(alias = "systemPrompt")]
     pub system_prompt: Option<String>,
+    #[serde(alias = "promptTemplate")]
     pub prompt_template: Option<String>,
 }
 
@@ -245,22 +249,31 @@ impl Translator for OpenAiCompatibleProvider {
             "stream": true
         });
 
-        // `reqwest-eventsource` owns the request/retry loop, so we hand it the
-        // builder directly instead of manually reading response bytes.
         let mut request = self.client.post(&url).json(&payload);
         if !self.config.api_key.is_empty() {
             request = request.header("Authorization", format!("Bearer {}", self.config.api_key));
         }
 
-        let mut stream = request
-            .eventsource()
-            .map_err(|e| ProviderError::Execution(format!("failed to open SSE stream: {e}")))?;
+        let response = request.send().await?;
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            if status.as_u16() == 401 {
+                return Err(ProviderError::Auth(format!(
+                    "OpenAI API 认证失败 (401): {body}"
+                )));
+            }
+            return Err(ProviderError::Execution(format!(
+                "OpenAI 流式请求失败 ({status}): {body}"
+            )));
+        }
+
+        let mut stream = response.bytes_stream().eventsource();
 
         while let Some(event) = stream.next().await {
             match event {
-                Ok(Event::Open) => {}
-                Ok(Event::Message(message)) => {
-                    let data = message.data.trim();
+                Ok(event) => {
+                    let data = event.data.trim();
                     if data.is_empty() {
                         continue;
                     }
@@ -286,7 +299,6 @@ impl Translator for OpenAiCompatibleProvider {
                             .map_err(|e| ProviderError::Execution(e.to_string()))?;
                     }
                 }
-                Err(EventSourceError::StreamEnded) => break,
                 Err(e) => {
                     let message = e.to_string();
                     let _ = channel.send(StreamChunk {

@@ -4,11 +4,10 @@ import { ShellView } from './views/ShellView';
 import { useTheme } from './hooks/useTheme';
 import './App.css';
 
+import { RegionSelectView } from './views/RegionSelectView';
+
 const SettingsView = React.lazy(() =>
   import('./views/SettingsView').then((m) => ({ default: m.SettingsView })),
-);
-const RegionSelectView = React.lazy(() =>
-  import('./views/RegionSelectView').then((m) => ({ default: m.RegionSelectView })),
 );
 
 /**
@@ -40,6 +39,7 @@ export const App: React.FC = () => {
           <Route path="/shell" element={<ShellView />} />
           <Route path="/settings" element={<SettingsView />} />
           <Route path="/ocr-region" element={<RegionSelectView />} />
+          <Route path="/region" element={<RegionSelectView />} />
           <Route path="*" element={<Navigate to="/shell" replace />} />
         </Routes>
       </React.Suspense>

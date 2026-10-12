@@ -1,5 +1,5 @@
 use crate::platform::desktop::ScreenRect;
-use crate::platform::imaging::crop_monitor_frame;
+use crate::platform::imaging::{crop_monitor_frame, is_all_black};
 use windows::Win32::Foundation::POINT;
 use windows::Win32::Graphics::Direct3D::D3D_FEATURE_LEVEL_11_0;
 use windows::Win32::Graphics::Direct3D11::{
@@ -46,6 +46,9 @@ impl Drop for DuplFrameGuard<'_> {
 pub struct DxgiDesktop {
     factory: IDXGIFactory1,
 }
+
+unsafe impl Send for DxgiDesktop {}
+unsafe impl Sync for DxgiDesktop {}
 
 impl DxgiDesktop {
     pub fn new() -> Result<Self, String> {
@@ -120,7 +123,7 @@ impl DxgiDesktop {
             D3D11CreateDevice(
                 &target_adapter,
                 windows::Win32::Graphics::Direct3D::D3D_DRIVER_TYPE_UNKNOWN,
-                None,
+                windows::Win32::Foundation::HMODULE::default(),
                 flags,
                 Some(&levels),
                 D3D11_SDK_VERSION,
@@ -144,7 +147,7 @@ impl DxgiDesktop {
             for _ in 0..5 {
                 let status = dupl.AcquireNextFrame(50, &mut frame_info, &mut resource);
                 if status.is_ok() {
-                    if frame_info.AccumulatedFrames > 0 && resource.is_some() {
+                    if resource.is_some() {
                         frame_guard = Some(DuplFrameGuard::new(&dupl));
                         break;
                     }
@@ -181,7 +184,7 @@ impl DxgiDesktop {
             device
                 .CreateTexture2D(&staging_desc, None, Some(&mut staging))
                 .map_err(|e| format!("创建暂存纹理失败：{e}"))?;
-            let staging = staging.unwrap();
+            let staging = staging.ok_or_else(|| "DXGI 暂存纹理创建成功但指针为空".to_string())?;
 
             context.CopyResource(&staging, &texture);
 
@@ -231,10 +234,7 @@ impl DxgiDesktop {
             let monitor_image = image::RgbaImage::from_raw(width as u32, height as u32, rgba_bytes)
                 .ok_or_else(|| "DXGI 帧尺寸无效".to_string())?;
 
-            if !monitor_image
-                .pixels()
-                .any(|p| p[0] > 0 || p[1] > 0 || p[2] > 0)
-            {
+            if is_all_black(&monitor_image) {
                 return Err("DXGI 截图像素全为空白。".into());
             }
 

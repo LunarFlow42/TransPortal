@@ -32,12 +32,22 @@ pub fn configure_transparent_window<R: tauri::Runtime>(window: &tauri::WebviewWi
             );
             // Disable OS-default window transition animations (DWMWA_TRANSITIONS_FORCEDISABLED = 3)
             // so Windows doesn't apply its default zoom/fade or minimize/maximize stutter.
-            let disable_transitions: windows::Win32::Foundation::BOOL = true.into();
+            let disable_transitions: windows::core::BOOL = true.into();
             let _ = DwmSetWindowAttribute(
                 hwnd,
                 windows::Win32::Graphics::Dwm::DWMWINDOWATTRIBUTE(3),
                 &disable_transitions as *const _ as *const _,
-                std::mem::size_of::<windows::Win32::Foundation::BOOL>() as u32,
+                std::mem::size_of::<windows::core::BOOL>() as u32,
+            );
+            // Apply WS_EX_NOREDIRECTIONBITMAP to eliminate the GDI redirection surface white flash.
+            use windows::Win32::UI::WindowsAndMessaging::{
+                GWL_EXSTYLE, GetWindowLongPtrW, SetWindowLongPtrW, WS_EX_NOREDIRECTIONBITMAP,
+            };
+            let ex_style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+            let _ = SetWindowLongPtrW(
+                hwnd,
+                GWL_EXSTYLE,
+                ex_style | WS_EX_NOREDIRECTIONBITMAP.0 as isize,
             );
         }
     }
@@ -89,7 +99,7 @@ pub fn resize_and_clamp_window<R: tauri::Runtime>(
 
             let _ = SetWindowPos(
                 hwnd,
-                HWND::default(),
+                Some(HWND::default()),
                 new_x,
                 new_y,
                 target_w,
@@ -258,7 +268,7 @@ pub fn place_window_smartly<R: tauri::Runtime>(
             let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
             let _ = SetWindowPos(
                 hwnd,
-                HWND_TOPMOST,
+                Some(HWND_TOPMOST),
                 clamped_x,
                 clamped_y,
                 0,
@@ -268,7 +278,7 @@ pub fn place_window_smartly<R: tauri::Runtime>(
         } else {
             let _ = SetWindowPos(
                 hwnd,
-                HWND_TOPMOST,
+                Some(HWND_TOPMOST),
                 clamped_x,
                 clamped_y,
                 0,
@@ -279,4 +289,92 @@ pub fn place_window_smartly<R: tauri::Runtime>(
     }
 
     Ok(())
+}
+
+/// Returns the handle of the current native foreground window, if any.
+/// Windows owned by TransPortal's own process are ignored.
+pub fn get_foreground_window() -> Option<usize> {
+    use windows::Win32::System::Threading::GetCurrentProcessId;
+    use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
+
+    unsafe {
+        let hwnd = GetForegroundWindow();
+        if hwnd.0.is_null() {
+            return None;
+        }
+        let mut pid = 0;
+        let _ = GetWindowThreadProcessId(hwnd, Some(&mut pid));
+        if pid == GetCurrentProcessId() {
+            return None;
+        }
+        Some(hwnd.0 as usize)
+    }
+}
+
+/// Restores a previously saved native window (e.g. exclusive fullscreen games)
+/// to the foreground. If the window was minimized (`IsIconic`), it is restored
+/// with `SW_RESTORE` before calling `SetForegroundWindow`.
+pub fn restore_foreground_window(handle: usize) {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::System::Threading::{
+        AttachThreadInput, GetCurrentProcessId, GetCurrentThreadId,
+    };
+    use windows::Win32::UI::WindowsAndMessaging::{
+        BringWindowToTop, GetForegroundWindow, GetWindowThreadProcessId, IsIconic, IsWindow,
+        SW_RESTORE, SW_SHOW, SetForegroundWindow, ShowWindow,
+    };
+
+    if handle == 0 {
+        return;
+    }
+    unsafe {
+        let hwnd = HWND(handle as *mut _);
+        if !IsWindow(Some(hwnd)).as_bool() {
+            return;
+        }
+        let mut pid = 0;
+        let target_thread = GetWindowThreadProcessId(hwnd, Some(&mut pid));
+        if pid == GetCurrentProcessId() {
+            return;
+        }
+        if IsIconic(hwnd).as_bool() {
+            let _ = ShowWindow(hwnd, SW_RESTORE);
+        } else {
+            let _ = ShowWindow(hwnd, SW_SHOW);
+        }
+
+        let current_thread = GetCurrentThreadId();
+        let foreground_hwnd = GetForegroundWindow();
+        let foreground_thread = if !foreground_hwnd.0.is_null() {
+            GetWindowThreadProcessId(foreground_hwnd, None)
+        } else {
+            0
+        };
+
+        if current_thread != target_thread && foreground_thread != 0 {
+            let _ = AttachThreadInput(current_thread, foreground_thread, true);
+            let _ = BringWindowToTop(hwnd);
+            let _ = SetForegroundWindow(hwnd);
+            let _ = AttachThreadInput(current_thread, foreground_thread, false);
+        } else {
+            let _ = BringWindowToTop(hwnd);
+            let _ = SetForegroundWindow(hwnd);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_restore_foreground_window_invalid_handle() {
+        restore_foreground_window(0);
+        restore_foreground_window(usize::MAX);
+    }
+
+    #[test]
+    fn test_get_foreground_window_call() {
+        let _ = get_foreground_window();
+    }
 }

@@ -173,7 +173,12 @@ impl GestureSource for KeyboardHook {
                 // the callback only queues bounded messages and always returns.
                 unsafe {
                     let hook = GetModuleHandleW(None).and_then(|module| {
-                        SetWindowsHookExW(WH_KEYBOARD_LL, Some(keyboard_hook), module, 0)
+                        SetWindowsHookExW(
+                            WH_KEYBOARD_LL,
+                            Some(keyboard_hook),
+                            Some(module.into()),
+                            0,
+                        )
                     });
                     match hook {
                         Ok(hook) => {
