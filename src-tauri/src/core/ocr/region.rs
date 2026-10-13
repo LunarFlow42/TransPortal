@@ -251,6 +251,7 @@ impl RegionService {
         if let Some(window) = app.get_webview_window(WINDOW_LABEL) {
             let _ = app.state::<RegionService>().desktop.exclude(&window, true);
             PlatformWindow::configure_transparent_window(&window);
+            let _ = PlatformWindow::set_ignore_cursor_events(&window, true);
             Ok(window)
         } else {
             let bounds = app
@@ -282,6 +283,7 @@ impl RegionService {
             .build()
             .map_err(|e| e.to_string())?;
             PlatformWindow::configure_transparent_window(&window);
+            let _ = PlatformWindow::set_ignore_cursor_events(&window, true);
             let _ = app.state::<RegionService>().desktop.exclude(&window, true);
             Ok(window)
         }
@@ -325,11 +327,15 @@ impl RegionService {
         let app_handle = app.clone();
         tauri::async_runtime::spawn(async move {
             tokio::time::sleep(std::time::Duration::from_millis(350)).await;
-            if app_handle
-                .state::<RegionService>()
-                .selection()
-                .is_some_and(|s| s.id == id)
-            {
+            let service = app_handle.state::<RegionService>();
+            let should_show = {
+                let state = service.state.lock().unwrap();
+                state
+                    .pending
+                    .as_ref()
+                    .is_some_and(|p| p.selection.id == id && !p.cancel.is_cancelled())
+            };
+            if should_show {
                 let _ = Self::show_window(&app_handle);
             }
         });
@@ -337,7 +343,18 @@ impl RegionService {
     }
 
     pub fn show_window(app: &AppHandle) -> Result<(), String> {
+        let service = app.state::<RegionService>();
+        {
+            let state = service.state.lock().unwrap();
+            let Some(pending) = state.pending.as_ref() else {
+                return Ok(());
+            };
+            if pending.cancel.is_cancelled() {
+                return Ok(());
+            }
+        }
         if let Some(window) = app.get_webview_window(WINDOW_LABEL) {
+            let _ = PlatformWindow::set_ignore_cursor_events(&window, false);
             window.show().map_err(|e| e.to_string())?;
         }
         Ok(())
@@ -418,7 +435,9 @@ impl RegionService {
     pub fn hide_window(app: &AppHandle) {
         if let Some(window) = app.get_webview_window(WINDOW_LABEL) {
             let _ = window.emit("transportal://region-reset", ());
+            let _ = PlatformWindow::set_ignore_cursor_events(&window, true);
             let _ = window.hide();
+            PlatformWindow::force_hide_window(&window);
         }
     }
 }

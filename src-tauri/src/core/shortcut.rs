@@ -456,6 +456,7 @@ pub fn retry(app: &AppHandle) -> ShortcutReport {
 fn trigger(app: &AppHandle, action: ShortcutAction) {
     if let Some(settings) = app.get_webview_window("settings") {
         let _ = settings.hide();
+        PlatformWindow::force_hide_window(&settings);
     }
     match action {
         ShortcutAction::Selection | ShortcutAction::DoubleCopy => {
@@ -503,6 +504,7 @@ pub fn set_pinned(pinned: bool) {
 pub fn on_input_translate(app: &AppHandle) {
     if let Some(settings) = app.get_webview_window("settings") {
         let _ = settings.hide();
+        PlatformWindow::force_hide_window(&settings);
     }
     if let Some(window) = app.get_webview_window("shell") {
         if !is_pinned() || !window.is_visible().unwrap_or(false) {
@@ -659,6 +661,7 @@ pub fn show_shell_with_anchor(
 ) {
     if let Some(settings) = app.get_webview_window("settings") {
         let _ = settings.hide();
+        PlatformWindow::force_hide_window(&settings);
     }
     if let Some(window) = app.get_webview_window("shell") {
         let reposition = !is_pinned() || !window.is_visible().unwrap_or(false);

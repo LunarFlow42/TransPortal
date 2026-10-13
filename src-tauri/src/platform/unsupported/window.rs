@@ -100,3 +100,12 @@ pub fn get_foreground_window() -> Option<usize> {
 }
 
 pub fn restore_foreground_window(_handle: usize) {}
+
+pub fn set_ignore_cursor_events<R: tauri::Runtime>(
+    window: &tauri::WebviewWindow<R>,
+    ignore: bool,
+) -> Result<(), String> {
+    window
+        .set_ignore_cursor_events(ignore)
+        .map_err(|e| e.to_string())
+}

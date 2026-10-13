@@ -84,4 +84,10 @@ pub trait WindowOps {
     /// to the foreground. If the window was minimized (`IsIconic`), it is restored
     /// with `SW_RESTORE` before calling `SetForegroundWindow`.
     fn restore_foreground_window(handle: usize);
+
+    /// Dynamically ignore cursor events (enabling or disabling OS-level mouse click-through).
+    fn set_ignore_cursor_events<R: Runtime>(
+        window: &WebviewWindow<R>,
+        ignore: bool,
+    ) -> Result<(), String>;
 }

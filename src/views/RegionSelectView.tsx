@@ -204,14 +204,24 @@ export function RegionSelectView() {
       const top = Math.round(currentRect.y * selection.bounds.height);
       const right = Math.round((currentRect.x + currentRect.width) * selection.bounds.width);
       const bottom = Math.round((currentRect.y + currentRect.height) * selection.bounds.height);
-      if (right - left < 8 || bottom - top < 8) {
+      const spanW = right - left;
+      const spanH = bottom - top;
+
+      // 如果用户仅仅是轻微点击（位移小于 4 像素），判定为误触或希望切回桌面程序，立即自动取消退出
+      if (spanW < 4 && spanH < 4) {
+        reset();
+        void invoke('cancel_region', { id: current.current?.id ?? null });
+        return;
+      }
+
+      if (spanW < 8 || spanH < 8) {
         setError('请拖动选择至少 8 × 8 像素的区域。');
         setRect(null);
         return;
       }
       setBusy(true);
       void invoke('confirm_region', { id: selection.id, region: {
-        x: selection.bounds.x + left, y: selection.bounds.y + top, width: right - left, height: bottom - top,
+        x: selection.bounds.x + left, y: selection.bounds.y + top, width: spanW, height: spanH,
       } })
       .then(() => {
         reset();

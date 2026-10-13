@@ -43,6 +43,7 @@ pub fn present<R: Runtime>(
     let Some(window) = app.get_webview_window(SHELL_LABEL) else {
         return;
     };
+    let _ = PlatformWindow::set_ignore_cursor_events(&window, false);
     let generation = GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
     show(&window);
     let _ = app.emit_to(
@@ -94,6 +95,7 @@ pub fn hide_now<R: Runtime>(app: &AppHandle<R>) {
 /// `ShowWindow` when it never saw the show (no-activate placement bypasses it),
 /// so the native hide makes it stick either way.
 fn conceal<R: Runtime>(window: &WebviewWindow<R>) -> Result<(), String> {
+    let _ = PlatformWindow::set_ignore_cursor_events(window, true);
     let result = window.hide().map_err(|e| e.to_string());
     PlatformWindow::force_hide_window(window);
     result

@@ -428,7 +428,7 @@ pub async fn open_settings_window(app: AppHandle) -> Result<(), String> {
         if let Some(shell) = app.get_webview_window(crate::core::shell::SHELL_LABEL) {
             let visible = shell.is_visible().unwrap_or(false);
             if visible {
-                let _ = shell.hide();
+                crate::core::shell::hide_now(&app);
             }
             visible
         } else {
@@ -445,6 +445,7 @@ pub async fn open_settings_window(app: AppHandle) -> Result<(), String> {
 pub async fn close_settings_window(app: AppHandle) -> Result<(), String> {
     if let Some(settings) = app.get_webview_window("settings") {
         let _ = settings.hide();
+        crate::platform::PlatformWindow::force_hide_window(&settings);
     }
     if SHELL_RESUME_AFTER_SETTINGS.swap(false, Ordering::SeqCst) {
         crate::core::shell::present(&app, false, |w| {

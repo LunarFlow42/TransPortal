@@ -106,4 +106,11 @@ impl WindowOps for WindowsWindow {
     fn restore_foreground_window(handle: usize) {
         window::restore_foreground_window(handle);
     }
+
+    fn set_ignore_cursor_events<R: Runtime>(
+        window: &WebviewWindow<R>,
+        ignore: bool,
+    ) -> Result<(), String> {
+        window::set_ignore_cursor_events(window, ignore)
+    }
 }

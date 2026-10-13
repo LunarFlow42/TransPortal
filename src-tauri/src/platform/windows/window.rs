@@ -363,6 +363,32 @@ pub fn restore_foreground_window(handle: usize) {
     }
 }
 
+/// Dynamically ignore cursor events (enabling or disabling OS-level mouse click-through).
+pub fn set_ignore_cursor_events<R: tauri::Runtime>(
+    window: &tauri::WebviewWindow<R>,
+    ignore: bool,
+) -> Result<(), String> {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GWL_EXSTYLE, GetWindowLongPtrW, SetWindowLongPtrW, WS_EX_TRANSPARENT,
+    };
+
+    let _ = window.set_ignore_cursor_events(ignore);
+    if let Ok(handle) = window.hwnd() {
+        unsafe {
+            let hwnd = HWND(handle.0);
+            let ex_style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+            let new_style = if ignore {
+                ex_style | WS_EX_TRANSPARENT.0 as isize
+            } else {
+                ex_style & !(WS_EX_TRANSPARENT.0 as isize)
+            };
+            let _ = SetWindowLongPtrW(hwnd, GWL_EXSTYLE, new_style);
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

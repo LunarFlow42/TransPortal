@@ -22,6 +22,7 @@ vi.mock('@tauri-apps/api/core', () => ({
 vi.mock('@tauri-apps/api/window', () => ({
   getCurrentWindow: () => ({
     hide: mockHide,
+    setIgnoreCursorEvents: vi.fn().mockResolvedValue(undefined),
     onFocusChanged: (cb: (event: { payload: boolean }) => void) => {
       focusCallback = cb;
       return Promise.resolve(mockUnlisten);

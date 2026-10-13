@@ -102,6 +102,10 @@ export async function dismissShell(options: DismissOptions = {}): Promise<boolea
   }
 
   setStage('exiting');
+  const win = getCurrentWindow();
+  if (typeof win.setIgnoreCursorEvents === 'function') {
+    void win.setIgnoreCursorEvents(true).catch(() => {});
+  }
 
   return new Promise<boolean>((resolve) => {
     exitTimer = setTimeout(() => {
@@ -119,6 +123,10 @@ export function cancelDismiss(): void {
   if (exitTimer === null) return;
   clearTimeout(exitTimer);
   exitTimer = null;
+  const win = getCurrentWindow();
+  if (typeof win.setIgnoreCursorEvents === 'function') {
+    void win.setIgnoreCursorEvents(false).catch(() => {});
+  }
   setStage('entered');
 }
 
@@ -142,6 +150,10 @@ export function useWindowAnimation(): {
 
   useEffect(() => {
     const unlistenPromise = listen<ShellShownEvent>(SHELL_SHOWN_EVENT, (event) => {
+      const win = getCurrentWindow();
+      if (typeof win.setIgnoreCursorEvents === 'function') {
+        void win.setIgnoreCursorEvents(false).catch(() => {});
+      }
       if (typeof event.payload?.generation === 'number') {
         shownGeneration = event.payload.generation;
       }

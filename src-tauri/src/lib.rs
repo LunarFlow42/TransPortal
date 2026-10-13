@@ -58,6 +58,7 @@ pub fn open_or_focus_settings<R: tauri::Runtime>(
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
                 let _ = win_clone.hide();
+                PlatformWindow::force_hide_window(&win_clone);
                 if commands::SHELL_RESUME_AFTER_SETTINGS
                     .swap(false, std::sync::atomic::Ordering::SeqCst)
                 {
