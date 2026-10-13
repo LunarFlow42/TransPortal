@@ -61,7 +61,7 @@ pub fn open_or_focus_settings<R: tauri::Runtime>(
                 if commands::SHELL_RESUME_AFTER_SETTINGS
                     .swap(false, std::sync::atomic::Ordering::SeqCst)
                 {
-                    core::shell::present(&app_handle, false, |w| {
+                    crate::core::shell::present(&app_handle, false, |w| {
                         let _ = w.show();
                         let _ = w.set_focus();
                     });

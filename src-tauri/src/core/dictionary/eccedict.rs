@@ -33,6 +33,15 @@ pub async fn import_file(service: &LookupService, path: String) -> Result<usize,
     Ok(count)
 }
 
+/// RAII guard ensuring temporary CSV download file is cleaned up upon completion, error, or drop.
+pub(crate) struct TempFileGuard(pub(crate) std::path::PathBuf);
+
+impl Drop for TempFileGuard {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
+}
+
 /// Download the full (~63 MB) ECCEDICT CSV with progress, then import it.
 pub async fn download_and_import(
     service: &LookupService,
@@ -59,6 +68,8 @@ pub async fn download_and_import(
 
     let total = response.content_length();
     let path = std::env::temp_dir().join("transportal-eccedict.csv");
+    let _cleanup_guard = TempFileGuard(path.clone());
+
     let mut file = tokio::fs::File::create(&path)
         .await
         .map_err(|e| format!("failed to create temp file: {e}"))?;
@@ -97,4 +108,29 @@ pub async fn download_and_import(
     });
 
     Ok(count)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_temp_file_guard_cleans_up_on_drop() {
+        let temp_path = std::env::temp_dir().join(format!(
+            "transportal-test-{}.csv",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::write(&temp_path, "dummy,data\n").expect("write test file");
+        assert!(temp_path.exists());
+
+        {
+            let _guard = TempFileGuard(temp_path.clone());
+            assert!(temp_path.exists());
+        }
+
+        assert!(!temp_path.exists());
+    }
 }

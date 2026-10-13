@@ -419,16 +419,25 @@ impl LookupService {
 
     /// Drop all cached lookups (e.g. after importing/changing sources).
     pub fn invalidate_cache(&self) {
-        self.cache.lock().expect("lookup cache lock").clear();
+        self.cache
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clear();
     }
 
     /// Ordered source list with state, for the settings UI.
     pub fn sources(&self) -> Vec<SourceInfo> {
-        let entries = self.entries.read().expect("source list lock");
+        let entries = self
+            .entries
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         entries
             .iter()
             .map(|entry| {
-                let stats = entry.stats.lock().expect("source stats lock");
+                let stats = entry
+                    .stats
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
                 SourceInfo {
                     id: entry.id.to_string(),
                     label: entry.label.to_string(),
@@ -445,7 +454,10 @@ impl LookupService {
 
     pub fn set_source_enabled(&self, id: &str, enabled: bool) -> Result<(), String> {
         {
-            let mut entries = self.entries.write().expect("source list lock");
+            let mut entries = self
+                .entries
+                .write()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             let entry = entries
                 .iter_mut()
                 .find(|entry| entry.id == id)
@@ -459,7 +471,10 @@ impl LookupService {
     /// Move a source up (`delta < 0`) or down (`delta > 0`) in the pipeline.
     pub fn move_source(&self, id: &str, delta: i32) -> Result<(), String> {
         {
-            let mut entries = self.entries.write().expect("source list lock");
+            let mut entries = self
+                .entries
+                .write()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             let index = entries
                 .iter()
                 .position(|entry| entry.id == id)
@@ -477,7 +492,10 @@ impl LookupService {
     /// Replace the pipeline order with the given ids (must be complete).
     pub fn set_source_order(&self, ids: &[String]) -> Result<(), String> {
         {
-            let mut entries = self.entries.write().expect("source list lock");
+            let mut entries = self
+                .entries
+                .write()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             if ids.len() != entries.len() {
                 return Err("source order must list every source".to_string());
             }
@@ -506,7 +524,7 @@ impl LookupService {
         if let Some(cached) = self
             .cache
             .lock()
-            .expect("lookup cache lock")
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
             .get(&key)
             .cloned()
         {
@@ -515,7 +533,10 @@ impl LookupService {
 
         // Snapshot (source, stats) so no lock guard is held across `.await`.
         let pipeline: Vec<PipelineItem> = {
-            let entries = self.entries.read().expect("source list lock");
+            let entries = self
+                .entries
+                .read()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             entries
                 .iter()
                 .filter(|entry| entry.enabled && entry.source.is_available())
@@ -528,7 +549,9 @@ impl LookupService {
             let result = source.query(word).await.ok().flatten();
             let elapsed_ms = started.elapsed().as_millis() as u64;
             {
-                let mut stats = stats.lock().expect("source stats lock");
+                let mut stats = stats
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
                 stats.last_latency_ms = Some(elapsed_ms);
                 stats.last_ok = Some(result.is_some());
             }
@@ -536,7 +559,7 @@ impl LookupService {
             if let Some(entry) = result {
                 self.cache
                     .lock()
-                    .expect("lookup cache lock")
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
                     .put(key, entry.clone());
                 return Some(entry);
             }
@@ -746,5 +769,53 @@ mod tests {
         assert_eq!(entry.definitions[0].meanings, ["苹果", "苹果树"]);
         assert_eq!(entry.examples[0].en, "An apple a day.");
         assert!(entry.audio_url.unwrap().ends_with("&type=2"));
+    }
+
+    #[tokio::test]
+    async fn test_lookup_service_lock_poisoning_recovery() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "lookup_test_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::create_dir_all(&temp_dir);
+        let db_path = temp_dir.join("test.redb");
+        let store = Arc::new(DictStore::open(&db_path).unwrap());
+        let service = Arc::new(LookupService::new(store, db_path));
+
+        // Poison the cache mutex
+        let svc_clone = Arc::clone(&service);
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = svc_clone.cache.lock().unwrap();
+            panic!("poisoning cache lock intentional");
+        }));
+
+        assert!(service.cache.is_poisoned());
+
+        // Verify invalidate_cache recovers from poisoned mutex
+        service.invalidate_cache();
+
+        // Poison the entries rwlock
+        let svc_clone2 = Arc::clone(&service);
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = svc_clone2.entries.write().unwrap();
+            panic!("poisoning entries lock intentional");
+        }));
+
+        assert!(service.entries.is_poisoned());
+
+        // Verify sources() recovers from poisoned rwlock
+        let sources = service.sources();
+        assert!(!sources.is_empty());
+
+        // Verify set_source_enabled recovers from poisoned rwlock
+        assert!(service.set_source_enabled("youdao", true).is_ok());
+
+        // Verify lookup recovers gracefully from poisoned locks
+        let _ = service.lookup("").await;
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }

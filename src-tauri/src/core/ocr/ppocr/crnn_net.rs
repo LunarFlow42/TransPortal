@@ -84,7 +84,12 @@ impl CrnnNet {
 
         let mut keys = Vec::with_capacity(character_list.len() / 3);
         keys.push("#".to_string());
-        keys.extend(character_list.split('\n').map(|s| s.to_string()));
+        keys.extend(
+            character_list
+                .lines()
+                .filter(|s| !s.is_empty())
+                .map(|s| s.trim_end_matches('\r').to_string()),
+        );
         keys.push(" ".to_string());
         Ok(keys)
     }

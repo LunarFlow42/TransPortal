@@ -264,6 +264,10 @@ impl WgcDesktop {
             self.d3d11_context.CopyResource(&staging, &texture);
         }
 
+        let width = desc.Width as usize;
+        let height = desc.Height as usize;
+        let mut rgba_bytes = vec![0u8; width * height * 4];
+
         let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
         unsafe {
             self.d3d11_context
@@ -271,21 +275,35 @@ impl WgcDesktop {
                 .map_err(|e| format!("Failed to map staging texture: {e}"))?;
         }
 
-        let width = desc.Width as usize;
-        let height = desc.Height as usize;
-        let row_pitch = mapped.RowPitch as usize;
-        let mut rgba_bytes = vec![0u8; width * height * 4];
-
-        unsafe {
-            convert_bgra_to_rgba(
-                mapped.pData as *const u8,
-                width,
-                height,
-                row_pitch,
-                &mut rgba_bytes,
-            );
-            self.d3d11_context.Unmap(&staging, 0);
+        struct StagingMapGuard<'a> {
+            context: &'a ID3D11DeviceContext,
+            staging: &'a ID3D11Texture2D,
+            subresource: u32,
         }
+
+        impl Drop for StagingMapGuard<'_> {
+            fn drop(&mut self) {
+                unsafe {
+                    self.context.Unmap(self.staging, self.subresource);
+                }
+            }
+        }
+
+        let _map_guard = StagingMapGuard {
+            context: &self.d3d11_context,
+            staging: &staging,
+            subresource: 0,
+        };
+
+        let row_pitch = mapped.RowPitch as usize;
+        convert_bgra_to_rgba(
+            mapped.pData as *const u8,
+            width,
+            height,
+            row_pitch,
+            &mut rgba_bytes,
+        );
+        drop(_map_guard);
         let staging_copy_ms = staging_start.elapsed().as_millis() as u64;
 
         let full_image = image::RgbaImage::from_raw(desc.Width, desc.Height, rgba_bytes)

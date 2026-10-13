@@ -67,6 +67,16 @@ impl DbNet {
         box_thresh: f32,
         un_clip_ratio: f32,
     ) -> Result<Vec<TextBox>, OcrError> {
+        if img_src.width() == 0
+            || img_src.height() == 0
+            || scale.dst_width == 0
+            || scale.dst_height == 0
+            || scale.scale_width <= 0.0
+            || scale.scale_height <= 0.0
+        {
+            return Ok(Vec::new());
+        }
+
         let session = self
             .session
             .as_mut()
@@ -151,7 +161,7 @@ impl DbNet {
 
             let mut max_side = 0.0f32;
             let min_box = Self::get_mini_box(&contour.points, &mut max_side)?;
-            if max_side < max_side_thresh {
+            if min_box.len() < 4 || max_side < max_side_thresh {
                 continue;
             }
 
@@ -161,7 +171,7 @@ impl DbNet {
             }
 
             let clip_box = Self::unclip(&min_box, un_clip_ratio)?;
-            if clip_box.is_empty() {
+            if clip_box.len() <= 2 {
                 continue;
             }
 
@@ -172,17 +182,27 @@ impl DbNet {
 
             let mut max_side_clip = 0.0f32;
             let clip_min_box = Self::get_mini_box(&clip_contour, &mut max_side_clip)?;
-            if max_side_clip < max_side_thresh + 2.0 {
+            if clip_min_box.len() < 4 || max_side_clip < max_side_thresh + 2.0 {
                 continue;
             }
 
             let mut final_points = Vec::with_capacity(clip_min_box.len());
+            let max_x = s.src_width.saturating_sub(1);
+            let max_y = s.src_height.saturating_sub(1);
             for item in clip_min_box {
-                let x = (item.x / s.scale_width) as u32;
-                let ptx = x.min(s.src_width);
+                let ptx = if s.scale_width > 0.0 {
+                    let x = (item.x.max(0.0) / s.scale_width) as u32;
+                    x.min(max_x)
+                } else {
+                    0
+                };
 
-                let y = (item.y / s.scale_height) as u32;
-                let pty = y.min(s.src_height);
+                let pty = if s.scale_height > 0.0 {
+                    let y = (item.y.max(0.0) / s.scale_height) as u32;
+                    y.min(max_y)
+                } else {
+                    0
+                };
 
                 final_points.push(Point { x: ptx, y: pty });
             }
@@ -196,16 +216,24 @@ impl DbNet {
         Ok(rs_boxes)
     }
 
-    fn get_mini_box(
+    pub(crate) fn get_mini_box(
         contour_points: &[imageproc::point::Point<i32>],
         min_edge_size: &mut f32,
     ) -> Result<Vec<imageproc::point::Point<f32>>, OcrError> {
+        if contour_points.len() <= 2 {
+            return Ok(Vec::new());
+        }
+
         let rect = imageproc::geometry::min_area_rect(contour_points);
 
         let mut rect_points: Vec<imageproc::point::Point<f32>> = rect
             .iter()
             .map(|p| imageproc::point::Point::new(p.x as f32, p.y as f32))
             .collect();
+
+        if rect_points.len() < 4 {
+            return Ok(Vec::new());
+        }
 
         let width = ((rect_points[0].x - rect_points[1].x).powi(2)
             + (rect_points[0].y - rect_points[1].y).powi(2))
@@ -252,6 +280,13 @@ impl DbNet {
         contour: &imageproc::contours::Contour<i32>,
         f_map_mat: &image::ImageBuffer<image::Luma<f32>, Vec<f32>>,
     ) -> Result<f32, OcrError> {
+        let width = f_map_mat.width() as i32;
+        let height = f_map_mat.height() as i32;
+
+        if width <= 0 || height <= 0 || contour.points.is_empty() {
+            return Ok(0.0);
+        }
+
         let mut xmin = i32::MAX;
         let mut xmax = i32::MIN;
         let mut ymin = i32::MAX;
@@ -263,9 +298,6 @@ impl DbNet {
             ymin = ymin.min(point.y);
             ymax = ymax.max(point.y);
         }
-
-        let width = f_map_mat.width() as i32;
-        let height = f_map_mat.height() as i32;
 
         xmin = xmin.clamp(0, width - 1);
         xmax = xmax.clamp(0, width - 1);
@@ -301,7 +333,7 @@ impl DbNet {
         Ok(mean)
     }
 
-    fn unclip(
+    pub(crate) fn unclip(
         box_points: &[imageproc::point::Point<f32>],
         unclip_ratio: f32,
     ) -> Result<Vec<imageproc::point::Point<i32>>, OcrError> {

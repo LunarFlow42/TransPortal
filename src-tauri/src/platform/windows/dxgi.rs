@@ -191,20 +191,41 @@ impl DxgiDesktop {
             // Release the frame from duplication pipeline as soon as GPU copy is dispatched
             frame_guard.release();
 
+            let width = tex_desc.Width as usize;
+            let height = tex_desc.Height as usize;
+            let mut rgba_bytes = vec![0u8; width * height * 4];
+
             // Map CPU staging buffer
             let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
             context
                 .Map(&staging, 0, D3D11_MAP_READ, 0, Some(&mut mapped))
                 .map_err(|e| format!("映射显存数据失败：{e}"))?;
 
-            let width = tex_desc.Width as usize;
-            let height = tex_desc.Height as usize;
+            struct StagingMapGuard<'a> {
+                context: &'a ID3D11DeviceContext,
+                staging: &'a ID3D11Texture2D,
+                subresource: u32,
+            }
+
+            impl Drop for StagingMapGuard<'_> {
+                fn drop(&mut self) {
+                    unsafe {
+                        self.context.Unmap(self.staging, self.subresource);
+                    }
+                }
+            }
+
+            let _map_guard = StagingMapGuard {
+                context: &context,
+                staging: &staging,
+                subresource: 0,
+            };
+
             let row_pitch = mapped.RowPitch as usize;
             let src_slice =
                 std::slice::from_raw_parts(mapped.pData as *const u8, row_pitch * height);
 
             // Read BGRA/RGBA and convert to RGBA
-            let mut rgba_bytes = vec![0u8; width * height * 4];
             let is_bgra = tex_desc.Format
                 == windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_B8G8R8A8_UNORM;
             for row in 0..height {
@@ -229,7 +250,7 @@ impl DxgiDesktop {
                 }
             }
 
-            context.Unmap(&staging, 0);
+            drop(_map_guard);
 
             let monitor_image = image::RgbaImage::from_raw(width as u32, height as u32, rgba_bytes)
                 .ok_or_else(|| "DXGI 帧尺寸无效".to_string())?;

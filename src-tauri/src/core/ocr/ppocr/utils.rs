@@ -77,7 +77,7 @@ impl OcrUtils {
         img_src: &image::RgbImage,
         box_points: &[Point],
     ) -> image::RgbImage {
-        if box_points.len() < 4 {
+        if box_points.len() < 4 || img_src.width() == 0 || img_src.height() == 0 {
             return image::RgbImage::new(1, 1);
         }
 
@@ -95,8 +95,14 @@ impl OcrUtils {
             },
         );
 
-        let crop_w = (max_x.saturating_sub(min_x)).max(1);
-        let crop_h = (max_y.saturating_sub(min_y)).max(1);
+        let min_x = min_x.min(img_src.width().saturating_sub(1));
+        let min_y = min_y.min(img_src.height().saturating_sub(1));
+        let crop_w = (max_x.saturating_sub(min_x))
+            .max(1)
+            .min(img_src.width().saturating_sub(min_x));
+        let crop_h = (max_y.saturating_sub(min_y))
+            .max(1)
+            .min(img_src.height().saturating_sub(min_y));
 
         let img_crop = imageops::crop_imm(img_src, min_x, min_y, crop_w, crop_h).to_image();
 

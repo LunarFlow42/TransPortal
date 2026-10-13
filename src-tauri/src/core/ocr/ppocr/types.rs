@@ -58,7 +58,7 @@ pub struct OcrResult {
     pub text_blocks: Vec<TextBlock>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ScaleParam {
     pub src_width: u32,
     pub src_height: u32,
@@ -91,6 +91,10 @@ impl ScaleParam {
         let src_width = src.width();
         let src_height = src.height();
 
+        if src_width == 0 || src_height == 0 {
+            return Self::default();
+        }
+
         let ratio = if src_width > src_height {
             target_size as f32 / src_width as f32
         } else {
@@ -100,12 +104,8 @@ impl ScaleParam {
         let mut dst_width = (src_width as f32 * ratio) as u32;
         let mut dst_height = (src_height as f32 * ratio) as u32;
 
-        if !dst_width.is_multiple_of(32) {
-            dst_width = ((dst_width / 32) * 32).max(32);
-        }
-        if !dst_height.is_multiple_of(32) {
-            dst_height = ((dst_height / 32) * 32).max(32);
-        }
+        dst_width = ((dst_width / 32) * 32).max(32);
+        dst_height = ((dst_height / 32) * 32).max(32);
 
         let scale_width = dst_width as f32 / src_width as f32;
         let scale_height = dst_height as f32 / src_height as f32;

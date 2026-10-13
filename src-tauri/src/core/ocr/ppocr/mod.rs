@@ -74,6 +74,12 @@ impl PpOcrEngine {
         most_angle: bool,
         angle_rollback_threshold: f32,
     ) -> Result<OcrResult, OcrError> {
+        if img_src.width() == 0 || img_src.height() == 0 {
+            return Ok(OcrResult {
+                text_blocks: Vec::new(),
+            });
+        }
+
         let origin_max_side = img_src.width().max(img_src.height());
         let mut resize = if max_side_len == 0 || max_side_len > origin_max_side {
             origin_max_side
@@ -183,6 +189,48 @@ mod tests {
     }
 
     #[test]
+    fn test_scale_param_zero_and_boundary() {
+        let zero_img = image::RgbImage::new(0, 0);
+        let param_zero = ScaleParam::get_scale_param(&zero_img, 300);
+        assert_eq!(param_zero.src_width, 0);
+        assert_eq!(param_zero.src_height, 0);
+        assert_eq!(param_zero.dst_width, 0);
+
+        let tiny_img = image::RgbImage::new(1, 1);
+        let param_tiny = ScaleParam::get_scale_param(&tiny_img, 300);
+        assert_eq!(param_tiny.dst_width % 32, 0);
+        assert_eq!(param_tiny.dst_height % 32, 0);
+        assert!(param_tiny.dst_width >= 32);
+        assert!(param_tiny.dst_height >= 32);
+    }
+
+    #[test]
+    fn test_get_rotate_crop_image_edge_bounds() {
+        let img = image::RgbImage::new(100, 100);
+        // Points touching or exceeding the image boundary
+        let edge_points = vec![
+            Point { x: 0, y: 0 },
+            Point { x: 100, y: 0 },
+            Point { x: 100, y: 100 },
+            Point { x: 0, y: 100 },
+        ];
+        let cropped = utils::OcrUtils::get_rotate_crop_image(&img, &edge_points);
+        assert!(cropped.width() > 0);
+        assert!(cropped.height() > 0);
+
+        // Degenerate points and empty image
+        let empty_img = image::RgbImage::new(0, 0);
+        let cropped_empty = utils::OcrUtils::get_rotate_crop_image(&empty_img, &edge_points);
+        assert_eq!(cropped_empty.width(), 1);
+        assert_eq!(cropped_empty.height(), 1);
+
+        let few_points = vec![Point { x: 0, y: 0 }];
+        let cropped_few = utils::OcrUtils::get_rotate_crop_image(&img, &few_points);
+        assert_eq!(cropped_few.width(), 1);
+        assert_eq!(cropped_few.height(), 1);
+    }
+
+    #[test]
     fn test_subtract_mean_normalize_shape_and_values() {
         let mut img = image::RgbImage::new(4, 4);
         for pixel in img.pixels_mut() {
@@ -223,5 +271,52 @@ mod tests {
         mask.put_pixel(1, 0, image::Luma([255]));
         let mean = utils::OcrUtils::calculate_mean_with_mask(&f_map, &mask);
         assert_eq!(mean, 0.5);
+    }
+
+    #[test]
+    fn test_db_net_degenerate_polygons() {
+        let mut max_side = 0.0f32;
+
+        // 0 points
+        let empty_pts: Vec<imageproc::point::Point<i32>> = vec![];
+        let res_empty = DbNet::get_mini_box(&empty_pts, &mut max_side).unwrap();
+        assert!(res_empty.is_empty());
+
+        // 1 point
+        let single_pt = vec![imageproc::point::Point::new(10, 10)];
+        let res_single = DbNet::get_mini_box(&single_pt, &mut max_side).unwrap();
+        assert!(res_single.is_empty());
+
+        // 2 points
+        let two_pts = vec![
+            imageproc::point::Point::new(10, 10),
+            imageproc::point::Point::new(20, 20),
+        ];
+        let res_two = DbNet::get_mini_box(&two_pts, &mut max_side).unwrap();
+        assert!(res_two.is_empty());
+
+        // Unclip with degenerate points
+        let unclip_empty = DbNet::unclip(&[], 1.5).unwrap();
+        assert!(unclip_empty.is_empty());
+
+        let unclip_few = DbNet::unclip(
+            &[
+                imageproc::point::Point::new(0.0, 0.0),
+                imageproc::point::Point::new(1.0, 1.0),
+            ],
+            1.5,
+        )
+        .unwrap();
+        assert!(unclip_few.is_empty());
+    }
+
+    #[test]
+    fn test_zero_dimension_ocr_engine_detect() {
+        let mut engine = PpOcrEngine::new();
+        let zero_img = image::RgbImage::new(0, 0);
+        let res =
+            engine.detect_angle_rollback(&zero_img, 10, 300, 0.5, 0.3, 1.5, false, false, 0.5);
+        assert!(res.is_ok());
+        assert!(res.unwrap().text_blocks.is_empty());
     }
 }

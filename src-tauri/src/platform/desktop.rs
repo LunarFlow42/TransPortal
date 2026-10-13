@@ -31,10 +31,12 @@ impl ScreenRect {
                 <= i64::from(self.y) + i64::from(self.height)
     }
     pub fn intersects(&self, other: &Self) -> bool {
-        let left = self.x.max(other.x);
-        let top = self.y.max(other.y);
-        let right = (self.x + self.width as i32).min(other.x + other.width as i32);
-        let bottom = (self.y + self.height as i32).min(other.y + other.height as i32);
+        let left = i64::from(self.x).max(i64::from(other.x));
+        let top = i64::from(self.y).max(i64::from(other.y));
+        let right = (i64::from(self.x) + i64::from(self.width))
+            .min(i64::from(other.x) + i64::from(other.width));
+        let bottom = (i64::from(self.y) + i64::from(self.height))
+            .min(i64::from(other.y) + i64::from(other.height));
         right > left && bottom > top
     }
 }
@@ -200,6 +202,12 @@ mod tests {
             height: 200
         }));
         assert!(!desktop.contains(&ScreenRect {
+            x: i32::MAX,
+            y: 0,
+            width: u32::MAX,
+            height: 20
+        }));
+        assert!(!desktop.intersects(&ScreenRect {
             x: i32::MAX,
             y: 0,
             width: u32::MAX,
