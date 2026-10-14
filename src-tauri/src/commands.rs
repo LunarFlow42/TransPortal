@@ -19,7 +19,7 @@ pub fn detect_intent(text: String) -> IntentResult {
 
 /// Build the provider selected by name from the microkernel registry.
 fn build_provider(provider: Option<String>, config: Option<OpenAiConfig>) -> Arc<dyn Translator> {
-    crate::core::translation::create(provider.as_deref().unwrap_or("google_free"), config)
+    crate::core::translation::create(provider.as_deref().unwrap_or("bing_free"), config)
 }
 
 /// Full translation command.

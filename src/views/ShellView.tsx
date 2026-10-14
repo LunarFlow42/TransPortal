@@ -2,13 +2,22 @@ import React, { useEffect, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { open } from '@tauri-apps/plugin-dialog';
-import { ImagePlus, Languages, ScanText, Settings, Monitor, Sparkles } from 'lucide-react';
+import {
+  CornerDownLeft,
+  ImagePlus,
+  Languages,
+  ScanText,
+  Search,
+  Settings,
+  Monitor,
+  Sparkles,
+} from 'lucide-react';
 import { LookupDeck } from '../components/LookupDeck';
 import { OcrPanel } from '../components/OcrPanel';
 import { OcrCardView } from '../components/OcrCardView';
 import { AutoOcrPanel } from '../components/AutoOcrPanel';
 import { StartupShortcutNotice } from '../components/ShortcutStatusPanel';
-import { Button, IconButton, Surface } from '../components/ui';
+import { Button, IconButton, Select, Surface } from '../components/ui';
 import { useBootstrap } from '../hooks/useBootstrap';
 import { useHideOnBlur } from '../hooks/useHideOnBlur';
 import { useMemoryManager } from '../hooks/useMemoryManager';
@@ -32,6 +41,28 @@ const WINDOW_SIZES: Record<Density, { width: number; height: number }> = {
   compact: { width: 460, height: 270 },
   dense: { width: 460, height: 620 },
 };
+
+const PROVIDER_OPTIONS: { value: ProviderType; label: string }[] = [
+  { value: 'bing_free', label: 'Bing 微软' },
+  { value: 'google_free', label: 'Google 谷歌' },
+  { value: 'youdao_free', label: '有道翻译' },
+  { value: 'tencent_free', label: '腾讯翻译' },
+  { value: 'openai', label: 'OpenAI' },
+];
+
+const AUTO_INTERVAL_OPTIONS = [
+  { value: '1000', label: '1 秒' },
+  { value: '2000', label: '2 秒' },
+  { value: '5000', label: '5 秒' },
+  { value: '10000', label: '10 秒' },
+];
+
+const OCR_TARGET_OPTIONS = [
+  { value: 'zh-CN', label: '简体中文' },
+  { value: 'en', label: 'English' },
+  { value: 'ja', label: '日本語' },
+  { value: 'ko', label: '한국어' },
+];
 
 /**
  * `#/shell` — the ghost bubble overlay.
@@ -466,59 +497,88 @@ export const ShellView: React.FC = () => {
           <OcrPanel key={ocr.id} event={ocr} />
         )
       ) : (
-        <Surface className="w-full px-5 py-5 text-center">
+        <Surface className="w-full px-5 py-4 text-center">
           <div
             onMouseDown={startWindowDrag}
-            className="flex cursor-grab active:cursor-grabbing items-center justify-between pb-1"
+            className="flex cursor-grab active:cursor-grabbing items-center justify-between pb-1.5"
           >
             <div className="flex items-center gap-1.5">
-              <span className="text-[11px] text-[var(--muted)]">引擎:</span>
-              <select
+              <span className="grid h-4.5 w-4.5 place-items-center rounded bg-gradient-to-br from-[var(--accent-a)] to-[var(--accent-b)] shadow-[0_2px_8px_rgba(34,211,238,0.3)]">
+                <Languages className="h-2.5 w-2.5 text-white" />
+              </span>
+              <span className="text-[11px] font-semibold tracking-wide text-[var(--text)]">TransPortal</span>
+              <span className="text-[10px] text-[var(--faint)]">/</span>
+              <Select
+                size="xs"
                 value={provider}
-                onChange={(e) => {
-                  const next = e.target.value as ProviderType;
-                  setProvider(next);
-                  void saveSettings({ provider: next });
+                onChange={(next) => {
+                  const p = next as ProviderType;
+                  setProvider(p);
+                  void saveSettings({ provider: p });
                 }}
-                className="h-5 cursor-pointer rounded bg-[var(--surface-2)] px-1.5 py-0 font-mono text-[10px] text-[var(--muted)] hover:text-[var(--text)] outline-none border border-[var(--stroke)] transition-colors"
+                options={PROVIDER_OPTIONS}
                 title="切换翻译引擎"
-              >
-                <option value="bing_free">Bing</option>
-                <option value="google_free">Google</option>
-                <option value="youdao_free">有道</option>
-                <option value="tencent_free">腾讯</option>
-                <option value="openai">OpenAI</option>
-              </select>
+              />
             </div>
-            <IconButton title="Settings" onClick={() => void openSettingsWindow()}>
+            <IconButton title="打开设置 (Ctrl+A)" onClick={() => void openSettingsWindow()}>
               <Settings className="h-3.5 w-3.5" />
             </IconButton>
           </div>
 
-          <div className="my-2 w-full">
-            <input
-              ref={inputRef}
-              type="text"
-              value={manualInput}
-              onChange={(e) => setManualInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && manualInput.trim()) {
-                  e.preventDefault();
-                  void useAppStore.getState().processText(manualInput.trim());
-                  setManualInput('');
-                }
-              }}
-              placeholder="输入单词或句子，按 Enter 翻译..."
-              className="w-full rounded-[var(--r-ctrl)] border border-[var(--stroke)] bg-[var(--surface-2)] px-3 py-1.5 text-xs text-[var(--text)] placeholder-[var(--faint)] outline-none transition-colors focus:border-[var(--accent-b)] focus:bg-[var(--surface-3)]"
-            />
+          <div className="my-2.5 w-full">
+            <div className="relative flex w-full items-center rounded-[var(--r-ctrl)] border border-[var(--stroke)] bg-[var(--surface-2)] transition-colors focus-within:border-[var(--accent-b)] focus-within:bg-[var(--surface-3)]">
+              <Search className="pointer-events-none ml-2.5 h-3.5 w-3.5 shrink-0 text-[var(--muted)]" />
+              <input
+                ref={inputRef}
+                type="text"
+                value={manualInput}
+                onChange={(e) => setManualInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && manualInput.trim()) {
+                    e.preventDefault();
+                    void useAppStore.getState().processText(manualInput.trim());
+                    setManualInput('');
+                  }
+                }}
+                placeholder="输入单词或句子，按 Enter 翻译..."
+                className="w-full flex-1 bg-transparent px-2.5 py-1.5 text-xs text-[var(--text)] placeholder:text-[var(--faint)] outline-none"
+              />
+              {manualInput.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setManualInput('');
+                    inputRef.current?.focus();
+                  }}
+                  title="清空输入"
+                  className="mr-1.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[var(--muted)] hover:bg-[var(--hover)] hover:text-[var(--text)] cursor-pointer transition-colors"
+                >
+                  <span className="text-xs leading-none">×</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  if (manualInput.trim()) {
+                    void useAppStore.getState().processText(manualInput.trim());
+                    setManualInput('');
+                  }
+                }}
+                title="按 Enter 提交翻译"
+                className="mr-2 flex shrink-0 items-center gap-0.5 rounded border border-[var(--stroke)] bg-[var(--surface-3)] px-1.5 py-0.5 font-mono text-[9px] text-[var(--muted)] hover:text-[var(--text)] cursor-pointer select-none transition-colors"
+              >
+                <span>Enter</span>
+                <CornerDownLeft className="h-2.5 w-2.5" />
+              </button>
+            </div>
           </div>
 
-          <p className="text-xs text-[var(--muted)]">
-            划选后按{' '}
+          <p className="text-[11px] text-[var(--muted)]">
+            划选文字后按{' '}
             {hotkeyParts.map((part, index) => (
               <React.Fragment key={part}>
                 {index > 0 && ' + '}
-                <kbd className="rounded-[4px] border border-[var(--stroke)] bg-[var(--surface-2)] px-1 py-0.5 font-mono text-[11px] text-[var(--text)]">
+                <kbd className="rounded-[4px] border border-[var(--stroke)] bg-[var(--surface-2)] px-1 py-0.5 font-mono text-[10px] text-[var(--text)]">
                   {part}
                 </kbd>
               </React.Fragment>
@@ -527,44 +587,82 @@ export const ShellView: React.FC = () => {
           </p>
 
           {ocrStatus && (
-            <div className="mt-4 flex flex-wrap justify-center gap-2">
-              {ocrStatus.supported && <>
-                <Button size="sm" variant="primary" title={withKey('框选屏幕文字，图文双栏对照并支持点词查词', 'ocr_card')}
+            <div className="mt-3.5 flex flex-col gap-2 border-t border-[var(--stroke)] pt-3">
+              {ocrStatus.supported && (
+                <div className="flex flex-wrap items-center justify-center gap-1.5">
+                  <span className="mr-0.5 text-[10px] font-semibold text-[var(--faint)]">截图:</span>
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    title={withKey('框选屏幕文字，图文双栏对照并支持点词查词', 'ocr_card')}
+                    disabled={!ocrStatus.engine.available}
+                    onClick={() => void startOcr('card')}
+                  >
+                    <Languages className="h-3.5 w-3.5" />对照翻译
+                  </Button>
+                  <Button
+                    size="sm"
+                    title={withKey('框选屏幕文字，原位置覆盖译文', 'ocr_picture')}
+                    disabled={!ocrStatus.engine.available}
+                    onClick={() => void startOcr('picture')}
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />原图翻译
+                  </Button>
+                  <Button
+                    size="sm"
+                    title={withKey('框选屏幕文字，识别后复制', 'ocr_text')}
+                    disabled={!ocrStatus.engine.available}
+                    onClick={() => void startOcr('text')}
+                  >
+                    <ScanText className="h-3.5 w-3.5" />提取文字
+                  </Button>
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center justify-center gap-1.5">
+                <span className="mr-0.5 text-[10px] font-semibold text-[var(--faint)]">扩展:</span>
+                <Button
+                  size="sm"
+                  title="打开本地图片并提取文字"
                   disabled={!ocrStatus.engine.available}
-                  onClick={() => void startOcr('card')}>
-                  <Languages className="h-3.5 w-3.5" />对照翻译
+                  onClick={() => void pickImage()}
+                >
+                  <ImagePlus className="h-3.5 w-3.5" />打开图片
                 </Button>
-                <Button size="sm" title={withKey('框选屏幕文字，原位置覆盖译文', 'ocr_picture')}
-                  disabled={!ocrStatus.engine.available}
-                  onClick={() => void startOcr('picture')}>
-                  <Sparkles className="h-3.5 w-3.5" />原图翻译
-                </Button>
-                <Button size="sm" title={withKey('框选屏幕文字，识别后复制', 'ocr_text')}
-                  disabled={!ocrStatus.engine.available}
-                  onClick={() => void startOcr('text')}>
-                  <ScanText className="h-3.5 w-3.5" />提取文字
-                </Button>
-              </>}
-              <Button size="sm" title="打开本地图片并提取文字"
-                disabled={!ocrStatus.engine.available}
-                onClick={() => void pickImage()}>
-                <ImagePlus className="h-3.5 w-3.5" />打开图片
-              </Button>
-              {ocrStatus.supported && <div className="flex w-full flex-wrap items-center justify-center gap-2">
-                <Button size="sm" title="持续监控选定区域，内容变化后自动更新译图" disabled={!ocrStatus.engine.available}
-                  onClick={() => void useAppStore.getState().startAutoOcr(autoInterval)}><Monitor className="h-3.5 w-3.5" />自动区域翻译</Button>
-                <select aria-label="自动翻译刷新间隔" value={autoInterval} onChange={(e) => setAutoInterval(Number(e.target.value))} className="cursor-pointer rounded border border-[var(--stroke)] bg-[var(--surface-2)] p-1 text-[11px] text-[var(--text)] focus-ring">
-                  <option value={1000}>1 秒</option><option value={2000}>2 秒</option><option value={5000}>5 秒</option><option value={10000}>10 秒</option>
-                </select>
-                <select aria-label="自动翻译目标语言" value={ocrTarget} onChange={(e) => useAppStore.setState({ ocrTarget: e.target.value })} className="cursor-pointer rounded border border-[var(--stroke)] bg-[var(--surface-2)] p-1 text-[11px] text-[var(--text)] focus-ring">
-                  <option value="zh-CN">简体中文</option><option value="en">English</option><option value="ja">日本語</option><option value="ko">한국어</option>
-                </select>
-              </div>}
+                {ocrStatus.supported && (
+                  <>
+                    <Button
+                      size="sm"
+                      title="持续监控选定区域，内容变化后自动更新译图"
+                      disabled={!ocrStatus.engine.available}
+                      onClick={() => void useAppStore.getState().startAutoOcr(autoInterval)}
+                    >
+                      <Monitor className="h-3.5 w-3.5" />自动监控
+                    </Button>
+                    <Select
+                      size="xs"
+                      ariaLabel="自动翻译刷新间隔"
+                      value={String(autoInterval)}
+                      onChange={(val) => setAutoInterval(Number(val))}
+                      options={AUTO_INTERVAL_OPTIONS}
+                      title="区域监控刷新频率"
+                    />
+                    <Select
+                      size="xs"
+                      ariaLabel="自动翻译目标语言"
+                      value={ocrTarget}
+                      onChange={(val) => useAppStore.setState({ ocrTarget: val })}
+                      options={OCR_TARGET_OPTIONS}
+                      title="目标语言"
+                    />
+                  </>
+                )}
+              </div>
             </div>
           )}
 
           {capture?.error && (
-            <p className="mt-1.5 text-[11px] text-[var(--faint)]">{capture.error}</p>
+            <p className="mt-2 text-[11px] text-rose-400">{capture.error}</p>
           )}
         </Surface>
       )}

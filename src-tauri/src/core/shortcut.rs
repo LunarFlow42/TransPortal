@@ -519,6 +519,33 @@ pub fn on_input_translate(app: &AppHandle) {
     }
 }
 
+fn resolve_replace_translation_config(
+    app: &AppHandle,
+) -> (
+    String,
+    Option<String>,
+    Option<crate::core::translation::OpenAiConfig>,
+) {
+    use tauri_plugin_store::StoreExt;
+    if let Ok(store) = app.store("settings.json") {
+        let provider = store
+            .get("provider")
+            .and_then(|v| v.as_str().map(String::from));
+        let target_lang = store
+            .get("targetLanguage")
+            .and_then(|v| v.as_str().map(String::from));
+        let openai_config = store
+            .get("openaiConfig")
+            .and_then(|v| serde_json::from_value(v.clone()).ok());
+        return (
+            provider.unwrap_or_else(|| "bing_free".to_string()),
+            target_lang,
+            openai_config,
+        );
+    }
+    ("bing_free".to_string(), None, None)
+}
+
 pub async fn on_replace_selection(app: &AppHandle) {
     app.state::<crate::core::ocr::monitor::MonitorService>()
         .stop(app, true);
@@ -548,15 +575,34 @@ pub async fn on_replace_selection(app: &AppHandle) {
     }
 
     let token = outcome.replace_token.unwrap();
-    let target_lang = crate::core::translation::resolve_target_lang(&outcome.text, Some("zh-CN"));
-    let provider = crate::core::translation::create("google_free", None);
+    let (provider_name, target_lang_pref, openai_config) = resolve_replace_translation_config(app);
+    let target_lang = crate::core::translation::resolve_target_lang(
+        &outcome.text,
+        target_lang_pref.as_deref().or(Some("zh-CN")),
+    );
+    let provider = crate::core::translation::create(&provider_name, openai_config);
     let query = crate::core::translation::TranslateQuery {
         text: outcome.text,
         source_lang: None,
         target_lang: Some(target_lang.to_string()),
     };
 
-    match provider.translate(&query).await {
+    let result = match provider.translate(&query).await {
+        Ok(result) => Ok(result),
+        Err(err) => {
+            if provider_name != "bing_free" {
+                eprintln!(
+                    "[replace_selection] provider {provider_name} failed: {err}; retrying with bing_free"
+                );
+                let fallback = crate::core::translation::create("bing_free", None);
+                fallback.translate(&query).await
+            } else {
+                Err(err)
+            }
+        }
+    };
+
+    match result {
         Ok(result) => {
             let app_clone = app.clone();
             let translated = result.translated_text;

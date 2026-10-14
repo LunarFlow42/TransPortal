@@ -187,7 +187,11 @@ impl SelectionService {
         state.captured = None;
         if !outcome.text.trim().is_empty()
             && let Some(target) = target
-            && self.platform.foreground().as_ref() == Some(&target)
+            && self
+                .platform
+                .foreground()
+                .as_ref()
+                .is_some_and(|cur| cur.matches(&target))
         {
             state.next += 1;
             outcome.replace_token = Some(state.next);

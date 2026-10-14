@@ -165,24 +165,86 @@ export const Switch: React.FC<SwitchProps> = ({
 /* ------------------------------------------------------------------ *
  * Input / Select
  * ------------------------------------------------------------------ */
-export const Input = forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
-  ({ className, ...props }, ref) => (
-    <input
-      ref={ref}
-      className={cn(
-        'w-full flex-1 min-w-0 rounded-[var(--r-ctrl)] border border-[var(--stroke)] bg-[var(--surface-2)] px-2.5 py-1.5 text-[13px] text-[var(--text)] placeholder:text-[var(--faint)] focus-ring',
-        className,
-      )}
-      {...props}
-    />
-  ),
+export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+  leftIcon?: React.ReactNode;
+  rightElement?: React.ReactNode;
+  clearable?: boolean;
+  onClear?: () => void;
+}
+
+export const Input = forwardRef<HTMLInputElement, InputProps>(
+  ({ className, leftIcon, rightElement, clearable, onClear, value, onChange, ...props }, ref) => {
+    if (!leftIcon && !rightElement && !clearable) {
+      return (
+        <input
+          ref={ref}
+          value={value}
+          onChange={onChange}
+          className={cn(
+            'w-full flex-1 min-w-0 rounded-[var(--r-ctrl)] border border-[var(--stroke)] bg-[var(--surface-2)] px-2.5 py-1.5 text-[13px] text-[var(--text)] placeholder:text-[var(--faint)] focus-ring',
+            className,
+          )}
+          {...props}
+        />
+      );
+    }
+
+    const hasValue = Boolean(value && String(value).length > 0);
+
+    return (
+      <div
+        className={cn(
+          'relative flex flex-1 min-w-0 items-center rounded-[var(--r-ctrl)] border border-[var(--stroke)] bg-[var(--surface-2)] transition-colors focus-within:border-[var(--accent-b)] focus-within:bg-[var(--surface-3)]',
+          className,
+        )}
+      >
+        {leftIcon && (
+          <span className="pointer-events-none flex shrink-0 items-center pl-2.5 text-[var(--muted)]">
+            {leftIcon}
+          </span>
+        )}
+        <input
+          ref={ref}
+          value={value}
+          onChange={onChange}
+          className={cn(
+            'w-full flex-1 min-w-0 bg-transparent py-1.5 text-[13px] text-[var(--text)] placeholder:text-[var(--faint)] outline-none',
+            leftIcon ? 'pl-2' : 'pl-2.5',
+            rightElement || (clearable && hasValue) ? 'pr-1.5' : 'pr-2.5',
+          )}
+          {...props}
+        />
+        {clearable && hasValue && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onClear?.();
+            }}
+            title="清空"
+            className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[var(--muted)] hover:bg-[var(--hover)] hover:text-[var(--text)] transition-colors"
+          >
+            <span className="text-xs leading-none">×</span>
+          </button>
+        )}
+        {rightElement && (
+          <span className="flex shrink-0 items-center pr-2 text-[var(--muted)]">
+            {rightElement}
+          </span>
+        )}
+      </div>
+    );
+  },
 );
 Input.displayName = 'Input';
 
 export interface SelectOption {
   value: string;
   label: string;
+  icon?: React.ReactNode;
 }
+
+export type SelectSize = 'xs' | 'sm' | 'md';
 
 /**
  * Themed dropdown.
@@ -196,47 +258,133 @@ export const Select: React.FC<{
   options: SelectOption[];
   disabled?: boolean;
   className?: string;
+  size?: SelectSize;
   ariaLabel?: string;
-}> = ({ value, onChange, options, disabled = false, className, ariaLabel }) => {
+  title?: string;
+}> = ({
+  value,
+  onChange,
+  options,
+  disabled = false,
+  className,
+  size = 'md',
+  ariaLabel,
+  title,
+}) => {
   const [open, setOpen] = useState(false);
+  const [dropUp, setDropUp] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const root = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open) return;
     const onPointerDown = (event: PointerEvent) => {
       if (!root.current?.contains(event.target as Node)) setOpen(false);
     };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
-    };
     document.addEventListener('pointerdown', onPointerDown);
-    document.addEventListener('keydown', onKeyDown);
     return () => {
       document.removeEventListener('pointerdown', onPointerDown);
-      document.removeEventListener('keydown', onKeyDown);
     };
   }, [open]);
 
+  useEffect(() => {
+    if (open) {
+      if (root.current) {
+        const rect = root.current.getBoundingClientRect();
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const spaceAbove = rect.top;
+        setDropUp(spaceBelow < 170 && spaceAbove > spaceBelow);
+      }
+      const currentIndex = options.findIndex((option) => option.value === value);
+      setHighlightedIndex(currentIndex >= 0 ? currentIndex : 0);
+    }
+  }, [open, options, value]);
+
+  const handleKeyDown = (event: React.KeyboardEvent) => {
+    if (disabled) return;
+    if (!open) {
+      if (['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(event.key)) {
+        event.preventDefault();
+        setOpen(true);
+      }
+      return;
+    }
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setHighlightedIndex((prev) => (prev + 1) % options.length);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setHighlightedIndex((prev) => (prev - 1 + options.length) % options.length);
+    } else if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      if (highlightedIndex >= 0 && highlightedIndex < options.length) {
+        onChange(options[highlightedIndex].value);
+        setOpen(false);
+      }
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      setOpen(false);
+      triggerRef.current?.focus();
+    }
+  };
+
   const selected = options.find((option) => option.value === value);
 
+  const SIZE_STYLES = {
+    xs: {
+      button: 'h-5 py-0 px-1.5 text-[10px] gap-1 font-mono rounded',
+      chevron: 'h-2.5 w-2.5',
+      listbox: 'p-0.5 min-w-[100px]',
+      item: 'px-1.5 py-0.5 text-[10px] gap-1 font-mono rounded',
+      check: 'h-2.5 w-2.5',
+    },
+    sm: {
+      button: 'h-7 py-1 px-2 text-[12px] gap-1.5 rounded-[var(--r-ctrl)]',
+      chevron: 'h-3 w-3',
+      listbox: 'p-1 min-w-[120px]',
+      item: 'px-2 py-1 text-[12px] gap-1.5 rounded-[var(--r-ctrl)]',
+      check: 'h-3 w-3',
+    },
+    md: {
+      button: 'py-1.5 pl-2.5 pr-2 text-[13px] gap-2 rounded-[var(--r-ctrl)]',
+      chevron: 'h-3.5 w-3.5',
+      listbox: 'p-1 min-w-[140px]',
+      item: 'px-2 py-1.5 text-[13px] gap-2 rounded-[var(--r-ctrl)]',
+      check: 'h-3.5 w-3.5',
+    },
+  }[size];
+
   return (
-    <div ref={root} className="relative flex-1">
+    <div
+      ref={root}
+      onKeyDown={handleKeyDown}
+      className={cn('relative inline-flex', size === 'md' && 'flex-1')}
+    >
       <button
+        ref={triggerRef}
         type="button"
+        title={title}
         disabled={disabled}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={ariaLabel}
         onClick={() => setOpen((previous) => !previous)}
         className={cn(
-          'flex w-full items-center justify-between gap-2 rounded-[var(--r-ctrl)] border border-[var(--stroke)] bg-[var(--surface-2)] py-1.5 pl-2.5 pr-2 text-left text-[13px] text-[var(--text)] focus-ring disabled:opacity-40',
+          'flex w-full items-center justify-between border border-[var(--stroke)] bg-[var(--surface-2)] text-left text-[var(--text)] transition-colors hover:bg-[var(--surface-3)] focus-ring disabled:opacity-40 select-none cursor-pointer',
+          SIZE_STYLES.button,
           className,
         )}
       >
-        <span className="truncate">{selected?.label ?? value}</span>
+        <span className="truncate flex items-center gap-1">
+          {selected?.icon}
+          {selected?.label ?? value}
+        </span>
         <ChevronDown
           className={cn(
-            'h-3.5 w-3.5 shrink-0 text-[var(--muted)] transition-transform',
+            'shrink-0 text-[var(--muted)] transition-transform',
+            SIZE_STYLES.chevron,
             open && 'rotate-180',
           )}
         />
@@ -245,27 +393,40 @@ export const Select: React.FC<{
       {open && (
         <ul
           role="listbox"
-          className="absolute z-50 mt-1 max-h-64 w-full min-w-[140px] overflow-y-auto rounded-[var(--r-inner)] border border-[var(--stroke)] bg-[var(--popover-bg)] p-1 shadow-[0_12px_32px_rgba(0,0,0,0.5)] backdrop-blur-xl"
+          className={cn(
+            'absolute z-50 max-h-60 w-max min-w-full overflow-y-auto rounded-[var(--r-inner)] border border-[var(--stroke)] bg-[var(--popover-bg)] shadow-[0_12px_32px_rgba(0,0,0,0.5)] backdrop-blur-xl',
+            dropUp ? 'bottom-full mb-1' : 'top-full mt-1',
+            SIZE_STYLES.listbox,
+          )}
         >
-          {options.map((option) => {
+          {options.map((option, index) => {
             const active = option.value === value;
+            const highlighted = index === highlightedIndex;
             return (
               <li key={option.value} role="option" aria-selected={active}>
                 <button
                   type="button"
+                  onMouseEnter={() => setHighlightedIndex(index)}
                   onClick={() => {
                     onChange(option.value);
                     setOpen(false);
+                    triggerRef.current?.focus();
                   }}
                   className={cn(
-                    'flex w-full items-center justify-between gap-2 rounded-[var(--r-ctrl)] px-2 py-1.5 text-left text-[13px] transition-colors',
+                    'flex w-full items-center justify-between text-left transition-colors cursor-pointer',
+                    SIZE_STYLES.item,
                     active
                       ? 'bg-[var(--pos-bg)] font-medium text-[var(--pos-fg)]'
-                      : 'text-[var(--text)] hover:bg-[var(--hover)]',
+                      : highlighted
+                        ? 'bg-[var(--hover)] text-[var(--text)]'
+                        : 'text-[var(--text)] hover:bg-[var(--hover)]',
                   )}
                 >
-                  <span className="truncate">{option.label}</span>
-                  {active && <Check className="h-3.5 w-3.5 shrink-0" />}
+                  <span className="truncate flex items-center gap-1">
+                    {option.icon}
+                    {option.label}
+                  </span>
+                  {active && <Check className={cn('shrink-0', SIZE_STYLES.check)} />}
                 </button>
               </li>
             );
@@ -275,6 +436,27 @@ export const Select: React.FC<{
     </div>
   );
 };
+
+/* ------------------------------------------------------------------ *
+ * SavedBadge — Transient feedback when settings are persisted
+ * ------------------------------------------------------------------ */
+export const SavedBadge: React.FC<{
+  saved: boolean;
+  className?: string;
+}> = ({ saved, className }) => (
+  <div
+    className={cn(
+      'inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-400 transition-all duration-300 select-none shadow-[0_2px_8px_rgba(16,185,129,0.15)]',
+      saved
+        ? 'opacity-100 scale-100 pointer-events-auto'
+        : 'opacity-0 scale-95 pointer-events-none',
+      className,
+    )}
+  >
+    <Check className="h-2.5 w-2.5 shrink-0 text-emerald-400" />
+    <span>已自动保存</span>
+  </div>
+);
 
 /* ------------------------------------------------------------------ *
  * Pill

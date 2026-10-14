@@ -93,10 +93,11 @@ impl ClipboardRestore {
                 continue;
             }
             if snapshot.formats.len() >= 512 {
-                return Err("剪贴板格式过多，无法安全保留，请手动复制译文。".into());
+                break;
             }
-            let source = unsafe { GetClipboardData(format) }
-                .map_err(|_| "无法读取完整的原剪贴板，已取消替换。")?;
+            let Ok(source) = (unsafe { GetClipboardData(format) }) else {
+                continue;
+            };
             let storage_format = match format {
                 130 => 2,
                 131 => 3,
@@ -111,7 +112,7 @@ impl ClipboardRestore {
                 )
             };
             if copied.is_invalid() {
-                return Err(format!("无法保留剪贴板格式 {format}，已取消替换。"));
+                continue;
             }
             let kind = match storage_format {
                 2 | 9 => TYMED_GDI,

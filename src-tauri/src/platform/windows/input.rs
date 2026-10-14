@@ -70,7 +70,7 @@ fn wait_for_keys_released(max_ms: u64) {
 }
 
 /// Synthesize key-up for modifiers that would corrupt the Ctrl+C chord.
-fn release_modifiers() {
+pub(crate) fn release_modifiers() {
     for key in [VK_MENU, VK_SHIFT, VK_LWIN, VK_RWIN, VK_CONTROL] {
         let input = key_input(key, true);
         // SAFETY: `input` is a single valid `INPUT` record.

@@ -79,7 +79,7 @@ describe('OCR settings startup', () => {
     await vi.waitFor(() => expect(lifecycle.initialized).toHaveBeenCalledWith(true));
     expect(invoke).toHaveBeenCalledWith('finish_startup_checks');
     expect(emit).toHaveBeenCalledWith('transportal://settings-changed', {
-      provider: 'google_free',
+      provider: 'bing_free',
       openaiConfig: {
         api_key: '',
         base_url: 'https://api.openai.com/v1',

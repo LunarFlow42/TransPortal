@@ -25,7 +25,7 @@ export function ReplaceSelectionButton({ node }: { node: LookupNode }) {
     try {
       const state = useAppStore.getState();
       const text = node.translation.trim() || (await invoke<TranslateResult>('translate_text', {
-        query: { text: node.text, target_lang: state.ocrTarget }, provider: state.provider,
+        query: { text: node.text, target_lang: state.targetLanguage }, provider: state.provider,
         openaiConfig: state.provider === 'openai' ? state.openaiConfig : null,
       })).translated_text;
       if (useAppStore.getState().capture?.replace_token !== token || useAppStore.getState().lookupStack[0]?.id !== node.id) {

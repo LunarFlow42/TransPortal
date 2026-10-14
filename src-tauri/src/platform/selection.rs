@@ -53,6 +53,18 @@ pub struct SelectionTarget {
     pub focus: usize,
 }
 
+impl SelectionTarget {
+    pub fn matches(&self, other: &Self) -> bool {
+        if self.window != other.window || self.process != other.process {
+            return false;
+        }
+        if self.focus != 0 && other.focus != 0 && self.focus != other.focus {
+            return false;
+        }
+        true
+    }
+}
+
 /// Compare selections independently of line-ending style and outer whitespace.
 pub fn normalize_selection(text: &str) -> String {
     text.replace("\r\n", "\n")
@@ -122,5 +134,49 @@ mod tests {
             normalize_selection("line one\nline two")
         );
         assert_ne!(normalize_selection("a b"), normalize_selection("a  b"));
+    }
+
+    #[test]
+    fn test_selection_target_matches() {
+        let t1 = SelectionTarget {
+            window: 100,
+            process: 200,
+            focus: 0,
+        };
+        let t2 = SelectionTarget {
+            window: 100,
+            process: 200,
+            focus: 300,
+        };
+        assert!(t1.matches(&t2));
+        assert!(t2.matches(&t1));
+
+        let t3 = SelectionTarget {
+            window: 100,
+            process: 200,
+            focus: 300,
+        };
+        assert!(t2.matches(&t3));
+
+        let t4 = SelectionTarget {
+            window: 100,
+            process: 200,
+            focus: 400,
+        };
+        assert!(!t2.matches(&t4));
+
+        let t5 = SelectionTarget {
+            window: 101,
+            process: 200,
+            focus: 0,
+        };
+        assert!(!t1.matches(&t5));
+
+        let t6 = SelectionTarget {
+            window: 100,
+            process: 201,
+            focus: 0,
+        };
+        assert!(!t1.matches(&t6));
     }
 }

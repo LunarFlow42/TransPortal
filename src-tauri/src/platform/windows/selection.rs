@@ -1,6 +1,6 @@
 use super::clipboard::WindowsClipboard;
 use super::clipboard_restore::ClipboardRestore;
-use super::input::{copy_selection_to_clipboard, key_input};
+use super::input::{copy_selection_to_clipboard, key_input, release_modifiers};
 use super::uia::WindowsSelectionReader;
 use crate::platform::clipboard::ClipboardOps;
 use crate::platform::selection::{
@@ -15,8 +15,8 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetAsyncKeyState, INPUT, SendInput, VK_CONTROL, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT, VK_V,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    GUITHREADINFO, GetForegroundWindow, GetGUIThreadInfo, GetWindowThreadProcessId, IsWindow,
-    SetForegroundWindow,
+    BringWindowToTop, GUITHREADINFO, GetForegroundWindow, GetGUIThreadInfo,
+    GetWindowThreadProcessId, IsWindow, SetForegroundWindow,
 };
 
 #[derive(Default)]
@@ -49,15 +49,17 @@ fn target() -> Option<SelectionTarget> {
 
 fn wait_for_modifiers() -> Result<(), String> {
     let start = Instant::now();
-    while [VK_CONTROL, VK_MENU, VK_SHIFT, VK_LWIN, VK_RWIN, VK_V]
+    while [VK_CONTROL, VK_MENU, VK_SHIFT, VK_LWIN, VK_RWIN]
         .iter()
         .any(|key| unsafe { GetAsyncKeyState(i32::from(key.0)) } as u16 & 0x8000 != 0)
     {
-        if start.elapsed() > Duration::from_secs(1) {
-            return Err("请松开键盘按键后再替换。".into());
+        if start.elapsed() > Duration::from_millis(1500) {
+            release_modifiers();
+            break;
         }
-        std::thread::sleep(Duration::from_millis(10));
+        std::thread::sleep(Duration::from_millis(15));
     }
+    release_modifiers();
     Ok(())
 }
 
@@ -87,7 +89,7 @@ impl SelectionOps for WindowsSelection {
         replacement: &str,
     ) -> Result<(), String> {
         let owner = owner.hwnd().map_err(|e| e.to_string())?;
-        let mut restore = ClipboardRestore::snapshot(HWND(owner.0))?;
+        let mut restore = ClipboardRestore::snapshot(HWND(owner.0)).ok();
         let window = HWND(source.window as *mut _);
         unsafe {
             let mut process = 0;
@@ -97,46 +99,61 @@ impl SelectionOps for WindowsSelection {
             }
         }
         let current = target().ok_or("无法确认当前窗口。")?;
-        if current.window != source.window && current.process != unsafe { GetCurrentProcessId() } {
+        if !current.matches(source) && current.process != unsafe { GetCurrentProcessId() } {
             return Err("当前焦点已转到其他软件，请重新取词后替换。".into());
         }
         wait_for_modifiers()?;
         unsafe {
             let _ = SetForegroundWindow(window);
+            let _ = BringWindowToTop(window);
         }
-        for _ in 0..15 {
-            if target().as_ref() == Some(source) {
+        for _ in 0..25 {
+            if let Some(cur) = target()
+                && cur.matches(source)
+            {
                 break;
             }
             std::thread::sleep(Duration::from_millis(20));
         }
-        if target().as_ref() != Some(source) {
+        let current_target = target().ok_or("无法确认当前窗口。")?;
+        if !current_target.matches(source) {
             return Err("无法恢复原输入框焦点，请重新选中文字。".into());
         }
         // Read the actual selection again; never blindly paste at a stale caret.
         let selected = match WindowsSelectionReader::new().read_via_uia() {
             Ok(content) if !content.text.trim().is_empty() => content.text,
             _ => {
-                copy_selection_to_clipboard()?;
-                restore.owned_revision = Some(WindowsClipboard.revision());
-                app.clipboard()
-                    .read_text()
-                    .map_err(|error| format!("无法核对选中文字：{error}"))?
+                std::thread::sleep(Duration::from_millis(50));
+                let copy_res = copy_selection_to_clipboard();
+                if let Some(ref mut r) = restore {
+                    r.owned_revision = Some(WindowsClipboard.revision());
+                }
+                match app.clipboard().read_text() {
+                    Ok(text) if !text.trim().is_empty() => text,
+                    _ => {
+                        copy_res.map_err(|error| format!("无法核对选中文字：{error}"))?;
+                        app.clipboard()
+                            .read_text()
+                            .map_err(|error| format!("无法核对选中文字：{error}"))?
+                    }
+                }
             }
         };
         if normalize_selection(&selected) != normalize_selection(expected) {
             return Err("选中的文字已变化，已取消替换。请重新取词。".into());
         }
         wait_for_modifiers()?;
-        if target().as_ref() != Some(source) {
+        if !target().as_ref().is_some_and(|cur| cur.matches(source)) {
             return Err("输入焦点已变化，已取消替换。".into());
         }
         app.clipboard()
             .write_text(replacement.to_string())
             .map_err(|error| format!("无法准备译文：{error}"))?;
-        restore.owned_revision = Some(WindowsClipboard.revision());
+        if let Some(ref mut r) = restore {
+            r.owned_revision = Some(WindowsClipboard.revision());
+        }
         // Recheck after clipboard access, which can briefly yield to another app.
-        if target().as_ref() != Some(source) {
+        if !target().as_ref().is_some_and(|cur| cur.matches(source)) {
             return Err("输入焦点已变化，已取消替换。".into());
         }
         let inputs = [
@@ -150,10 +167,10 @@ impl SelectionOps for WindowsSelection {
             return Err("目标软件拒绝了粘贴，请手动复制译文（可能权限不一致）。".into());
         }
         // Let the target consume WM_PASTE before restoring the user's clipboard.
-        std::thread::sleep(Duration::from_millis(250));
-        restore
-            .restore()
-            .map_err(|error| format!("文字已替换，但恢复剪贴板失败：{error}"))?;
+        std::thread::sleep(Duration::from_millis(350));
+        if let Some(mut r) = restore {
+            let _ = r.restore();
+        }
         Ok(())
     }
 }

@@ -16,6 +16,7 @@ import {
   X,
   RefreshCw,
   AlertCircle,
+  AlertTriangle,
   Search,
   MousePointerClick,
   AppWindow,
@@ -36,7 +37,7 @@ import { IntegrityPanel } from '../components/IntegrityPanel';
 import { MemorySettingsPanel } from '../components/MemorySettingsPanel';
 import { CaptureDiagnosticsPanel } from '../components/CaptureDiagnosticsPanel';
 import { ResizeHandles } from '../components/ResizeHandles';
-import { Button, IconButton, Input, Section, Select, Surface, Switch } from '../components/ui';
+import { Button, IconButton, Input, SavedBadge, Section, Select, Surface, Switch } from '../components/ui';
 import { cn } from '../utils/cn';
 import type { ProviderType, ShortcutActionId, ThemeMode } from '../types';
 
@@ -177,11 +178,48 @@ export const SettingsView: React.FC = () => {
     setOverlayOpacity,
     smoothTransitions,
     setSmoothTransitions,
+    resetToDefaults,
   } = useAppStore();
   const [recordingAction, setRecordingAction] = useState<ShortcutActionId | null>(null);
   const [autostart, setAutostart] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const [savedPulse, setSavedPulse] = useState(false);
+  const saveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isInitialMount = React.useRef(true);
+
+  const triggerSaveNotice = React.useCallback(() => {
+    setSavedPulse(true);
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      setSavedPulse(false);
+      saveTimerRef.current = null;
+    }, 1500);
+  }, []);
+
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    triggerSaveNotice();
+  }, [
+    theme,
+    overlayOpacity,
+    fontSize,
+    smoothTransitions,
+    showCrosshairs,
+    autostart,
+    provider,
+    targetLanguage,
+    autoPronounce,
+    inkTranslateKey,
+    doubleCopyEnabled,
+    clipboardMonitorEnabled,
+    triggerSaveNotice,
+  ]);
 
   const { report, error: shortcutError, retrying, retry } = useShortcutStatus();
 
@@ -290,6 +328,7 @@ export const SettingsView: React.FC = () => {
   const matchMemory = isSearching && isMatch(['memory', '系统', '性能', '内存', '释放', 'ram', 'clean', 'working set']);
   const matchIntegrity = isSearching && isMatch(['integrity', '完整性', '健康', '检测', 'checks', 'sha256', 'hash']);
   const matchCapture = isSearching && isMatch(['capture', 'screenshot', '截图', '诊断', 'wgc', 'dxgi', 'gdi', 'debug', '调试', '游戏', '全屏', 'pipeline', 'pipe']);
+  const matchReset = isSearching && isMatch(['reset', 'restore', 'default', 'defaults', '默认', '重置', '恢复', '出厂']);
 
   const anyMatch =
     matchAppearance ||
@@ -302,7 +341,8 @@ export const SettingsView: React.FC = () => {
     matchInWindow ||
     matchMemory ||
     matchIntegrity ||
-    matchCapture;
+    matchCapture ||
+    matchReset;
 
   return (
     <div className="h-screen w-screen bg-transparent overflow-hidden">
@@ -318,17 +358,20 @@ export const SettingsView: React.FC = () => {
             </span>
             TransPortal Settings
           </div>
-          <div className="flex items-center gap-0.5">
-            <IconButton title="Minimize" onClick={() => void getCurrentWindow().minimize()}>
-              <Minus className="h-3.5 w-3.5" />
-            </IconButton>
-            <IconButton
-              title="Close"
-              onClick={() => void closeSettingsWindow()}
-              className="hover:bg-rose-500/90 hover:text-white"
-            >
-              <X className="h-3.5 w-3.5" />
-            </IconButton>
+          <div className="flex items-center gap-2">
+            <SavedBadge saved={savedPulse} />
+            <div className="flex items-center gap-0.5">
+              <IconButton title="最小化" onClick={() => void getCurrentWindow().minimize()}>
+                <Minus className="h-3.5 w-3.5" />
+              </IconButton>
+              <IconButton
+                title="关闭 (Esc)"
+                onClick={() => void closeSettingsWindow()}
+                className="hover:bg-rose-500/90 hover:text-white"
+              >
+                <X className="h-3.5 w-3.5" />
+              </IconButton>
+            </div>
           </div>
         </header>
 
@@ -375,26 +418,32 @@ export const SettingsView: React.FC = () => {
           <div className="flex flex-1 min-w-0 flex-col overflow-hidden">
             {/* 顶栏：全局搜索 */}
             <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--stroke)] px-4 py-2.5 bg-[var(--surface-2)]/20">
-              <div className="relative flex-1">
+              <div className="relative flex-1 flex items-center">
                 <Search className="pointer-events-none absolute left-3 top-2.5 h-3.5 w-3.5 text-[var(--muted)]" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="搜索设置项、快捷键或功能..."
-                  className="w-full rounded-[var(--r-ctrl)] border border-[var(--stroke)] bg-[var(--surface-2)] pl-8 pr-3 py-1.5 text-xs text-[var(--text)] placeholder-[var(--faint)] outline-none transition-colors focus:border-[var(--accent-b)] focus:bg-[var(--surface-3)]"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape' && searchQuery) {
+                      e.stopPropagation();
+                      setSearchQuery('');
+                    }
+                  }}
+                  placeholder="搜索设置项、快捷键或功能... (按 Esc 清除)"
+                  className="w-full rounded-[var(--r-ctrl)] border border-[var(--stroke)] bg-[var(--surface-2)] pl-8 pr-8 py-1.5 text-xs text-[var(--text)] placeholder-[var(--faint)] outline-none transition-colors focus:border-[var(--accent-b)] focus:bg-[var(--surface-3)]"
                 />
+                {isSearching && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    title="清除搜索"
+                    className="absolute right-2.5 flex h-4 w-4 items-center justify-center rounded-full text-[var(--muted)] hover:bg-[var(--hover)] hover:text-[var(--text)] transition-colors cursor-pointer"
+                  >
+                    <span className="text-xs leading-none">×</span>
+                  </button>
+                )}
               </div>
-
-              {isSearching && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery('')}
-                  className="shrink-0 text-xs text-[var(--accent-b)] hover:underline cursor-pointer"
-                >
-                  清除搜索
-                </button>
-              )}
             </div>
 
             {/* 滚动内容卡片区 */}
@@ -818,6 +867,79 @@ export const SettingsView: React.FC = () => {
               className="shrink-0"
             >
               <CaptureDiagnosticsPanel bare />
+            </Section>
+          )}
+
+          {/* 危险区：恢复默认设置 */}
+          {(isSearching ? matchReset : activeTab === 'advanced') && (
+            <Section
+              label="Danger Zone 危险区与恢复"
+              icon={<AlertTriangle className="h-3.5 w-3.5 text-amber-500" />}
+              className="shrink-0"
+            >
+              <Surface variant="inner" className="flex flex-col gap-3 p-3.5 border border-rose-500/20 bg-rose-500/5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[13px] font-semibold text-[var(--text)]">恢复默认推荐配置</span>
+                    <p className="text-[11px] text-[var(--muted)] leading-relaxed">
+                      将外观主题、窗口透明度、字号、全局快捷键与翻译引擎恢复至初装推荐状态。
+                      <span className="text-emerald-400 font-medium ml-1">已导入的本地离线词典数据库将完整保留。</span>
+                    </p>
+                  </div>
+                  {!showResetConfirm && (
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      onClick={() => setShowResetConfirm(true)}
+                      className="shrink-0"
+                    >
+                      恢复默认设置...
+                    </Button>
+                  )}
+                </div>
+
+                {showResetConfirm && (
+                  <div className="rounded-[var(--r-ctrl)] border border-rose-500/40 bg-[var(--surface-1)] p-3 text-xs flex flex-col gap-2.5">
+                    <div className="flex items-center gap-2 text-rose-400 font-semibold">
+                      <AlertTriangle className="h-4 w-4 shrink-0" />
+                      <span>确认重置所有软件偏好设置？</span>
+                    </div>
+                    <ul className="text-[11px] text-[var(--muted)] list-disc pl-4 space-y-1">
+                      <li>外观重置为跟随系统、透明度 72%、字号 14px</li>
+                      <li>所有全局快捷键重置为初始预设（划词 Alt+Q，截图 Alt+Shift+X 等）</li>
+                      <li>默认翻译引擎恢复为微软必应，目标语言恢复为简体中文</li>
+                      <li className="text-emerald-400 font-medium">离线 ECCEDICT 词条数据库不受影响，仍可正常离线查词</li>
+                    </ul>
+                    <div className="flex items-center justify-end gap-2 pt-1 border-t border-[var(--stroke)]">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={isResetting}
+                        onClick={() => setShowResetConfirm(false)}
+                      >
+                        取消
+                      </Button>
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        disabled={isResetting}
+                        onClick={async () => {
+                          setIsResetting(true);
+                          try {
+                            await resetToDefaults();
+                            setShowResetConfirm(false);
+                            triggerSaveNotice();
+                          } finally {
+                            setIsResetting(false);
+                          }
+                        }}
+                      >
+                        {isResetting ? '正在恢复...' : '确认重置'}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </Surface>
             </Section>
           )}
 

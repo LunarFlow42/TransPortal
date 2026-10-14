@@ -3,6 +3,7 @@ import { invoke, Channel } from '@tauri-apps/api/core';
 import { forgetScrollTops } from '../utils/scrollMemory';
 import { isNewOcrEvent } from '../utils/ocr';
 import { languageTagOf, resolveTargetLanguage } from '../utils/language';
+import { saveSettings } from './persistence';
 import type {
   Density,
   DictEntry,
@@ -114,6 +115,7 @@ interface AppState {
   setSmoothTransitions: (enabled: boolean) => void;
   togglePinned: () => void;
   hydrate: (settings: Partial<PersistedSettings>) => void;
+  resetToDefaults: () => Promise<void>;
 
   // Native selection capture
   applyCapture: (outcome: CaptureOutcome) => void;
@@ -165,7 +167,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   autoOcr: null,
   autoOcrRevision: -1,
 
-  provider: 'google_free',
+  provider: 'bing_free',
   openaiConfig: {
     api_key: '',
     base_url: 'https://api.openai.com/v1',
@@ -379,6 +381,52 @@ export const useAppStore = create<AppState>((set, get) => ({
       ocrPictureDefaultView: settings.ocrPictureDefaultView ?? state.ocrPictureDefaultView,
       smoothTransitions: settings.smoothTransitions ?? state.smoothTransitions,
     })),
+
+  resetToDefaults: async () => {
+    const defaults = {
+      provider: 'bing_free' as ProviderType,
+      hotkey: 'Alt+Q',
+      ocrCardHotkey: 'Alt+Shift+X',
+      ocrPictureHotkey: 'Alt+S',
+      ocrTextHotkey: 'Alt+Shift+S',
+      replaceSelectionHotkey: 'Alt+Z',
+      silentOcrHotkey: 'Alt+Shift+C',
+      inputTranslateHotkey: 'Alt+Space',
+      inkTranslateKey: 'None',
+      doubleCopyEnabled: true,
+      clipboardMonitorEnabled: false,
+      autoPronounce: true,
+      ocrEngine: 'windows' as OcrEngineId,
+      ocrLanguage: 'auto',
+      theme: 'system' as ThemeMode,
+      overlayOpacity: 0.72,
+      fontSize: 14,
+      showCrosshairs: true,
+      aiPromptTemplate: 'direct' as const,
+      targetLanguage: 'zh-CN',
+      ocrTarget: 'zh-CN',
+      ocrPictureDefaultView: 'translated' as const,
+      smoothTransitions: true,
+      settingsError: null,
+    };
+
+    await Promise.allSettled([
+      invoke('set_shortcut', { action: 'selection', accelerator: defaults.hotkey }),
+      invoke('set_shortcut', { action: 'ocr_card', accelerator: defaults.ocrCardHotkey }),
+      invoke('set_shortcut', { action: 'ocr_picture', accelerator: defaults.ocrPictureHotkey }),
+      invoke('set_shortcut', { action: 'ocr_text', accelerator: defaults.ocrTextHotkey }),
+      invoke('set_shortcut', { action: 'replace_selection', accelerator: defaults.replaceSelectionHotkey }),
+      invoke('set_shortcut', { action: 'silent_ocr', accelerator: defaults.silentOcrHotkey }),
+      invoke('set_shortcut', { action: 'input_translate', accelerator: defaults.inputTranslateHotkey }),
+      invoke('set_double_copy_enabled', { enabled: defaults.doubleCopyEnabled }),
+      invoke('set_clipboard_monitor_enabled', { enabled: defaults.clipboardMonitorEnabled }),
+      invoke('set_ink_translate_key', { key: defaults.inkTranslateKey }),
+      invoke('set_ocr_config', { config: { engine: defaults.ocrEngine, language: null } }),
+    ]);
+
+    await saveSettings(defaults);
+    set(defaults);
+  },
 
   applyCapture: (outcome) => {
     get().clearLookup();

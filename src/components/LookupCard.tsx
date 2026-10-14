@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { dismissShell } from '../hooks/useWindowAnimation';
-import { IconButton, Pill } from './ui';
+import { IconButton, Pill, Select } from './ui';
 import {
   ArrowLeftRight,
   BookOpen,
@@ -26,6 +26,32 @@ import { cn } from '../utils/cn';
 import { playPronunciation, stopPronunciation } from '../utils/audio';
 import { recallScrollTop, rememberScrollTop } from '../utils/scrollMemory';
 import type { LookupNode, ProviderType } from '../types';
+
+const CARD_PROVIDER_OPTIONS: { value: ProviderType; label: string }[] = [
+  { value: 'bing_free', label: 'Bing' },
+  { value: 'google_free', label: 'Google' },
+  { value: 'youdao_free', label: '有道' },
+  { value: 'tencent_free', label: '腾讯' },
+  { value: 'openai', label: 'OpenAI' },
+];
+
+const AI_TEMPLATE_OPTIONS = [
+  { value: 'direct', label: '直译' },
+  { value: 'academic', label: '学术' },
+  { value: 'code', label: '代码' },
+  { value: 'casual', label: '口语' },
+];
+
+const QUICK_LANG_OPTIONS = [
+  { value: 'zh-CN', label: '中文' },
+  { value: 'en', label: '英语' },
+  { value: 'ja', label: '日语' },
+  { value: 'ko', label: '韩语' },
+  { value: 'fr', label: '法语' },
+  { value: 'de', label: '德语' },
+  { value: 'ru', label: '俄语' },
+  { value: 'es', label: '西语' },
+];
 
 /** Split an enriched phonetic string like `英 /uk/ 美 /us/` into labelled parts. */
 function splitPhonetic(phonetic: string): { label: string; value: string }[] | null {
@@ -241,7 +267,7 @@ export const LookupCard: React.FC<LookupCardProps> = ({
 
   const pinButton = (
     <IconButton
-      title={pinned ? 'Unpin' : 'Pin'}
+      title={pinned ? '取消固定 (Ctrl+Shift+T)' : '固定浮层 (Ctrl+Shift+T)'}
       active={pinned}
       onClick={togglePinned}
       className={pinned ? 'text-amber-400' : undefined}
@@ -252,7 +278,7 @@ export const LookupCard: React.FC<LookupCardProps> = ({
 
   const densityButton = (
     <IconButton
-      title={compact ? 'Expand' : 'Collapse'}
+      title={compact ? '展开卡片详情' : '折叠卡片'}
       onClick={() => setDensity(compact ? 'dense' : 'compact')}
     >
       {compact ? (
@@ -264,14 +290,14 @@ export const LookupCard: React.FC<LookupCardProps> = ({
   );
 
   const settingsButton = (
-    <IconButton title="Settings" onClick={() => void openSettingsWindow()}>
+    <IconButton title="设置中心 (Ctrl+A)" onClick={() => void openSettingsWindow()}>
       <Settings className="h-3.5 w-3.5" />
     </IconButton>
   );
 
   const closeButton = (
     <IconButton
-      title="Close"
+      title="关闭浮层 (Esc)"
       onClick={handleClose}
       className="hover:bg-rose-500/90 hover:text-white"
     >
@@ -336,7 +362,7 @@ export const LookupCard: React.FC<LookupCardProps> = ({
             </div>
           )}
           {(total > 1 || Boolean(ocr)) && (
-            <IconButton title={ocr && total === 1 ? "返回截图对照" : "Back"} onClick={handleBack}>
+            <IconButton title={ocr && total === 1 ? "返回截图对照" : "返回上一层 (Alt+←)"} onClick={handleBack}>
               <ChevronLeft className="h-4 w-4" />
             </IconButton>
           )}
@@ -355,44 +381,45 @@ export const LookupCard: React.FC<LookupCardProps> = ({
                   setTargetLanguage(nextLang);
                   void startStreamTranslation(node.text, node.id);
                 }}
-                title="点击切换目标语言 (中/英)"
-                className="flex items-center gap-1 rounded bg-[var(--surface-3)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--muted)] hover:bg-[var(--hover)] hover:text-[var(--text)] transition-colors border border-[var(--stroke)]"
+                title="点击在自动/中文与目标语言间快速互译"
+                className="flex items-center gap-0.5 rounded bg-[var(--surface-3)] px-1.5 py-0 font-mono text-[10px] text-[var(--muted)] hover:bg-[var(--hover)] hover:text-[var(--text)] transition-colors border border-[var(--stroke)] h-5 cursor-pointer"
               >
-                <span>{targetLanguage.startsWith('zh') ? '自动 ⇄ 中' : '自动 ⇄ En'}</span>
+                <span>自动 ⇄ {QUICK_LANG_OPTIONS.find((l) => l.value === targetLanguage)?.label ?? targetLanguage}</span>
               </button>
-              <select
+              <Select
+                size="xs"
+                value={targetLanguage}
+                onChange={(nextLang) => {
+                  setTargetLanguage(nextLang);
+                  void startStreamTranslation(node.text, node.id);
+                }}
+                options={QUICK_LANG_OPTIONS}
+                title="选择目标语言"
+              />
+              <Select
+                size="xs"
                 value={provider}
-                onChange={(e) => {
-                  const nextProvider = e.target.value as ProviderType;
+                onChange={(next) => {
+                  const nextProvider = next as ProviderType;
                   setProvider(nextProvider);
                   void saveSettings({ provider: nextProvider });
                   void startStreamTranslation(node.text, node.id);
                 }}
-                className="h-5 cursor-pointer rounded bg-[var(--surface-3)] px-1.5 py-0 font-mono text-[10px] text-[var(--muted)] hover:text-[var(--text)] outline-none border border-[var(--stroke)] transition-colors"
+                options={CARD_PROVIDER_OPTIONS}
                 title="切换翻译引擎"
-              >
-                <option value="bing_free">Bing</option>
-                <option value="google_free">Google</option>
-                <option value="youdao_free">有道</option>
-                <option value="tencent_free">腾讯</option>
-                <option value="openai">OpenAI</option>
-              </select>
+              />
               {provider === 'openai' && (
-                <select
+                <Select
+                  size="xs"
                   value={aiPromptTemplate}
-                  onChange={(e) => {
-                    const val = e.target.value as 'direct' | 'academic' | 'code' | 'casual';
-                    setAiPromptTemplate(val);
+                  onChange={(val) => {
+                    const t = val as 'direct' | 'academic' | 'code' | 'casual';
+                    setAiPromptTemplate(t);
                     void startStreamTranslation(node.text, node.id);
                   }}
-                  className="h-5 cursor-pointer rounded bg-[var(--surface-3)] px-1 py-0 font-mono text-[10px] text-[var(--muted)] hover:text-[var(--text)] outline-none border border-[var(--stroke)]"
+                  options={AI_TEMPLATE_OPTIONS}
                   title="AI 提示词模板"
-                >
-                  <option value="direct">直译</option>
-                  <option value="academic">学术润色</option>
-                  <option value="code">代码解释</option>
-                  <option value="casual">口语交流</option>
-                </select>
+                />
               )}
             </div>
           )}
@@ -400,7 +427,7 @@ export const LookupCard: React.FC<LookupCardProps> = ({
 
         <div className="flex shrink-0 items-center gap-0.5">
           {node.kind === 'word' ? (
-            <IconButton title="Export TSV" onClick={() => exportTsv()}>
+            <IconButton title="导出单词本 (TSV)" onClick={() => exportTsv()}>
               <Download className="h-3.5 w-3.5" />
             </IconButton>
           ) : (
@@ -413,7 +440,7 @@ export const LookupCard: React.FC<LookupCardProps> = ({
               >
                 <ArrowLeftRight className="h-3.5 w-3.5" />
               </IconButton>
-              <IconButton title="Copy translation" onClick={() => void handleCopy()}>
+              <IconButton title="复制译文" onClick={() => void handleCopy()}>
                 {copied ? (
                   <Check className="h-3.5 w-3.5 text-emerald-400" />
                 ) : (
