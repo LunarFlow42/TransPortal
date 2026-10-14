@@ -25,6 +25,7 @@ import type {
   PictureTranslation,
   MonitorUpdate,
   MonitorOptions,
+  TtsEngine,
 } from '../types';
 
 /** Monotonic ids for stack frames. */
@@ -90,6 +91,9 @@ interface AppState {
   historyIndex: number;
   targetLanguage: string;
   smoothTransitions: boolean;
+  ttsEngine: TtsEngine;
+  ttsVoice: string;
+  ttsSpeed: number;
 
   // Config actions
   setProvider: (provider: ProviderType) => void;
@@ -105,6 +109,9 @@ interface AppState {
   runBackTranslation: () => Promise<void>;
   navigateHistory: (direction: 'prev' | 'next') => void;
   setAutoPronounce: (enabled: boolean) => void;
+  setTtsEngine: (engine: TtsEngine) => void;
+  setTtsVoice: (voice: string) => void;
+  setTtsSpeed: (speed: number) => void;
   setTargetLanguage: (targetLanguage: string) => void;
   setOcrLanguage: (language: string) => Promise<boolean>;
   setOcrEngine: (engine: OcrEngineId) => Promise<boolean>;
@@ -200,6 +207,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   historyIndex: -1,
   targetLanguage: 'zh-CN',
   smoothTransitions: true,
+  ttsEngine: 'kokoro_onnx',
+  ttsVoice: 'af_heart',
+  ttsSpeed: 1.0,
 
   setOcrPictureOriginal: (ocrPictureOriginal) => set({ ocrPictureOriginal }),
   toggleOcrPictureOriginal: () => set((state) => ({ ocrPictureOriginal: !state.ocrPictureOriginal })),
@@ -319,6 +329,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
   setAutoPronounce: (autoPronounce) => set({ autoPronounce }),
+  setTtsEngine: (ttsEngine) => set({ ttsEngine }),
+  setTtsVoice: (ttsVoice) => set({ ttsVoice }),
+  setTtsSpeed: (ttsSpeed) => set({ ttsSpeed }),
   setTargetLanguage: (targetLanguage) => set({ targetLanguage, ocrTarget: targetLanguage }),
   setOcrLanguage: (language) => get().setOcrConfig(get().ocrEngine, language),
   setOcrEngine: (engine) => get().setOcrConfig(engine, 'auto'),
@@ -380,6 +393,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       ocrTarget: settings.targetLanguage ?? state.ocrTarget,
       ocrPictureDefaultView: settings.ocrPictureDefaultView ?? state.ocrPictureDefaultView,
       smoothTransitions: settings.smoothTransitions ?? state.smoothTransitions,
+      ttsEngine: settings.ttsEngine ?? state.ttsEngine,
+      ttsVoice: settings.ttsVoice ?? state.ttsVoice,
+      ttsSpeed: settings.ttsSpeed ?? state.ttsSpeed,
     })),
 
   resetToDefaults: async () => {
@@ -396,6 +412,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       doubleCopyEnabled: true,
       clipboardMonitorEnabled: false,
       autoPronounce: true,
+      ttsEngine: 'kokoro_onnx' as TtsEngine,
+      ttsVoice: 'af_heart',
+      ttsSpeed: 1.0,
       ocrEngine: 'windows' as OcrEngineId,
       ocrLanguage: 'auto',
       theme: 'system' as ThemeMode,

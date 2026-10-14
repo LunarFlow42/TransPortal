@@ -10,3 +10,4 @@ pub mod selection;
 pub mod shell;
 pub mod shortcut;
 pub mod translation;
+pub mod tts;

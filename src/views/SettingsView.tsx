@@ -33,6 +33,7 @@ import { startWindowDrag } from '../utils/drag';
 import { closeSettingsWindow } from '../utils/windows';
 import { DictionaryPanel } from '../components/DictionaryPanel';
 import { OcrSettingsPanel } from '../components/OcrSettingsPanel';
+import { TtsSettingsPanel } from '../components/TtsSettingsPanel';
 import { IntegrityPanel } from '../components/IntegrityPanel';
 import { MemorySettingsPanel } from '../components/MemorySettingsPanel';
 import { CaptureDiagnosticsPanel } from '../components/CaptureDiagnosticsPanel';
@@ -178,6 +179,9 @@ export const SettingsView: React.FC = () => {
     setOverlayOpacity,
     smoothTransitions,
     setSmoothTransitions,
+    ttsEngine,
+    ttsVoice,
+    ttsSpeed,
     resetToDefaults,
   } = useAppStore();
   const [recordingAction, setRecordingAction] = useState<ShortcutActionId | null>(null);
@@ -218,6 +222,9 @@ export const SettingsView: React.FC = () => {
     inkTranslateKey,
     doubleCopyEnabled,
     clipboardMonitorEnabled,
+    ttsEngine,
+    ttsVoice,
+    ttsSpeed,
     triggerSaveNotice,
   ]);
 
@@ -324,6 +331,7 @@ export const SettingsView: React.FC = () => {
   const matchShortcuts = isSearching && isMatch(['global', 'shortcuts', '全局', '快捷键', '热键', '划词', '替换', 'ocr', '截图', '提取文字', '静默', '输入翻译']);
   const matchGestures = isSearching && isMatch(['gestures', 'monitoring', '手势', '监听', '落墨', '划选', '复制', 'ctrl+c+c', '剪贴板', 'clipboard', 'ink']);
   const matchDict = isSearching && isMatch(['dictionary', '词典', '发音', 'audio', 'pronounce', 'ecdict']);
+  const matchTts = isSearching && isMatch(['tts', '语音', '发音', '朗读', 'speech', 'kokoro', '声音', '音色']);
   const matchInWindow = isSearching && isMatch(['in-window', 'window', '软件快捷键', '内置', '窗口快捷键', 'tab', 'ctrl+a', 'ctrl+r', '置顶']);
   const matchMemory = isSearching && isMatch(['memory', '系统', '性能', '内存', '释放', 'ram', 'clean', 'working set']);
   const matchIntegrity = isSearching && isMatch(['integrity', '完整性', '健康', '检测', 'checks', 'sha256', 'hash']);
@@ -335,9 +343,10 @@ export const SettingsView: React.FC = () => {
     matchStartup ||
     matchProvider ||
     matchOcr ||
+    matchDict ||
+    matchTts ||
     matchShortcuts ||
     matchGestures ||
-    matchDict ||
     matchInWindow ||
     matchMemory ||
     matchIntegrity ||
@@ -641,6 +650,15 @@ export const SettingsView: React.FC = () => {
                   />
                 </div>
                 <DictionaryPanel />
+              </Surface>
+            </Section>
+          )}
+
+          {/* TTS 语音合成 */}
+          {(isSearching ? matchTts : activeTab === 'translation') && (
+            <Section label="Speech 语音合成 (TTS)" icon={<Volume2 className="h-3.5 w-3.5" />} className="shrink-0">
+              <Surface variant="inner" className="flex flex-col gap-3 p-3">
+                <TtsSettingsPanel disabled={!settingsReady} />
               </Surface>
             </Section>
           )}

@@ -195,6 +195,63 @@ pub async fn install_onnx_ocr(
 }
 
 #[tauri::command]
+pub async fn tts_status(
+    app: AppHandle,
+) -> Result<crate::core::tts::assets::TtsInstallStatus, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<crate::core::tts::TtsService>().status()
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn tts_voices(app: AppHandle) -> Vec<crate::core::tts::assets::VoiceInfo> {
+    app.state::<crate::core::tts::TtsService>().voices()
+}
+
+#[tauri::command]
+pub async fn install_onnx_tts(
+    app: AppHandle,
+    on_progress: tauri::ipc::Channel<crate::core::tts::assets::InstallProgress>,
+) -> Result<(), String> {
+    let tts = app.state::<crate::core::tts::TtsService>();
+    tts.install(&move |progress| {
+        let _ = on_progress.send(progress);
+    })
+    .await?;
+    let _ = app.emit("transportal://tts-assets-changed", ());
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn delete_onnx_tts(app: AppHandle) -> Result<(), String> {
+    let app_handle = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        app_handle.state::<crate::core::tts::TtsService>().delete()
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    let _ = app.emit("transportal://tts-assets-changed", ());
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn tts_synthesize(
+    app: AppHandle,
+    text: String,
+    voice: String,
+    speed: f32,
+) -> Result<tauri::ipc::Response, String> {
+    let tts = app.state::<crate::core::tts::TtsService>();
+    let wav_bytes = tts
+        .synthesize(&text, &voice, speed)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(tauri::ipc::Response::new(wav_bytes))
+}
+
+#[tauri::command]
 pub async fn ocr_image(
     path: String,
     mode: crate::core::ocr::OcrMode,

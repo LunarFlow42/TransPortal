@@ -1,4 +1,8 @@
+import { invoke } from '@tauri-apps/api/core';
+import { useAppStore } from '../store/useAppStore';
+
 let currentAudio: HTMLAudioElement | null = null;
+let currentBlobUrl: string | null = null;
 let isSpeaking = false;
 
 /**
@@ -26,6 +30,10 @@ export function stopPronunciation(): void {
     currentAudio.src = '';
     currentAudio = null;
   }
+  if (currentBlobUrl) {
+    URL.revokeObjectURL(currentBlobUrl);
+    currentBlobUrl = null;
+  }
   isSpeaking = false;
   if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
     window.speechSynthesis.cancel();
@@ -35,16 +43,89 @@ export function stopPronunciation(): void {
 /**
  * Play a pronunciation, stopping whatever was playing first.
  *
- * A single module-level audio instance means deep lookup stacks can never
- * overlap their audio.
+ * If `ttsEngine` is configured to `kokoro_onnx`, attempts local offline neural synthesis first.
+ * If the model is not installed or the text contains non-English characters, automatically
+ * falls back to remote audioUrl or Web Speech API.
  */
 export function playPronunciation(
   word: string,
   audioUrl: string | null | undefined,
   onEnd: () => void,
+  options?: { voice?: string; speed?: number },
 ): void {
   stopPronunciation();
 
+  const state = useAppStore.getState();
+  const voice = options?.voice ?? state.ttsVoice ?? 'af_heart';
+  const speed = options?.speed ?? state.ttsSpeed ?? 1.0;
+  const ttsEngine = state.ttsEngine;
+
+  if (ttsEngine === 'kokoro_onnx') {
+    void invoke<ArrayBuffer>('tts_synthesize', {
+      text: word,
+      voice,
+      speed,
+    })
+      .then((buffer) => {
+        playWavBuffer(buffer, onEnd, () => {
+          // If blob playback somehow fails, fall back to remote or Web Speech
+          fallbackPronunciation(word, audioUrl, onEnd);
+        });
+      })
+      .catch(() => {
+        // Fallback gracefully on UnsupportedLanguageOrEmpty or missing model
+        fallbackPronunciation(word, audioUrl, onEnd);
+      });
+    return;
+  }
+
+  fallbackPronunciation(word, audioUrl, onEnd);
+}
+
+function playWavBuffer(
+  buffer: ArrayBuffer,
+  onEnd: () => void,
+  onError: () => void,
+): void {
+  const blob = new Blob([buffer], { type: 'audio/wav' });
+  const blobUrl = URL.createObjectURL(blob);
+  currentBlobUrl = blobUrl;
+
+  const audio = new Audio(blobUrl);
+  currentAudio = audio;
+
+  const finish = () => {
+    if (currentAudio === audio) {
+      currentAudio = null;
+    }
+    if (currentBlobUrl === blobUrl) {
+      URL.revokeObjectURL(blobUrl);
+      currentBlobUrl = null;
+    }
+    onEnd();
+  };
+
+  const fail = () => {
+    if (currentAudio === audio) {
+      currentAudio = null;
+    }
+    if (currentBlobUrl === blobUrl) {
+      URL.revokeObjectURL(blobUrl);
+      currentBlobUrl = null;
+    }
+    onError();
+  };
+
+  audio.onended = finish;
+  audio.onerror = fail;
+  void audio.play().catch(fail);
+}
+
+function fallbackPronunciation(
+  word: string,
+  audioUrl: string | null | undefined,
+  onEnd: () => void,
+): void {
   if (audioUrl) {
     const audio = new Audio(audioUrl);
     currentAudio = audio;
@@ -52,7 +133,6 @@ export function playPronunciation(
       if (currentAudio === audio) currentAudio = null;
       onEnd();
     };
-    // `onerror` and the rejected `play()` can both report one failure.
     const fallBack = () => {
       if (currentAudio !== audio) return;
       currentAudio = null;
@@ -76,7 +156,12 @@ function speak(word: string, onEnd: () => void): void {
   window.speechSynthesis.cancel();
   isSpeaking = true;
   const utterance = new SpeechSynthesisUtterance(word);
-  utterance.lang = 'en-US';
+  // Detect if text contains Chinese
+  if (/[\u4e00-\u9fff]/.test(word)) {
+    utterance.lang = 'zh-CN';
+  } else {
+    utterance.lang = 'en-US';
+  }
   utterance.rate = 0.9;
   const handleEnd = () => {
     isSpeaking = false;

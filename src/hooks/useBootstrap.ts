@@ -157,6 +157,9 @@ export function useBootstrap(persist: boolean) {
           aiPromptTemplate,
           targetLanguage,
           ocrPictureDefaultView,
+          ttsEngine,
+          ttsVoice,
+          ttsSpeed,
         } = useAppStore.getState();
         await emit(SETTINGS_CHANGED_EVENT, {
           provider,
@@ -182,6 +185,9 @@ export function useBootstrap(persist: boolean) {
           aiPromptTemplate,
           targetLanguage,
           ocrPictureDefaultView,
+          ttsEngine,
+          ttsVoice,
+          ttsSpeed,
         });
       }
     })().catch((error) => {
@@ -233,6 +239,9 @@ export function useBootstrap(persist: boolean) {
         if (state.smoothTransitions !== previous.smoothTransitions) {
           patch.smoothTransitions = state.smoothTransitions;
         }
+        if (state.ttsEngine !== previous.ttsEngine) patch.ttsEngine = state.ttsEngine;
+        if (state.ttsVoice !== previous.ttsVoice) patch.ttsVoice = state.ttsVoice;
+        if (state.ttsSpeed !== previous.ttsSpeed) patch.ttsSpeed = state.ttsSpeed;
 
         if (Object.keys(patch).length === 0) return;
 

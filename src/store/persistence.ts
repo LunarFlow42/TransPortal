@@ -44,6 +44,9 @@ export async function loadSettings(): Promise<Partial<PersistedSettings>> {
     ocrPictureDefaultView,
     smoothTransitions,
     dictSources,
+    ttsEngine,
+    ttsVoice,
+    ttsSpeed,
   ] = await Promise.all([
     store.get<PersistedSettings['provider']>('provider'),
     store.get<PersistedSettings['openaiConfig']>('openaiConfig'),
@@ -70,6 +73,9 @@ export async function loadSettings(): Promise<Partial<PersistedSettings>> {
     store.get<PersistedSettings['ocrPictureDefaultView']>('ocrPictureDefaultView'),
     store.get<PersistedSettings['smoothTransitions']>('smoothTransitions'),
     store.get<PersistedSettings['dictSources']>('dictSources'),
+    store.get<PersistedSettings['ttsEngine']>('ttsEngine'),
+    store.get<PersistedSettings['ttsVoice']>('ttsVoice'),
+    store.get<PersistedSettings['ttsSpeed']>('ttsSpeed'),
   ]);
 
   return {
@@ -98,6 +104,9 @@ export async function loadSettings(): Promise<Partial<PersistedSettings>> {
     ocrPictureDefaultView,
     smoothTransitions,
     dictSources,
+    ttsEngine,
+    ttsVoice,
+    ttsSpeed,
   };
 }
 

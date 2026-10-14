@@ -107,6 +107,9 @@ describe('OCR settings startup', () => {
       aiPromptTemplate: 'direct',
       targetLanguage: 'zh-CN',
       ocrPictureDefaultView: 'translated',
+      ttsEngine: 'kokoro_onnx',
+      ttsVoice: 'af_heart',
+      ttsSpeed: 1.0,
     });
     expect(saveSettings).not.toHaveBeenCalled();
     await useAppStore.getState().setOcrEngine('windows');

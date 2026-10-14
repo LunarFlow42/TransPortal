@@ -38,6 +38,7 @@ thiserror = "2"
 redb = "4.3"
 csv = "1"
 lru = "0.18"
+misaki-rs = { version = "0.6", default-features = false }
 ort = { version = "2.0.0-rc.10", default-features = false, features = ["std", "ndarray", "load-dynamic"] }
 ndarray = "0.16"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "bmp", "webp", "tiff"] }

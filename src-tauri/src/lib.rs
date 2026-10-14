@@ -181,6 +181,17 @@ pub fn run() {
                 ocr_data.join("downloads"),
             ));
             app.manage(ocr::OcrService::new(ocr_assets, platform::native_ocr()));
+            let tts_data = app.path().app_data_dir()?.join("tts");
+            let tts_assets = std::sync::Arc::new(core::tts::assets::TtsAssets::new(
+                tts_data.clone(),
+                tts_data.join("downloads"),
+                Some(
+                    ocr_data
+                        .join("ppocr-v5-fp32-ort-1.22.0")
+                        .join(core::ocr::assets::current_platform()),
+                ),
+            ));
+            app.manage(core::tts::TtsService::new(tts_assets));
             app.manage(ocr::region::RegionService::default());
             ocr::region::RegionService::prewarm(app.handle());
             app.manage(ocr::monitor::MonitorService::default());
@@ -223,6 +234,11 @@ pub fn run() {
             commands::set_ocr_config,
             commands::get_ocr_config,
             commands::install_onnx_ocr,
+            commands::tts_status,
+            commands::tts_voices,
+            commands::install_onnx_tts,
+            commands::delete_onnx_tts,
+            commands::tts_synthesize,
             commands::ocr_image,
             commands::start_ocr,
             commands::cancel_ocr,

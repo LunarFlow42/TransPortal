@@ -1,0 +1,83 @@
+{
+  "id": "kokoro-82m-v1.0-onnx-q8",
+  "model_family": "Kokoro-82M v1.0",
+  "precision": "INT8 (quantized)",
+  "runtime_version": "1.22.0",
+  "source": "https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX",
+  "model": {
+    "name": "model_quantized.onnx",
+    "bytes": 92361116,
+    "sha256": "fbae9257e1e05ffc727e951ef9b9c98418e6d79f1c9b6b13bd59f5c9028a1478",
+    "urls": [
+      "https://hf-mirror.com/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/onnx/model_quantized.onnx",
+      "https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/onnx/model_quantized.onnx"
+    ]
+  },
+  "voices": [
+    {
+      "id": "af_heart",
+      "name": "af_heart.bin",
+      "label": "Heart (美音女声·推荐)",
+      "language": "en-us",
+      "gender": "female",
+      "bytes": 522240,
+      "sha256": "d583ccff3cdca2f7fae535cb998ac07e9fcb90f09737b9a41fa2734ec44a8f0b",
+      "urls": [
+        "https://hf-mirror.com/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/voices/af_heart.bin",
+        "https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/voices/af_heart.bin"
+      ]
+    },
+    {
+      "id": "af_bella",
+      "name": "af_bella.bin",
+      "label": "Bella (美音女声)",
+      "language": "en-us",
+      "gender": "female",
+      "bytes": 522240,
+      "sha256": "f69d836209b78eb8c66e75e3cda491e26ea838a3674257e9d4e5703cbaf55c8b",
+      "urls": [
+        "https://hf-mirror.com/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/voices/af_bella.bin",
+        "https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/voices/af_bella.bin"
+      ]
+    },
+    {
+      "id": "am_adam",
+      "name": "am_adam.bin",
+      "label": "Adam (美音男声)",
+      "language": "en-us",
+      "gender": "male",
+      "bytes": 522240,
+      "sha256": "cd342ec9d00ca109a0dfc3952706a98f523e0f28a1663fb282fa40a3023c14bc",
+      "urls": [
+        "https://hf-mirror.com/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/voices/am_adam.bin",
+        "https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/voices/am_adam.bin"
+      ]
+    },
+    {
+      "id": "bf_emma",
+      "name": "bf_emma.bin",
+      "label": "Emma (英音女声)",
+      "language": "en-gb",
+      "gender": "female",
+      "bytes": 522240,
+      "sha256": "669fe0647f9dd04fcab92f1439a40eeb4c8b4ab1f82e4996fe3d918ce4a63b73",
+      "urls": [
+        "https://hf-mirror.com/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/voices/bf_emma.bin",
+        "https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/voices/bf_emma.bin"
+      ]
+    },
+    {
+      "id": "bm_george",
+      "name": "bm_george.bin",
+      "label": "George (英音男声)",
+      "language": "en-gb",
+      "gender": "male",
+      "bytes": 522240,
+      "sha256": "55f09927e89ac0c37f83dac61fab0b9e8404990ef57d3243ebafb9a9935e1bf1",
+      "urls": [
+        "https://hf-mirror.com/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/voices/bm_george.bin",
+        "https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/voices/bm_george.bin"
+      ]
+    }
+  ]
+}

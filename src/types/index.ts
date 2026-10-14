@@ -310,6 +310,9 @@ export interface PersistedSettings {
   ocrPictureDefaultView?: 'translated' | 'original';
   smoothTransitions?: boolean;
   dictSources: { id: string; enabled: boolean }[];
+  ttsEngine?: TtsEngine;
+  ttsVoice?: string;
+  ttsSpeed?: number;
 }
 
 export interface MemoryReport {
@@ -367,6 +370,33 @@ export interface CaptureDiagnostics {
   finalBackend: string;
   totalDurationMs: number;
   savedImagePath?: string;
+}
+
+export type TtsEngine = 'kokoro_onnx' | 'web_speech';
+
+export interface VoiceInfo {
+  id: string;
+  name: string;
+  label: string;
+  language: string;
+  gender: string;
+}
+
+export interface TtsInstallStatus {
+  installed: boolean;
+  installing: boolean;
+  path?: string | null;
+  download_bytes: number;
+  installed_bytes: number;
+  error?: string | null;
+  voices: VoiceInfo[];
+}
+
+export interface TtsInstallProgress {
+  stage: string;
+  file: string;
+  downloaded: number;
+  total: number;
 }
 
 
