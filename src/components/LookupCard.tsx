@@ -17,13 +17,12 @@ import {
   X,
 } from 'lucide-react';
 import { InteractiveSentence } from './InteractiveSentence';
-import { ReplaceSelectionButton } from './ReplaceSelectionButton';
 import { useAppStore } from '../store/useAppStore';
 import { saveSettings } from '../store/persistence';
 import { startWindowDrag } from '../utils/drag';
 import { openSettingsWindow } from '../utils/windows';
 import { cn } from '../utils/cn';
-import { playPronunciation, stopPronunciation } from '../utils/audio';
+import { isAudioPlaying, playPronunciation, stopPronunciation } from '../utils/audio';
 import { recallScrollTop, rememberScrollTop } from '../utils/scrollMemory';
 import type { LookupNode, ProviderType } from '../types';
 
@@ -184,7 +183,8 @@ export const LookupCard: React.FC<LookupCardProps> = ({
   const setProvider = useAppStore((state) => state.setProvider);
 
   const [copied, setCopied] = useState(false);
-  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const [playingTarget, setPlayingTarget] = useState<'word' | 'source' | 'translation' | null>(null);
+  const isPlayingAudio = playingTarget !== null;
   const scrollRef = useRef<HTMLDivElement>(null);
   const isTopRef = useRef(isTop);
   isTopRef.current = isTop;
@@ -201,7 +201,7 @@ export const LookupCard: React.FC<LookupCardProps> = ({
   useEffect(() => {
     if (!isTop) {
       stopPronunciation();
-      setIsPlayingAudio(false);
+      setPlayingTarget(null);
     }
   }, [isTop]);
 
@@ -231,12 +231,31 @@ export const LookupCard: React.FC<LookupCardProps> = ({
   const compact = node.density === 'compact';
   const displayWord = wordData?.word || node.text;
 
+  const handleTogglePronounce = (
+    target: 'word' | 'source' | 'translation',
+    text: string,
+    audioUrl?: string | null,
+  ) => {
+    if (!text?.trim()) return;
+    if (playingTarget === target && isAudioPlaying()) {
+      stopPronunciation();
+      setPlayingTarget(null);
+      return;
+    }
+    stopPronunciation();
+    setPlayingTarget(target);
+    playPronunciation(text.trim(), audioUrl, () => {
+      setPlayingTarget(null);
+    });
+  };
+
   const handleBack = () => {
     if (total > 1) {
       popLookup();
     } else {
       clearLookup();
       stopPronunciation();
+      setPlayingTarget(null);
       if (!ocr) {
         void dismissShell({ force: true, immediate: true });
       }
@@ -246,6 +265,7 @@ export const LookupCard: React.FC<LookupCardProps> = ({
   const handleClose = () => {
     clearLookup();
     stopPronunciation();
+    setPlayingTarget(null);
     void dismissShell({ force: true, immediate: true });
   };
 
@@ -261,8 +281,7 @@ export const LookupCard: React.FC<LookupCardProps> = ({
   };
 
   const handlePronounce = () => {
-    setIsPlayingAudio(true);
-    playPronunciation(displayWord, wordData?.audio_url, () => setIsPlayingAudio(false));
+    handleTogglePronounce('word', displayWord, wordData?.audio_url);
   };
 
   const pinButton = (
@@ -433,6 +452,23 @@ export const LookupCard: React.FC<LookupCardProps> = ({
           ) : (
             <>
               <IconButton
+                title={playingTarget === 'source' ? '停止朗读原文' : '朗读原文'}
+                onClick={() => handleTogglePronounce('source', node.text)}
+                active={playingTarget === 'source'}
+                className={playingTarget === 'source' ? 'animate-pulse text-[var(--accent-b)]' : undefined}
+              >
+                <Volume2 className="h-3.5 w-3.5" />
+              </IconButton>
+              <IconButton
+                title={playingTarget === 'translation' ? '停止朗读译文' : '朗读译文'}
+                onClick={() => node.translation && handleTogglePronounce('translation', node.translation)}
+                active={playingTarget === 'translation'}
+                className={playingTarget === 'translation' ? 'animate-pulse text-[var(--accent-b)]' : undefined}
+                disabled={!node.translation || node.status === 'loading'}
+              >
+                <Volume2 className="h-3.5 w-3.5 text-[var(--accent-b)]" />
+              </IconButton>
+              <IconButton
                 title="回译验证 (⇌)"
                 onClick={() => void runBackTranslation()}
                 active={Boolean(backTranslation)}
@@ -457,8 +493,6 @@ export const LookupCard: React.FC<LookupCardProps> = ({
       </div>
 
       <div className={cn('flex flex-col flex-1 min-h-0', compact ? 'p-3' : 'p-3.5')}>
-        {stackIndex === 0 && <ReplaceSelectionButton node={node} />}
-
         {/* ------------------------------------------------ body */}
       {node.kind === 'sentence' ? (
         <div
@@ -469,32 +503,58 @@ export const LookupCard: React.FC<LookupCardProps> = ({
             fillHeight ? 'mt-2.5 flex-1 min-h-0' : (compact ? 'mt-2.5 max-h-[520px]' : 'mt-3 max-h-[560px]'),
           )}
         >
-          <InteractiveSentence
-            sentence={node.text}
-            muted
-            className="text-xs italic"
-            currentWord={node.highlightWord}
-          />
+          <div className="flex items-start justify-between gap-1.5 group/src">
+            <InteractiveSentence
+              sentence={node.text}
+              muted
+              className="text-xs italic flex-1"
+              currentWord={node.highlightWord}
+            />
+            <IconButton
+              title={playingTarget === 'source' ? '停止朗读原文' : '朗读原文'}
+              onClick={() => handleTogglePronounce('source', node.text)}
+              className={cn(
+                'h-5 w-5 shrink-0 text-[var(--faint)] hover:text-[var(--text)] transition-colors',
+                playingTarget === 'source' && 'animate-pulse text-[var(--accent-b)]',
+              )}
+            >
+              <Volume2 className="h-3 w-3" />
+            </IconButton>
+          </div>
           <div
             className={cn(
-              'font-medium leading-relaxed',
+              'flex items-start justify-between gap-1.5 font-medium leading-relaxed group/trans',
               compact ? 'text-sm' : 'text-base',
             )}
           >
-            {node.status === 'loading' ? (
-              <span className="animate-pulse text-[var(--faint)]">Analyzing…</span>
-            ) : node.status === 'notfound' ? (
-              <span className="text-[var(--muted)]">未获得翻译。</span>
-            ) : (
-              <>
-                <InteractiveSentence
-                  sentence={node.translation}
-                  currentWord={node.highlightWord}
-                />
-                {node.status === 'streaming' && (
-                  <span className="ml-0.5 inline-block h-3.5 w-1.5 animate-pulse bg-[var(--accent-b)] align-middle" />
+            <div className="flex-1">
+              {node.status === 'loading' ? (
+                <span className="animate-pulse text-[var(--faint)]">Analyzing…</span>
+              ) : node.status === 'notfound' ? (
+                <span className="text-[var(--muted)]">未获得翻译。</span>
+              ) : (
+                <>
+                  <InteractiveSentence
+                    sentence={node.translation}
+                    currentWord={node.highlightWord}
+                  />
+                  {node.status === 'streaming' && (
+                    <span className="ml-0.5 inline-block h-3.5 w-1.5 animate-pulse bg-[var(--accent-b)] align-middle" />
+                  )}
+                </>
+              )}
+            </div>
+            {node.translation && node.status !== 'loading' && (
+              <IconButton
+                title={playingTarget === 'translation' ? '停止朗读译文' : '朗读译文'}
+                onClick={() => handleTogglePronounce('translation', node.translation)}
+                className={cn(
+                  'h-5 w-5 shrink-0 text-[var(--muted)] hover:text-[var(--accent-b)] transition-colors mt-0.5',
+                  playingTarget === 'translation' && 'animate-pulse text-[var(--accent-b)]',
                 )}
-              </>
+              >
+                <Volume2 className="h-3.5 w-3.5" />
+              </IconButton>
             )}
           </div>
 

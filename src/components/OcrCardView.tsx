@@ -16,6 +16,7 @@ import {
   X,
   Sparkles,
   ZoomIn,
+  Volume2,
 } from 'lucide-react';
 import { Button, IconButton, Surface } from './ui';
 import { InteractiveSentence } from './InteractiveSentence';
@@ -25,6 +26,7 @@ import { saveSettings } from '../store/persistence';
 import { startWindowDrag } from '../utils/drag';
 import { openSettingsWindow } from '../utils/windows';
 import { renderPicture } from '../utils/picture';
+import { isAudioPlaying, playPronunciation, stopPronunciation } from '../utils/audio';
 import { cn } from '../utils/cn';
 import type { OcrEvent, ProviderType, TranslateResult } from '../types';
 
@@ -48,6 +50,21 @@ export const OcrCardView: React.FC<{ event: OcrEvent }> = ({ event }) => {
 
   const [copiedOriginal, setCopiedOriginal] = useState(false);
   const [copiedTranslation, setCopiedTranslation] = useState(false);
+  const [playingTarget, setPlayingTarget] = useState<'original' | 'translation' | null>(null);
+
+  const togglePlay = (target: 'original' | 'translation', text: string) => {
+    if (!text?.trim()) return;
+    if (playingTarget === target && isAudioPlaying()) {
+      stopPronunciation();
+      setPlayingTarget(null);
+      return;
+    }
+    stopPronunciation();
+    setPlayingTarget(target);
+    playPronunciation(text.trim(), null, () => {
+      setPlayingTarget(null);
+    });
+  };
 
   const {
     isDragging: isZoomDragging,
@@ -71,6 +88,7 @@ export const OcrCardView: React.FC<{ event: OcrEvent }> = ({ event }) => {
 
   useEffect(() => {
     return () => {
+      stopPronunciation();
       if (copyOriginalTimerRef.current) clearTimeout(copyOriginalTimerRef.current);
       if (copyTranslationTimerRef.current) clearTimeout(copyTranslationTimerRef.current);
     };
@@ -402,24 +420,36 @@ export const OcrCardView: React.FC<{ event: OcrEvent }> = ({ event }) => {
                   点击单词即刻查词
                 </span>
               </div>
-              <Button
-                size="sm"
-                variant="subtle"
-                onClick={() => void copyOriginal()}
-                className="h-6 px-2 text-[11px]"
-              >
-                {copiedOriginal ? (
-                  <>
-                    <Check className="h-3 w-3 text-emerald-400" />
-                    已复制
-                  </>
-                ) : (
-                  <>
-                    <Copy className="h-3 w-3" />
-                    复制原文
-                  </>
-                )}
-              </Button>
+              <div className="flex items-center gap-1">
+                <Button
+                  size="sm"
+                  variant="subtle"
+                  onClick={() => togglePlay('original', event.text)}
+                  className="h-6 px-2 text-[11px]"
+                  title={playingTarget === 'original' ? '停止朗读原文' : '朗读原文'}
+                >
+                  <Volume2 className={cn('h-3 w-3', playingTarget === 'original' && 'animate-pulse text-[var(--accent-b)]')} />
+                  {playingTarget === 'original' ? '停止' : '朗读'}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="subtle"
+                  onClick={() => void copyOriginal()}
+                  className="h-6 px-2 text-[11px]"
+                >
+                  {copiedOriginal ? (
+                    <>
+                      <Check className="h-3 w-3 text-emerald-400" />
+                      已复制
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-3 w-3" />
+                      复制原文
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
 
             {/* 交互式分词句子渲染 */}
@@ -440,25 +470,38 @@ export const OcrCardView: React.FC<{ event: OcrEvent }> = ({ event }) => {
                   {provider}
                 </span>
               </div>
-              <Button
-                size="sm"
-                variant="subtle"
-                disabled={!translation || translating}
-                onClick={() => void copyTranslation()}
-                className="h-6 px-2 text-[11px]"
-              >
-                {copiedTranslation ? (
-                  <>
-                    <Check className="h-3 w-3 text-emerald-400" />
-                    已复制
-                  </>
-                ) : (
-                  <>
-                    <Copy className="h-3 w-3" />
-                    复制译文
-                  </>
-                )}
-              </Button>
+              <div className="flex items-center gap-1">
+                <Button
+                  size="sm"
+                  variant="subtle"
+                  disabled={!translation || translating}
+                  onClick={() => togglePlay('translation', translation)}
+                  className="h-6 px-2 text-[11px]"
+                  title={playingTarget === 'translation' ? '停止朗读译文' : '朗读译文'}
+                >
+                  <Volume2 className={cn('h-3 w-3', playingTarget === 'translation' && 'animate-pulse text-[var(--accent-b)]')} />
+                  {playingTarget === 'translation' ? '停止' : '朗读'}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="subtle"
+                  disabled={!translation || translating}
+                  onClick={() => void copyTranslation()}
+                  className="h-6 px-2 text-[11px]"
+                >
+                  {copiedTranslation ? (
+                    <>
+                      <Check className="h-3 w-3 text-emerald-400" />
+                      已复制
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-3 w-3" />
+                      复制译文
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
 
             {/* 译文内容 */}
