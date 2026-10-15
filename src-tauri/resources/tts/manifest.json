@@ -47,7 +47,7 @@
       "language": "en-us",
       "gender": "male",
       "bytes": 522240,
-      "sha256": "cd342ec9d00ca109a0dfc3952706a98f523e0f28a1663fb282fa40a3023c14bc",
+      "sha256": "162b035ed91cfc48b6046982184c645f72edcdd1b82843347f605d7bf7b15716",
       "urls": [
         "https://hf-mirror.com/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/voices/am_adam.bin",
         "https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/voices/am_adam.bin"
@@ -73,7 +73,7 @@
       "language": "en-gb",
       "gender": "male",
       "bytes": 522240,
-      "sha256": "55f09927e89ac0c37f83dac61fab0b9e8404990ef57d3243ebafb9a9935e1bf1",
+      "sha256": "c4b235a4c1f2cd3b939fed08b899ce9385638b763f7b73a59616c4fc9bd6c9bc",
       "urls": [
         "https://hf-mirror.com/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/voices/bm_george.bin",
         "https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/voices/bm_george.bin"
