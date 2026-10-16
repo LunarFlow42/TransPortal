@@ -94,10 +94,12 @@ interface AppState {
   ttsEngine: TtsEngine;
   ttsVoice: string;
   ttsSpeed: number;
+  openaiModels: string[];
 
   // Config actions
   setProvider: (provider: ProviderType) => void;
   setOpenaiConfig: (config: Partial<OpenAiConfig>) => void;
+  setOpenaiModels: (models: string[]) => void;
   setHotkey: (hotkey: string) => Promise<boolean>;
   setShortcut: (action: ShortcutActionId, accelerator: string) => Promise<boolean>;
   setDoubleCopyEnabled: (enabled: boolean) => Promise<boolean>;
@@ -210,6 +212,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   ttsEngine: 'kokoro_onnx',
   ttsVoice: 'af_heart',
   ttsSpeed: 1.0,
+  openaiModels: [],
 
   setOcrPictureOriginal: (ocrPictureOriginal) => set({ ocrPictureOriginal }),
   toggleOcrPictureOriginal: () => set((state) => ({ ocrPictureOriginal: !state.ocrPictureOriginal })),
@@ -218,6 +221,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setProvider: (provider) => set({ provider }),
   setOpenaiConfig: (config) =>
     set((state) => ({ openaiConfig: { ...state.openaiConfig, ...config } })),
+  setOpenaiModels: (openaiModels) => set({ openaiModels }),
   setShortcut: async (action, accelerator) => {
     try {
       await invoke('set_shortcut', { action, accelerator });

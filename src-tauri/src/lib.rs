@@ -262,6 +262,7 @@ pub fn run() {
             commands::set_ink_translate_key,
             commands::replace_captured_selection,
             commands::generate_examples,
+            commands::fetch_openai_models,
             commands::open_settings_window,
             commands::close_settings_window,
             commands::resize_and_clamp_window,

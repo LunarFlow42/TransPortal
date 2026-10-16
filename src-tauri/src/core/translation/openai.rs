@@ -140,6 +140,168 @@ impl OpenAiCompatibleProvider {
 
         Ok(content)
     }
+
+    /// Fetches and returns the available model list from the OpenAI-compatible `/models` endpoint.
+    pub async fn fetch_models(&self) -> Result<Vec<String>, ProviderError> {
+        let url = normalize_models_url(self.config.base_url.as_deref());
+        let mut request = self.client.get(&url);
+        let trimmed_key = self.config.api_key.trim();
+        if !trimmed_key.is_empty() {
+            request = request.header("Authorization", format!("Bearer {trimmed_key}"));
+        }
+
+        let response = request
+            .send()
+            .await
+            .map_err(|e| ProviderError::Execution(format!("请求模型列表网络异常: {e}")))?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let body = response.text().await.unwrap_or_default();
+            if status.as_u16() == 401 {
+                return Err(ProviderError::Auth(format!(
+                    "API Key 认证失败 (401)，请检查 API Key: {body}"
+                )));
+            }
+            if status.as_u16() == 404 {
+                return Err(ProviderError::Execution(format!(
+                    "接口返回 404，请确认 Base URL 是否正确 (通常需包含 /v1): {url}"
+                )));
+            }
+            return Err(ProviderError::Execution(format!(
+                "获取模型列表失败 ({status}): {body}"
+            )));
+        }
+
+        let json_val: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| ProviderError::Parse(format!("解析模型列表 JSON 响应失败: {e}")))?;
+
+        parse_and_sort_models(&json_val)
+    }
+}
+
+/// Normalizes the base URL into a `/models` endpoint URL.
+pub fn normalize_models_url(base_url: Option<&str>) -> String {
+    let raw = base_url.unwrap_or("https://api.openai.com/v1").trim();
+    let trimmed = raw.trim_end_matches('/');
+    if let Some(stripped) = trimmed.strip_suffix("/chat/completions") {
+        let base = stripped.trim_end_matches('/');
+        format!("{base}/models")
+    } else if trimmed.ends_with("/models") {
+        trimmed.to_string()
+    } else {
+        format!("{trimmed}/models")
+    }
+}
+
+fn model_priority_tier(name: &str) -> u8 {
+    let lower = name.to_lowercase();
+    // Non-text models get Tier 3 (bottom)
+    let is_non_text = lower.contains("embed")
+        || lower.contains("whisper")
+        || lower.contains("tts")
+        || lower.contains("dall-e")
+        || lower.contains("moderation")
+        || lower.contains("realtime")
+        || lower.contains("audio")
+        || lower.contains("babbage")
+        || lower.contains("davinci");
+
+    if is_non_text {
+        return 3;
+    }
+
+    // Mainstream chat / translation models get Tier 1 (top)
+    let is_popular_chat = lower.contains("gpt-4")
+        || lower.contains("gpt-3.5")
+        || lower.contains("o1")
+        || lower.contains("o3")
+        || lower.contains("o4")
+        || lower.contains("deepseek")
+        || lower.contains("claude")
+        || lower.contains("gemini")
+        || lower.contains("qwen")
+        || lower.contains("llama")
+        || lower.contains("mistral")
+        || lower.contains("glm")
+        || lower.contains("moonshot")
+        || lower.contains("kimi")
+        || lower.contains("gemma")
+        || lower.contains("chat");
+
+    if is_popular_chat { 1 } else { 2 }
+}
+
+pub fn sort_models(models: &mut [String]) {
+    models.sort_by(|a, b| {
+        let tier_a = model_priority_tier(a);
+        let tier_b = model_priority_tier(b);
+        if tier_a != tier_b {
+            tier_a.cmp(&tier_b)
+        } else {
+            a.to_lowercase().cmp(&b.to_lowercase())
+        }
+    });
+}
+
+/// Parses multi-format JSON responses from OpenAI or compatible endpoints,
+/// deduplicates the model IDs, and sorts them with smart priority.
+pub fn parse_and_sort_models(json_val: &serde_json::Value) -> Result<Vec<String>, ProviderError> {
+    let mut raw_models = Vec::new();
+
+    let mut extract_item = |item: &serde_json::Value| {
+        if let Some(s) = item.as_str() {
+            let s = s.trim();
+            if !s.is_empty() {
+                raw_models.push(s.to_string());
+            }
+        } else if let Some(obj) = item.as_object() {
+            if let Some(id) = obj.get("id").and_then(|v| v.as_str()) {
+                let id = id.trim();
+                if !id.is_empty() {
+                    raw_models.push(id.to_string());
+                    return;
+                }
+            }
+            if let Some(name) = obj.get("name").and_then(|v| v.as_str()) {
+                let name = name.trim();
+                if !name.is_empty() {
+                    raw_models.push(name.to_string());
+                }
+            }
+        }
+    };
+
+    if let Some(arr) = json_val.get("data").and_then(|v| v.as_array()) {
+        for item in arr {
+            extract_item(item);
+        }
+    } else if let Some(arr) = json_val.get("models").and_then(|v| v.as_array()) {
+        for item in arr {
+            extract_item(item);
+        }
+    } else if let Some(arr) = json_val.as_array() {
+        for item in arr {
+            extract_item(item);
+        }
+    }
+
+    if raw_models.is_empty() {
+        return Err(ProviderError::Parse("未找到任何可用模型 ID".to_string()));
+    }
+
+    let mut seen = std::collections::HashSet::new();
+    let mut unique_models = Vec::new();
+    for m in raw_models {
+        if seen.insert(m.clone()) {
+            unique_models.push(m);
+        }
+    }
+
+    sort_models(&mut unique_models);
+    Ok(unique_models)
 }
 
 fn natural_lang_name(tag: &str) -> &str {
@@ -364,5 +526,88 @@ mod tests {
         assert_eq!(natural_lang_name("zh-TW"), "Traditional Chinese (繁體中文)");
         assert_eq!(natural_lang_name("en"), "English");
         assert_eq!(natural_lang_name("ja"), "Japanese");
+    }
+
+    #[test]
+    fn test_normalize_models_url() {
+        assert_eq!(
+            normalize_models_url(None),
+            "https://api.openai.com/v1/models"
+        );
+        assert_eq!(
+            normalize_models_url(Some("https://api.openai.com/v1")),
+            "https://api.openai.com/v1/models"
+        );
+        assert_eq!(
+            normalize_models_url(Some("https://api.openai.com/v1/")),
+            "https://api.openai.com/v1/models"
+        );
+        assert_eq!(
+            normalize_models_url(Some("https://api.openai.com/v1/chat/completions")),
+            "https://api.openai.com/v1/models"
+        );
+        assert_eq!(
+            normalize_models_url(Some("https://api.openai.com/v1/chat/completions/")),
+            "https://api.openai.com/v1/models"
+        );
+        assert_eq!(
+            normalize_models_url(Some("https://api.deepseek.com")),
+            "https://api.deepseek.com/models"
+        );
+        assert_eq!(
+            normalize_models_url(Some("https://openrouter.ai/api/v1")),
+            "https://openrouter.ai/api/v1/models"
+        );
+        assert_eq!(
+            normalize_models_url(Some("http://127.0.0.1:11434/v1")),
+            "http://127.0.0.1:11434/v1/models"
+        );
+        assert_eq!(
+            normalize_models_url(Some("https://api.openai.com/v1/models")),
+            "https://api.openai.com/v1/models"
+        );
+    }
+
+    #[test]
+    fn test_parse_and_sort_models() {
+        let json_data = serde_json::json!({
+            "object": "list",
+            "data": [
+                { "id": "text-embedding-3-small" },
+                { "id": "whisper-1" },
+                { "id": "gpt-4o" },
+                { "id": "gpt-4o-mini" },
+                { "id": "deepseek-chat" },
+                { "id": "custom-domain-model" }
+            ]
+        });
+
+        let models = parse_and_sort_models(&json_data).expect("should parse successfully");
+        assert_eq!(
+            models,
+            vec![
+                "deepseek-chat",
+                "gpt-4o",
+                "gpt-4o-mini",
+                "custom-domain-model",
+                "text-embedding-3-small",
+                "whisper-1"
+            ]
+        );
+
+        // Test compatible format with `models` array and `name` field (e.g. Ollama)
+        let ollama_json = serde_json::json!({
+            "models": [
+                { "name": "llama3:latest" },
+                { "name": "qwen2.5:7b" },
+                { "name": "nomic-embed-text" }
+            ]
+        });
+        let ollama_models =
+            parse_and_sort_models(&ollama_json).expect("should parse ollama response");
+        assert_eq!(
+            ollama_models,
+            vec!["llama3:latest", "qwen2.5:7b", "nomic-embed-text"]
+        );
     }
 }

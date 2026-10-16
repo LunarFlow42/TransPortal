@@ -475,6 +475,13 @@ pub async fn generate_examples(
     crate::core::dictionary::examples::generate(&word, openai_config).await
 }
 
+/// Fetch the list of available models from an OpenAI-compatible endpoint.
+#[tauri::command]
+pub async fn fetch_openai_models(config: OpenAiConfig) -> Result<Vec<String>, String> {
+    let provider = crate::core::translation::openai::OpenAiCompatibleProvider::new(config);
+    provider.fetch_models().await.map_err(|e| e.to_string())
+}
+
 use std::sync::atomic::{AtomicBool, Ordering};
 
 pub static SHELL_RESUME_AFTER_SETTINGS: AtomicBool = AtomicBool::new(false);

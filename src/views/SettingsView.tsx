@@ -38,6 +38,7 @@ import { IntegrityPanel } from '../components/IntegrityPanel';
 import { MemorySettingsPanel } from '../components/MemorySettingsPanel';
 import { CaptureDiagnosticsPanel } from '../components/CaptureDiagnosticsPanel';
 import { ResizeHandles } from '../components/ResizeHandles';
+import { OpenaiModelSelect } from '../components/OpenaiModelSelect';
 import { Button, IconButton, Input, SavedBadge, Section, Select, Surface, Switch } from '../components/ui';
 import { cn } from '../utils/cn';
 import type { ProviderType, ShortcutActionId, ThemeMode } from '../types';
@@ -605,15 +606,11 @@ export const SettingsView: React.FC = () => {
                         placeholder="sk-..."
                       />
                     </div>
-                    <div className="flex items-center gap-3">
-                      <label className="w-24 shrink-0 text-[13px] text-[var(--muted)]">Model</label>
-                      <Input
-                        type="text"
-                        value={openaiConfig.model || ''}
-                        onChange={(e) => setOpenaiConfig({ model: e.target.value })}
-                        placeholder="gpt-4o-mini"
-                      />
-                    </div>
+                    <OpenaiModelSelect
+                      value={openaiConfig.model || ''}
+                      onChange={(model) => setOpenaiConfig({ model })}
+                      config={openaiConfig}
+                    />
                   </>
                 ) : (
                   <p className="text-[10px] text-[var(--faint)]">
