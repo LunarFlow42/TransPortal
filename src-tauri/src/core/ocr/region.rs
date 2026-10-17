@@ -29,6 +29,7 @@ pub enum RegionPurpose {
     Picture,
     Card,
     Silent,
+    Search,
     Monitor,
 }
 
@@ -36,7 +37,7 @@ impl RegionPurpose {
     pub fn is_snip(self) -> bool {
         matches!(
             self,
-            Self::Text | Self::Translate | Self::Picture | Self::Card | Self::Silent
+            Self::Text | Self::Translate | Self::Picture | Self::Card | Self::Silent | Self::Search
         )
     }
 }
@@ -48,6 +49,7 @@ impl From<OcrMode> for RegionPurpose {
             OcrMode::Picture => Self::Picture,
             OcrMode::Card => Self::Card,
             OcrMode::Silent => Self::Silent,
+            OcrMode::Search => Self::Search,
         }
     }
 }
@@ -454,7 +456,8 @@ pub fn confirm(app: &AppHandle, id: u64, region: ScreenRect) -> Result<(), Strin
         | RegionPurpose::Translate
         | RegionPurpose::Picture
         | RegionPurpose::Card
-        | RegionPurpose::Silent => {
+        | RegionPurpose::Silent
+        | RegionPurpose::Search => {
             app.state::<super::OcrService>()
                 .finish_capture(app, confirmed);
             Ok(())
@@ -477,7 +480,8 @@ pub fn cancel(app: &AppHandle, id: Option<u64>) {
             | RegionPurpose::Translate
             | RegionPurpose::Picture
             | RegionPurpose::Card
-            | RegionPurpose::Silent,
+            | RegionPurpose::Silent
+            | RegionPurpose::Search,
             _,
         )) => {
             app.state::<super::OcrService>().cancel(app);

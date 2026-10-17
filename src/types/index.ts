@@ -134,13 +134,14 @@ export interface CaptureOutcome {
   bounds?: SelectionBounds | null;
 }
 
-export type OcrMode = 'text' | 'picture' | 'card' | 'silent' | 'translate';
+export type OcrMode = 'text' | 'picture' | 'card' | 'silent' | 'translate' | 'search';
 
 export type ShortcutActionId =
   | 'selection'
   | 'ocr_card'
   | 'ocr_picture'
   | 'ocr_text'
+  | 'ocr_search'
   | 'double_copy'
   | 'replace_selection'
   | 'silent_ocr'
@@ -214,7 +215,7 @@ export interface PictureTranslation {
 }
 
 export interface ScreenRect { x: number; y: number; width: number; height: number }
-export type RegionPurpose = 'text' | 'translate' | 'picture' | 'card' | 'silent' | 'monitor';
+export type RegionPurpose = 'text' | 'translate' | 'picture' | 'card' | 'silent' | 'search' | 'monitor';
 export interface RegionSelection { id: number; purpose: RegionPurpose; bounds: ScreenRect; image_data_url?: string | null }
 export interface MonitorUpdate {
   id: number;
@@ -289,6 +290,8 @@ export interface PersistedSettings {
   ocrCardHotkey?: string;
   ocrPictureHotkey?: string;
   ocrTextHotkey?: string;
+  ocrSearchHotkey?: string;
+  searchEngine?: 'auto' | 'bing' | 'google' | 'baidu' | string;
   replaceSelectionHotkey?: string;
   silentOcrHotkey?: string;
   inputTranslateHotkey?: string;

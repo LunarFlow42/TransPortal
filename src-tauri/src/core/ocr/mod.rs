@@ -23,6 +23,7 @@ pub enum OcrMode {
     Picture,
     Card,
     Silent,
+    Search,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]

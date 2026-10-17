@@ -24,7 +24,8 @@ pub enum ShortcutAction {
     OcrCard,
     #[serde(alias = "ocr_translate")]
     OcrPicture,
-    OcrText,
+    #[serde(alias = "ocr_text")]
+    OcrSearch,
     DoubleCopy,
     ReplaceSelection,
     SilentOcr,
@@ -35,7 +36,7 @@ const ACTIONS: [ShortcutAction; 8] = [
     ShortcutAction::Selection,
     ShortcutAction::OcrCard,
     ShortcutAction::OcrPicture,
-    ShortcutAction::OcrText,
+    ShortcutAction::OcrSearch,
     ShortcutAction::DoubleCopy,
     ShortcutAction::ReplaceSelection,
     ShortcutAction::SilentOcr,
@@ -48,7 +49,7 @@ impl ShortcutAction {
             Self::Selection => "selection",
             Self::OcrCard => "ocr_card",
             Self::OcrPicture => "ocr_picture",
-            Self::OcrText => "ocr_text",
+            Self::OcrSearch => "ocr_search",
             Self::DoubleCopy => "double_copy",
             Self::ReplaceSelection => "replace_selection",
             Self::SilentOcr => "silent_ocr",
@@ -60,7 +61,7 @@ impl ShortcutAction {
             Self::Selection => "划词查询",
             Self::OcrCard => "截图对照翻译",
             Self::OcrPicture => "原图直接翻译",
-            Self::OcrText => "提取文字",
+            Self::OcrSearch => "截图搜索",
             Self::DoubleCopy => "快捷翻译",
             Self::ReplaceSelection => "替换翻译",
             Self::SilentOcr => "静默 OCR",
@@ -76,7 +77,8 @@ pub struct ShortcutConfig {
     pub ocr_card: String,
     #[serde(alias = "ocr_translate")]
     pub ocr_picture: String,
-    pub ocr_text: String,
+    #[serde(alias = "ocr_text")]
+    pub ocr_search: String,
     pub double_copy: String,
     pub replace_selection: String,
     pub silent_ocr: String,
@@ -88,7 +90,7 @@ impl Default for ShortcutConfig {
             selection: "Alt+Q".into(),
             ocr_card: "Alt+Shift+X".into(),
             ocr_picture: "Alt+S".into(),
-            ocr_text: "Alt+Shift+S".into(),
+            ocr_search: "Alt+Shift+S".into(),
             double_copy: "Ctrl+C+C".into(),
             replace_selection: "Alt+Z".into(),
             silent_ocr: "Alt+Shift+C".into(),
@@ -102,7 +104,7 @@ impl ShortcutConfig {
             ShortcutAction::Selection => &self.selection,
             ShortcutAction::OcrCard => &self.ocr_card,
             ShortcutAction::OcrPicture => &self.ocr_picture,
-            ShortcutAction::OcrText => &self.ocr_text,
+            ShortcutAction::OcrSearch => &self.ocr_search,
             ShortcutAction::DoubleCopy => &self.double_copy,
             ShortcutAction::ReplaceSelection => &self.replace_selection,
             ShortcutAction::SilentOcr => &self.silent_ocr,
@@ -205,7 +207,7 @@ fn parse_binding(action: ShortcutAction, accelerator: &str) -> Result<Option<Bin
     if shortcut == Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::KeyS) {
         return if matches!(
             action,
-            ShortcutAction::OcrText
+            ShortcutAction::OcrSearch
                 | ShortcutAction::OcrPicture
                 | ShortcutAction::OcrCard
                 | ShortcutAction::SilentOcr
@@ -233,7 +235,7 @@ fn supported_with(capabilities: Capabilities, action: ShortcutAction) -> bool {
         ShortcutAction::Selection | ShortcutAction::InputTranslate => true,
         ShortcutAction::DoubleCopy => capabilities.keyboard_gestures,
         ShortcutAction::ReplaceSelection => capabilities.selection_replace,
-        ShortcutAction::OcrText
+        ShortcutAction::OcrSearch
         | ShortcutAction::OcrPicture
         | ShortcutAction::OcrCard
         | ShortcutAction::SilentOcr => capabilities.screen_capture,
@@ -472,12 +474,12 @@ fn trigger(app: &AppHandle, action: ShortcutAction) {
         ShortcutAction::InputTranslate => {
             on_input_translate(app);
         }
-        ShortcutAction::OcrText
+        ShortcutAction::OcrSearch
         | ShortcutAction::OcrPicture
         | ShortcutAction::OcrCard
         | ShortcutAction::SilentOcr => {
             let mode = match action {
-                ShortcutAction::OcrText => OcrMode::Text,
+                ShortcutAction::OcrSearch => OcrMode::Search,
                 ShortcutAction::OcrPicture => OcrMode::Picture,
                 ShortcutAction::OcrCard => OcrMode::Card,
                 ShortcutAction::SilentOcr => OcrMode::Silent,
@@ -654,6 +656,7 @@ pub fn on_system_snip(app: &AppHandle, revision: u32) {
         let mode = match action {
             ShortcutAction::OcrCard => OcrMode::Card,
             ShortcutAction::OcrPicture => OcrMode::Picture,
+            ShortcutAction::OcrSearch => OcrMode::Search,
             _ => OcrMode::Text,
         };
         let service = app.state::<OcrService>();

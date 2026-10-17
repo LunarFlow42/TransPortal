@@ -586,7 +586,7 @@ impl OcrService {
     }
 
     fn publish(&self, app: &AppHandle, event: OcrEvent, show: bool) {
-        let foreground = if event.mode == OcrMode::Silent
+        let foreground = if (event.mode == OcrMode::Silent || event.mode == OcrMode::Search)
             && matches!(
                 event.stage,
                 OcrStage::Ready | OcrStage::Error | OcrStage::Cancelled
@@ -602,7 +602,7 @@ impl OcrService {
             return;
         }
         let _ = app.emit_to("shell", OCR_EVENT, &event);
-        if show && event.mode != OcrMode::Silent {
+        if show && event.mode != OcrMode::Silent && event.mode != OcrMode::Search {
             Self::update_window(app, &event);
         }
     }
@@ -635,6 +635,13 @@ impl OcrService {
         let foreground = self.sessions.lock().unwrap().foreground.take();
         if let Some(hwnd) = foreground {
             PlatformWindow::restore_foreground_window(hwnd);
+        }
+        if event.mode == OcrMode::Search {
+            let _ = app.emit_to(
+                "shell",
+                "transportal://notice",
+                "未识别到文字，请重新框选。",
+            );
         }
         event.stage = OcrStage::Error;
         event.error = Some(error);
@@ -753,6 +760,67 @@ fn recognize_with_chinese_retry(
     Ok(result)
 }
 
+pub fn percent_encode(input: &str) -> String {
+    let mut encoded = String::new();
+    for byte in input.as_bytes() {
+        match *byte {
+            b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                encoded.push(*byte as char);
+            }
+            b' ' => encoded.push('+'),
+            other => {
+                use std::fmt::Write;
+                let _ = write!(encoded, "%{:02X}", other);
+            }
+        }
+    }
+    encoded
+}
+
+pub fn build_search_url(app: &AppHandle, query: &str) -> String {
+    use tauri_plugin_store::StoreExt;
+    let (engine, target_lang) = if let Ok(store) = app.store("settings.json") {
+        let engine = store
+            .get("searchEngine")
+            .and_then(|v| v.as_str().map(String::from));
+        let lang = store
+            .get("targetLanguage")
+            .and_then(|v| v.as_str().map(String::from));
+        (engine, lang)
+    } else {
+        (None, None)
+    };
+
+    let encoded_query = percent_encode(query.trim());
+    let engine = engine.as_deref().unwrap_or("auto");
+
+    match engine {
+        "bing" => format!("https://www.bing.com/search?q={encoded_query}"),
+        "google" => format!("https://www.google.com/search?q={encoded_query}"),
+        "baidu" => format!("https://www.baidu.com/s?wd={encoded_query}"),
+        custom if custom.contains("%s") => custom.replace("%s", &encoded_query),
+        custom if custom.starts_with("http://") || custom.starts_with("https://") => {
+            format!("{custom}{encoded_query}")
+        }
+        _ => {
+            let is_zh = target_lang
+                .as_deref()
+                .map(|l| l.to_ascii_lowercase().starts_with("zh"))
+                .unwrap_or_else(|| {
+                    std::env::var("LANG")
+                        .or_else(|_| std::env::var("LC_ALL"))
+                        .map(|v| v.to_ascii_lowercase().contains("zh"))
+                        .unwrap_or(true)
+                });
+            if is_zh {
+                format!("https://www.bing.com/search?q={encoded_query}")
+            } else {
+                format!("https://www.google.com/search?q={encoded_query}")
+            }
+        }
+    }
+}
+
 impl OcrService {
     fn recognize_image(
         &self,
@@ -786,8 +854,11 @@ impl OcrService {
             if !sessions.is_current(event.id) {
                 return Ok(());
             }
-            if event.mode == OcrMode::Text || event.mode == OcrMode::Silent {
-                if event.mode == OcrMode::Silent {
+            if event.mode == OcrMode::Text
+                || event.mode == OcrMode::Silent
+                || event.mode == OcrMode::Search
+            {
+                if event.mode == OcrMode::Silent || event.mode == OcrMode::Search {
                     let _ = app.clipboard().write_text(event.text.clone());
                     event.copied = true;
                 } else if image_revision != 0 && self.clipboard.revision() == image_revision {
@@ -806,8 +877,27 @@ impl OcrService {
                     });
                 }
             }
+            if event.mode == OcrMode::Search {
+                let clean_query = event
+                    .text
+                    .lines()
+                    .map(str::trim)
+                    .filter(|line| !line.is_empty())
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                let url = build_search_url(app, &clean_query);
+                use tauri_plugin_opener::OpenerExt;
+                if let Err(error) = app.opener().open_url(&url, None::<&str>) {
+                    eprintln!("[ocr_search] Failed to open search url: {error}");
+                    let _ = app.emit_to(
+                        "shell",
+                        "transportal://notice",
+                        format!("打开搜索失败：{error}"),
+                    );
+                }
+            }
             sessions.update(event.clone());
-            if event.mode == OcrMode::Silent {
+            if event.mode == OcrMode::Silent || event.mode == OcrMode::Search {
                 sessions.foreground.take()
             } else {
                 None
@@ -825,7 +915,7 @@ impl OcrService {
             event.elapsed_ms.unwrap_or(0)
         );
         let _ = app.emit_to("shell", OCR_EVENT, &event);
-        if event.mode != OcrMode::Silent {
+        if event.mode != OcrMode::Silent && event.mode != OcrMode::Search {
             Self::update_window(app, &event);
         }
         Ok(())
@@ -979,5 +1069,23 @@ mod tests {
         };
         let result = recognize_with_chinese_retry(&engine, image, Some("zh-Hans-CN")).unwrap();
         assert!(result.text.is_empty());
+    }
+
+    #[test]
+    fn test_percent_encode() {
+        assert_eq!(percent_encode("hello world"), "hello+world");
+        assert_eq!(percent_encode("rust & c++"), "rust+%26+c%2B%2B");
+        assert_eq!(
+            percent_encode("中文 搜索"),
+            "%E4%B8%AD%E6%96%87+%E6%90%9C%E7%B4%A2"
+        );
+    }
+
+    #[test]
+    fn search_mode_can_begin_and_update() {
+        let mut state = SessionState::default();
+        let event = state.begin(OcrMode::Search, "windows").unwrap();
+        assert_eq!(event.mode, OcrMode::Search);
+        assert_eq!(event.stage, OcrStage::Capturing);
     }
 }

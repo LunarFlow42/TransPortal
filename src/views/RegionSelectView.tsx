@@ -7,6 +7,7 @@ import type { RegionPurpose, RegionSelection, ScreenRect } from '../types';
 const HINTS: Record<RegionPurpose, string> = {
   text: '拖动框选要提取的文字 · 松开鼠标开始识别 · 右键或 Esc 取消',
   silent: '拖动框选静默提取文字 · 松开鼠标识别并复制 · 右键或 Esc 取消',
+  search: '拖动框选要搜索的内容 · 松开鼠标识别并在浏览器中搜索 · 右键或 Esc 取消',
   translate: '拖动框选要翻译的文字 · 松开鼠标开始识别 · 右键或 Esc 取消',
   picture: '拖动框选原图覆盖翻译区域 · 松开鼠标开始识别 · 右键或 Esc 取消',
   card: '拖动框选图文对照翻译区域 · 松开鼠标开始识别 · 右键或 Esc 取消',
@@ -16,6 +17,7 @@ const HINTS: Record<RegionPurpose, string> = {
 const BUSY: Record<RegionPurpose, string> = {
   text: '正在识别…',
   silent: '正在后台识别并写入剪贴板…',
+  search: '正在识别并打开浏览器搜索…',
   translate: '正在识别…',
   picture: '正在识别并准备原位翻译…',
   card: '正在识别并准备对照翻译…',

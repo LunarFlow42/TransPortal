@@ -47,6 +47,8 @@ export async function loadSettings(): Promise<Partial<PersistedSettings>> {
     ttsEngine,
     ttsVoice,
     ttsSpeed,
+    ocrSearchHotkey,
+    searchEngine,
   ] = await Promise.all([
     store.get<PersistedSettings['provider']>('provider'),
     store.get<PersistedSettings['openaiConfig']>('openaiConfig'),
@@ -76,6 +78,8 @@ export async function loadSettings(): Promise<Partial<PersistedSettings>> {
     store.get<PersistedSettings['ttsEngine']>('ttsEngine'),
     store.get<PersistedSettings['ttsVoice']>('ttsVoice'),
     store.get<PersistedSettings['ttsSpeed']>('ttsSpeed'),
+    store.get<PersistedSettings['ocrSearchHotkey']>('ocrSearchHotkey'),
+    store.get<PersistedSettings['searchEngine']>('searchEngine'),
   ]);
 
   return {
@@ -85,6 +89,8 @@ export async function loadSettings(): Promise<Partial<PersistedSettings>> {
     ocrCardHotkey,
     ocrPictureHotkey,
     ocrTextHotkey,
+    ocrSearchHotkey: ocrSearchHotkey ?? ocrTextHotkey,
+    searchEngine: searchEngine ?? 'auto',
     replaceSelectionHotkey,
     silentOcrHotkey,
     inputTranslateHotkey,

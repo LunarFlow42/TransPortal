@@ -69,6 +69,8 @@ interface AppState {
   ocrCardHotkey: string;
   ocrPictureHotkey: string;
   ocrTextHotkey: string;
+  ocrSearchHotkey: string;
+  searchEngine: string;
   replaceSelectionHotkey: string;
   silentOcrHotkey: string;
   inputTranslateHotkey: string;
@@ -121,6 +123,7 @@ interface AppState {
   benchmarkOcr: () => Promise<number>;
   setTheme: (theme: ThemeMode) => void;
   setOverlayOpacity: (opacity: number) => void;
+  setSearchEngine: (searchEngine: string) => void;
   setSmoothTransitions: (enabled: boolean) => void;
   togglePinned: () => void;
   hydrate: (settings: Partial<PersistedSettings>) => void;
@@ -187,6 +190,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   ocrCardHotkey: 'Alt+Shift+X',
   ocrPictureHotkey: 'Alt+S',
   ocrTextHotkey: 'Alt+Shift+S',
+  ocrSearchHotkey: 'Alt+Shift+S',
+  searchEngine: 'auto',
   replaceSelectionHotkey: 'Alt+Z',
   silentOcrHotkey: 'Alt+Shift+C',
   inputTranslateHotkey: 'Alt+Space',
@@ -217,6 +222,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setOcrPictureOriginal: (ocrPictureOriginal) => set({ ocrPictureOriginal }),
   toggleOcrPictureOriginal: () => set((state) => ({ ocrPictureOriginal: !state.ocrPictureOriginal })),
   setOcrPictureDefaultView: (ocrPictureDefaultView) => set({ ocrPictureDefaultView }),
+  setSearchEngine: (searchEngine) => set({ searchEngine }),
 
   setProvider: (provider) => set({ provider }),
   setOpenaiConfig: (config) =>
@@ -229,7 +235,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (action === 'selection') patch.hotkey = accelerator;
       else if (action === 'ocr_card') patch.ocrCardHotkey = accelerator;
       else if (action === 'ocr_picture' || action === 'ocr_translate') patch.ocrPictureHotkey = accelerator;
-      else if (action === 'ocr_text') patch.ocrTextHotkey = accelerator;
+      else if (action === 'ocr_search' || action === 'ocr_text') {
+        patch.ocrSearchHotkey = accelerator;
+        patch.ocrTextHotkey = accelerator;
+      }
       else if (action === 'replace_selection') patch.replaceSelectionHotkey = accelerator;
       else if (action === 'silent_ocr') patch.silentOcrHotkey = accelerator;
       else if (action === 'input_translate') patch.inputTranslateHotkey = accelerator;
@@ -379,6 +388,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       ocrCardHotkey: settings.ocrCardHotkey ?? state.ocrCardHotkey,
       ocrPictureHotkey: settings.ocrPictureHotkey ?? state.ocrPictureHotkey,
       ocrTextHotkey: settings.ocrTextHotkey ?? state.ocrTextHotkey,
+      ocrSearchHotkey: settings.ocrSearchHotkey ?? settings.ocrTextHotkey ?? state.ocrSearchHotkey,
+      searchEngine: settings.searchEngine ?? state.searchEngine,
       replaceSelectionHotkey: settings.replaceSelectionHotkey ?? state.replaceSelectionHotkey,
       silentOcrHotkey: settings.silentOcrHotkey ?? state.silentOcrHotkey,
       inputTranslateHotkey: settings.inputTranslateHotkey ?? state.inputTranslateHotkey,
@@ -409,6 +420,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       ocrCardHotkey: 'Alt+Shift+X',
       ocrPictureHotkey: 'Alt+S',
       ocrTextHotkey: 'Alt+Shift+S',
+      ocrSearchHotkey: 'Alt+Shift+S',
+      searchEngine: 'auto',
       replaceSelectionHotkey: 'Alt+Z',
       silentOcrHotkey: 'Alt+Shift+C',
       inputTranslateHotkey: 'Alt+Space',
@@ -437,7 +450,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       invoke('set_shortcut', { action: 'selection', accelerator: defaults.hotkey }),
       invoke('set_shortcut', { action: 'ocr_card', accelerator: defaults.ocrCardHotkey }),
       invoke('set_shortcut', { action: 'ocr_picture', accelerator: defaults.ocrPictureHotkey }),
-      invoke('set_shortcut', { action: 'ocr_text', accelerator: defaults.ocrTextHotkey }),
+      invoke('set_shortcut', { action: 'ocr_search', accelerator: defaults.ocrSearchHotkey }),
       invoke('set_shortcut', { action: 'replace_selection', accelerator: defaults.replaceSelectionHotkey }),
       invoke('set_shortcut', { action: 'silent_ocr', accelerator: defaults.silentOcrHotkey }),
       invoke('set_shortcut', { action: 'input_translate', accelerator: defaults.inputTranslateHotkey }),

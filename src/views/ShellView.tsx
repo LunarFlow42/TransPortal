@@ -6,7 +6,6 @@ import {
   CornerDownLeft,
   ImagePlus,
   Languages,
-  ScanText,
   Search,
   Settings,
   Monitor,
@@ -429,7 +428,8 @@ export const ShellView: React.FC = () => {
   }, [showShortcutNotice, issueKey]);
 
   const hotkeyParts = hotkey.split('+');
-  const shortcutKey = (id: string) => shortcuts.report?.shortcuts.find((shortcut) => shortcut.id === id)?.active;
+  const shortcutKey = (id: string) =>
+    shortcuts.report?.shortcuts.find((shortcut) => shortcut.id === id || (id === 'ocr_search' && shortcut.id === 'ocr_text'))?.active;
   const withKey = (label: string, id: string) => {
     const key = shortcutKey(id);
     return key ? `${key}：${label}` : label;
@@ -610,11 +610,11 @@ export const ShellView: React.FC = () => {
                   </Button>
                   <Button
                     size="sm"
-                    title={withKey('框选屏幕文字，识别后复制', 'ocr_text')}
+                    title={withKey('框选屏幕文字，自动在默认浏览器中搜索', 'ocr_search')}
                     disabled={!ocrStatus.engine.available}
-                    onClick={() => void startOcr('text')}
+                    onClick={() => void startOcr('search')}
                   >
-                    <ScanText className="h-3.5 w-3.5" />提取文字
+                    <Search className="h-3.5 w-3.5" />截图搜索
                   </Button>
                 </div>
               )}

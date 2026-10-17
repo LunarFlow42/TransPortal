@@ -77,6 +77,14 @@ const INK_KEY_OPTIONS = [
   { value: 'CapsLock', label: 'Caps Lock 大写锁定' },
 ];
 
+const SEARCH_ENGINE_OPTIONS = [
+  { value: 'auto', label: '自动智能选择 (中文必应 / 英文谷歌)' },
+  { value: 'bing', label: '必应 Bing (免翻墙直连)' },
+  { value: 'google', label: '谷歌 Google' },
+  { value: 'baidu', label: '百度 搜索' },
+  { value: 'custom', label: '自定义搜索引擎 URL' },
+];
+
 const SHORTCUT_ITEMS: {
   id: ShortcutActionId;
   label: string;
@@ -103,9 +111,9 @@ const SHORTCUT_ITEMS: {
     description: '框选屏幕图像，在原图文字位置覆盖译文',
   },
   {
-    id: 'ocr_text',
-    label: '提取文字',
-    description: '框选屏幕文字，识别后自动复制到剪贴板',
+    id: 'ocr_search',
+    label: '截图搜索',
+    description: '框选屏幕文字，自动在默认浏览器中搜索，并复制文本到剪贴板',
   },
   {
     id: 'silent_ocr',
@@ -155,6 +163,9 @@ export const SettingsView: React.FC = () => {
     ocrCardHotkey,
     ocrPictureHotkey,
     ocrTextHotkey,
+    ocrSearchHotkey,
+    searchEngine,
+    setSearchEngine,
     replaceSelectionHotkey,
     silentOcrHotkey,
     inputTranslateHotkey,
@@ -223,6 +234,7 @@ export const SettingsView: React.FC = () => {
     inkTranslateKey,
     doubleCopyEnabled,
     clipboardMonitorEnabled,
+    searchEngine,
     ttsEngine,
     ttsVoice,
     ttsSpeed,
@@ -282,8 +294,9 @@ export const SettingsView: React.FC = () => {
         return ocrCardHotkey;
       case 'ocr_picture':
         return ocrPictureHotkey;
+      case 'ocr_search':
       case 'ocr_text':
-        return ocrTextHotkey;
+        return ocrSearchHotkey || ocrTextHotkey;
       case 'silent_ocr':
         return silentOcrHotkey;
       case 'input_translate':
@@ -328,8 +341,9 @@ export const SettingsView: React.FC = () => {
   const matchAppearance = isSearching && isMatch(['appearance', '外观', '界面', 'theme', '主题', 'opacity', '透明度', '动效', '动画', '过渡', '平滑', 'transition', 'animation', 'font', '字号', 'crosshairs', '对齐']);
   const matchStartup = isSearching && isMatch(['startup', '开机启动', '自启', 'launch']);
   const matchProvider = isSearching && isMatch(['provider', '翻译', 'engine', 'openai', 'youdao', 'google', 'tencent', 'target', '语言', '有道', '腾讯', 'bing', '微软']);
+  const matchSearchEngine = isSearching && isMatch(['search', '搜索', '搜索引擎', 'google', 'bing', 'baidu', '百度', '必应', '谷歌', '网页搜索']);
   const matchOcr = isSearching && isMatch(['ocr', '文字识别', 'windows ocr', 'onnx', 'paddle', '语言', '引擎', '原图', '译图', '图片展示', '覆写']);
-  const matchShortcuts = isSearching && isMatch(['global', 'shortcuts', '全局', '快捷键', '热键', '划词', '替换', 'ocr', '截图', '提取文字', '静默', '输入翻译']);
+  const matchShortcuts = isSearching && isMatch(['global', 'shortcuts', '全局', '快捷键', '热键', '划词', '替换', 'ocr', '截图', '截图搜索', '静默', '输入翻译']);
   const matchGestures = isSearching && isMatch(['gestures', 'monitoring', '手势', '监听', '落墨', '划选', '复制', 'ctrl+c+c', '剪贴板', 'clipboard', 'ink']);
   const matchDict = isSearching && isMatch(['dictionary', '词典', '发音', 'audio', 'pronounce', 'ecdict']);
   const matchTts = isSearching && isMatch(['tts', '语音', '发音', '朗读', 'speech', 'kokoro', '声音', '音色']);
@@ -343,6 +357,7 @@ export const SettingsView: React.FC = () => {
     matchAppearance ||
     matchStartup ||
     matchProvider ||
+    matchSearchEngine ||
     matchOcr ||
     matchDict ||
     matchTts ||
@@ -616,6 +631,49 @@ export const SettingsView: React.FC = () => {
                   <p className="text-[10px] text-[var(--faint)]">
                     免密钥接口，开箱即用；Bing / Google / 有道 / 腾讯 均支持自动识别源语言。
                   </p>
+                )}
+              </Surface>
+            </Section>
+          )}
+
+          {/* 网页搜索引擎 */}
+          {(isSearching ? matchSearchEngine : activeTab === 'translation') && (
+            <Section label="Web Search 网页搜索引擎" icon={<Search className="h-3.5 w-3.5" />}>
+              <Surface variant="inner" className="flex flex-col gap-2.5 p-3">
+                <div className="flex items-center gap-3">
+                  <label className="w-24 shrink-0 text-[13px] text-[var(--muted)]">默认引擎</label>
+                  <Select
+                    ariaLabel="Web search engine"
+                    value={['auto', 'bing', 'google', 'baidu'].includes(searchEngine) ? searchEngine : 'custom'}
+                    onChange={(value) => {
+                      if (value === 'custom') {
+                        const fallbackCustom = 'https://duckduckgo.com/?q=%s';
+                        setSearchEngine(fallbackCustom);
+                        void saveSettings({ searchEngine: fallbackCustom });
+                      } else {
+                        setSearchEngine(value);
+                        void saveSettings({ searchEngine: value });
+                      }
+                    }}
+                    options={SEARCH_ENGINE_OPTIONS}
+                  />
+                </div>
+                <p className="text-[10px] text-[var(--faint)]">
+                  用于「截图搜索」(Alt+Shift+S)。默认“自动”将根据系统语言智能选择（中文使用必应免翻墙直连，海外/英文系统使用谷歌）。
+                </p>
+                {!['auto', 'bing', 'google', 'baidu'].includes(searchEngine) && (
+                  <div className="flex items-center gap-3 pt-1">
+                    <label className="w-24 shrink-0 text-[13px] text-[var(--muted)]">URL 模板</label>
+                    <Input
+                      type="text"
+                      value={searchEngine}
+                      onChange={(e) => {
+                        setSearchEngine(e.target.value);
+                        void saveSettings({ searchEngine: e.target.value });
+                      }}
+                      placeholder="https://duckduckgo.com/?q=%s"
+                    />
+                  </div>
                 )}
               </Surface>
             </Section>
