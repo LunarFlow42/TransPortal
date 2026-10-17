@@ -30,4 +30,29 @@ impl SystemOps for WindowsSystem {
             );
         }
     }
+
+    fn system_language() -> String {
+        let lang_id = unsafe { GetUserDefaultUILanguage() };
+        // Primary language 0x04 is LANG_CHINESE (Simplified, Traditional, etc.)
+        if (lang_id & 0x03FF) == 0x04 {
+            return "zh-CN".to_string();
+        }
+        // Primary language 0x09 is LANG_ENGLISH
+        if (lang_id & 0x03FF) == 0x09 {
+            return "en-US".to_string();
+        }
+        let mut buffer = [0u16; 85];
+        let len = unsafe { GetUserDefaultLocaleName(buffer.as_mut_ptr(), buffer.len() as i32) };
+        if len > 1 {
+            String::from_utf16_lossy(&buffer[..(len as usize - 1)])
+        } else {
+            "en-US".to_string()
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+unsafe extern "system" {
+    fn GetUserDefaultUILanguage() -> u16;
+    fn GetUserDefaultLocaleName(lpLocaleName: *mut u16, cchLocaleName: i32) -> i32;
 }

@@ -197,6 +197,11 @@ impl SystemOps for UnsupportedSystem {
     fn show_fatal_error(_title: &str, message: &str) {
         eprintln!("{message}");
     }
+    fn system_language() -> String {
+        std::env::var("LANG")
+            .or_else(|_| std::env::var("LC_ALL"))
+            .unwrap_or_else(|_| "en-US".to_string())
+    }
 }
 
 fn get_memory_usage() -> Result<MemoryReport, String> {

@@ -37,6 +37,9 @@ pub trait SystemOps {
 
     /// Report an error that ends the app, before any window exists.
     fn show_fatal_error(title: &str, message: &str);
+
+    /// BCP-47 tag of the system/user display language (e.g. "en-US", "zh-CN").
+    fn system_language() -> String;
 }
 
 #[cfg(test)]
@@ -56,5 +59,11 @@ mod tests {
         let result = PlatformSystem::trim_memory().expect("failed to trim memory");
         assert!(result.before_bytes > 0);
         assert!(result.after_bytes > 0);
+    }
+
+    #[test]
+    fn test_system_language() {
+        let lang = PlatformSystem::system_language();
+        assert!(!lang.is_empty());
     }
 }

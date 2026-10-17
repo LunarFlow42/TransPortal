@@ -777,22 +777,9 @@ pub fn percent_encode(input: &str) -> String {
     encoded
 }
 
-pub fn build_search_url(app: &AppHandle, query: &str) -> String {
-    use tauri_plugin_store::StoreExt;
-    let (engine, target_lang) = if let Ok(store) = app.store("settings.json") {
-        let engine = store
-            .get("searchEngine")
-            .and_then(|v| v.as_str().map(String::from));
-        let lang = store
-            .get("targetLanguage")
-            .and_then(|v| v.as_str().map(String::from));
-        (engine, lang)
-    } else {
-        (None, None)
-    };
-
+pub fn resolve_search_url(engine: Option<&str>, sys_lang: &str, query: &str) -> String {
     let encoded_query = percent_encode(query.trim());
-    let engine = engine.as_deref().unwrap_or("auto");
+    let engine = engine.unwrap_or("auto");
 
     match engine {
         "bing" => format!("https://www.bing.com/search?q={encoded_query}"),
@@ -803,15 +790,7 @@ pub fn build_search_url(app: &AppHandle, query: &str) -> String {
             format!("{custom}{encoded_query}")
         }
         _ => {
-            let is_zh = target_lang
-                .as_deref()
-                .map(|l| l.to_ascii_lowercase().starts_with("zh"))
-                .unwrap_or_else(|| {
-                    std::env::var("LANG")
-                        .or_else(|_| std::env::var("LC_ALL"))
-                        .map(|v| v.to_ascii_lowercase().contains("zh"))
-                        .unwrap_or(true)
-                });
+            let is_zh = sys_lang.to_ascii_lowercase().starts_with("zh");
             if is_zh {
                 format!("https://www.bing.com/search?q={encoded_query}")
             } else {
@@ -819,6 +798,23 @@ pub fn build_search_url(app: &AppHandle, query: &str) -> String {
             }
         }
     }
+}
+
+pub fn build_search_url(app: &AppHandle, query: &str) -> String {
+    use crate::platform::PlatformSystem;
+    use crate::platform::system::SystemOps;
+    use tauri_plugin_store::StoreExt;
+
+    let engine = if let Ok(store) = app.store("settings.json") {
+        store
+            .get("searchEngine")
+            .and_then(|v| v.as_str().map(String::from))
+    } else {
+        None
+    };
+
+    let sys_lang = PlatformSystem::system_language();
+    resolve_search_url(engine.as_deref(), &sys_lang, query)
 }
 
 impl OcrService {
@@ -1087,5 +1083,40 @@ mod tests {
         let event = state.begin(OcrMode::Search, "windows").unwrap();
         assert_eq!(event.mode, OcrMode::Search);
         assert_eq!(event.stage, OcrStage::Capturing);
+    }
+
+    #[test]
+    fn test_resolve_search_url() {
+        // Auto: English system resolves to Google
+        assert_eq!(
+            resolve_search_url(Some("auto"), "en-US", "rust"),
+            "https://www.google.com/search?q=rust"
+        );
+        assert_eq!(
+            resolve_search_url(None, "en-US", "rust"),
+            "https://www.google.com/search?q=rust"
+        );
+        // Auto: Chinese system resolves to Bing
+        assert_eq!(
+            resolve_search_url(Some("auto"), "zh-CN", "rust"),
+            "https://www.bing.com/search?q=rust"
+        );
+        assert_eq!(
+            resolve_search_url(Some("auto"), "zh-Hans", "rust"),
+            "https://www.bing.com/search?q=rust"
+        );
+        // Explicit selection overrides system language
+        assert_eq!(
+            resolve_search_url(Some("bing"), "en-US", "rust"),
+            "https://www.bing.com/search?q=rust"
+        );
+        assert_eq!(
+            resolve_search_url(Some("google"), "zh-CN", "rust"),
+            "https://www.google.com/search?q=rust"
+        );
+        assert_eq!(
+            resolve_search_url(Some("baidu"), "en-US", "rust"),
+            "https://www.baidu.com/s?wd=rust"
+        );
     }
 }
