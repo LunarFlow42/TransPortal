@@ -40,6 +40,11 @@ pub fn get_global_cursor_pos() -> Option<(i32, i32)> {
 /// Other platforms only show windows through tao, so its own hide suffices.
 pub fn force_hide_window<R: tauri::Runtime>(_window: &tauri::WebviewWindow<R>) {}
 
+pub fn force_show_window<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
+    let _ = window.show();
+    let _ = window.set_focus();
+}
+
 /// Global pointer sampling is Windows-only; the overlay relies on blur here.
 pub struct PointerProbe;
 

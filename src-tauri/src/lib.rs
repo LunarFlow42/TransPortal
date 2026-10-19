@@ -22,11 +22,35 @@ fn focus_shell<R: tauri::Runtime>(app: &AppHandle<R>) {
     });
 }
 
+fn attach_settings_window_events<R: tauri::Runtime>(
+    window: &tauri::WebviewWindow<R>,
+    app: &AppHandle<R>,
+) {
+    let win_clone = window.clone();
+    let app_handle = app.clone();
+    window.on_window_event(move |event| {
+        if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+            api.prevent_close();
+            let _ = win_clone.hide();
+            PlatformWindow::force_hide_window(&win_clone);
+            if commands::SHELL_RESUME_AFTER_SETTINGS
+                .swap(false, std::sync::atomic::Ordering::SeqCst)
+            {
+                crate::core::shell::present(&app_handle, false, |w| {
+                    let _ = w.show();
+                    let _ = w.set_focus();
+                });
+            }
+        }
+    });
+}
+
 /// Dynamically create or focus the settings window on demand.
 pub fn open_or_focus_settings<R: tauri::Runtime>(
     app: &AppHandle<R>,
 ) -> Result<tauri::WebviewWindow<R>, String> {
     if let Some(window) = app.get_webview_window("settings") {
+        PlatformWindow::force_show_window(&window);
         let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();
@@ -52,23 +76,9 @@ pub fn open_or_focus_settings<R: tauri::Runtime>(
         .map_err(|e| e.to_string())?;
 
         PlatformWindow::configure_transparent_window(&window);
-        let win_clone = window.clone();
-        let app_handle = app.clone();
-        window.on_window_event(move |event| {
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
-                let _ = win_clone.hide();
-                PlatformWindow::force_hide_window(&win_clone);
-                if commands::SHELL_RESUME_AFTER_SETTINGS
-                    .swap(false, std::sync::atomic::Ordering::SeqCst)
-                {
-                    crate::core::shell::present(&app_handle, false, |w| {
-                        let _ = w.show();
-                        let _ = w.set_focus();
-                    });
-                }
-            }
-        });
+        attach_settings_window_events(&window, app);
+        PlatformWindow::force_show_window(&window);
+        let _ = window.show();
         let _ = window.set_focus();
         Ok(window)
     }
@@ -207,6 +217,10 @@ pub fn run() {
                 .install_observer(app.handle());
             if let Some(window) = app.get_webview_window("shell") {
                 PlatformWindow::configure_transparent_window(&window);
+            }
+            if let Some(settings) = app.get_webview_window("settings") {
+                PlatformWindow::configure_transparent_window(&settings);
+                attach_settings_window_events(&settings, app.handle());
             }
             shortcut::register(app.handle());
             clipboard_monitor::start(app.handle());

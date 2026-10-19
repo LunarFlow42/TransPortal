@@ -56,6 +56,10 @@ pub trait WindowOps {
     /// back (no-activate placement).
     fn force_hide_window<R: Runtime>(window: &WebviewWindow<R>);
 
+    /// Force show and bring `window` to the foreground, restoring from minimized
+    /// state if needed, even when it was hidden with [`force_hide_window`].
+    fn force_show_window<R: Runtime>(window: &WebviewWindow<R>);
+
     /// Whether `window` is the OS foreground window.
     fn is_foreground<R: Runtime>(window: &WebviewWindow<R>) -> bool;
 

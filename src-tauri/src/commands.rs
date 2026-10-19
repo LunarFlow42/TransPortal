@@ -487,7 +487,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 pub static SHELL_RESUME_AFTER_SETTINGS: AtomicBool = AtomicBool::new(false);
 
 #[tauri::command]
-pub async fn open_settings_window(app: AppHandle) -> Result<(), String> {
+pub fn open_settings_window(app: AppHandle) -> Result<(), String> {
     let was_shell_visible =
         if let Some(shell) = app.get_webview_window(crate::core::shell::SHELL_LABEL) {
             let visible = shell.is_visible().unwrap_or(false);
@@ -501,12 +501,21 @@ pub async fn open_settings_window(app: AppHandle) -> Result<(), String> {
     if was_shell_visible {
         SHELL_RESUME_AFTER_SETTINGS.store(true, Ordering::SeqCst);
     }
-    crate::open_or_focus_settings(&app)?;
+    if let Err(e) = crate::open_or_focus_settings(&app) {
+        if was_shell_visible {
+            SHELL_RESUME_AFTER_SETTINGS.store(false, Ordering::SeqCst);
+            crate::core::shell::present(&app, false, |w| {
+                let _ = w.show();
+                let _ = w.set_focus();
+            });
+        }
+        return Err(e);
+    }
     Ok(())
 }
 
 #[tauri::command]
-pub async fn close_settings_window(app: AppHandle) -> Result<(), String> {
+pub fn close_settings_window(app: AppHandle) -> Result<(), String> {
     if let Some(settings) = app.get_webview_window("settings") {
         let _ = settings.hide();
         crate::platform::PlatformWindow::force_hide_window(&settings);

@@ -452,23 +452,6 @@ export const LookupCard: React.FC<LookupCardProps> = ({
           ) : (
             <>
               <IconButton
-                title={playingTarget === 'source' ? '停止朗读原文' : '朗读原文'}
-                onClick={() => handleTogglePronounce('source', node.text)}
-                active={playingTarget === 'source'}
-                className={playingTarget === 'source' ? 'animate-pulse text-[var(--accent-b)]' : undefined}
-              >
-                <Volume2 className="h-3.5 w-3.5" />
-              </IconButton>
-              <IconButton
-                title={playingTarget === 'translation' ? '停止朗读译文' : '朗读译文'}
-                onClick={() => node.translation && handleTogglePronounce('translation', node.translation)}
-                active={playingTarget === 'translation'}
-                className={playingTarget === 'translation' ? 'animate-pulse text-[var(--accent-b)]' : undefined}
-                disabled={!node.translation || node.status === 'loading'}
-              >
-                <Volume2 className="h-3.5 w-3.5 text-[var(--accent-b)]" />
-              </IconButton>
-              <IconButton
                 title="回译验证 (⇌)"
                 onClick={() => void runBackTranslation()}
                 active={Boolean(backTranslation)}

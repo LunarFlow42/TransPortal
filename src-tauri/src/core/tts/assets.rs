@@ -140,12 +140,12 @@ impl TtsAssets {
     pub fn resolve_runtime(&self) -> Result<PathBuf, String> {
         // 1. Check OCR runtime directory first if configured
         if let Some(ocr_dir) = &self.ocr_runtime_dir {
-            #[cfg(target_os = "windows")]
-            let lib_name = "onnxruntime.dll";
-            #[cfg(target_os = "linux")]
-            let lib_name = "libonnxruntime.so.1.22.0";
-            #[cfg(target_os = "macos")]
-            let lib_name = "libonnxruntime.1.22.0.dylib";
+            let lib_name = match std::env::consts::OS {
+                "windows" => "onnxruntime.dll",
+                "linux" => "libonnxruntime.so.1.22.0",
+                "macos" => "libonnxruntime.1.22.0.dylib",
+                _ => "onnxruntime.dll",
+            };
 
             let path = ocr_dir.join(lib_name);
             if path.exists() {
@@ -157,12 +157,12 @@ impl TtsAssets {
         if let Ok(exe) = std::env::current_exe()
             && let Some(dir) = exe.parent()
         {
-            #[cfg(target_os = "windows")]
-            let lib_name = "onnxruntime.dll";
-            #[cfg(target_os = "linux")]
-            let lib_name = "libonnxruntime.so";
-            #[cfg(target_os = "macos")]
-            let lib_name = "libonnxruntime.dylib";
+            let lib_name = match std::env::consts::OS {
+                "windows" => "onnxruntime.dll",
+                "linux" => "libonnxruntime.so",
+                "macos" => "libonnxruntime.dylib",
+                _ => "onnxruntime.dll",
+            };
 
             let path = dir.join(lib_name);
             if path.exists() {

@@ -75,6 +75,10 @@ impl WindowOps for WindowsWindow {
         window::force_hide_window(window);
     }
 
+    fn force_show_window<R: Runtime>(window: &WebviewWindow<R>) {
+        window::force_show_window(window);
+    }
+
     fn is_foreground<R: Runtime>(window: &WebviewWindow<R>) -> bool {
         window::is_foreground_window(window)
     }

@@ -166,6 +166,51 @@ pub fn force_hide_window<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
     }
 }
 
+/// Force show and activate `window` using Win32 directly, restoring from minimized
+/// state and bypassing foreground lockouts.
+pub fn force_show_window<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        BringWindowToTop, GetForegroundWindow, GetWindowThreadProcessId, IsIconic, IsWindow,
+        SW_RESTORE, SW_SHOW, SetForegroundWindow, ShowWindow,
+    };
+
+    if let Ok(handle) = window.hwnd() {
+        unsafe {
+            let hwnd = HWND(handle.0);
+            if !IsWindow(Some(hwnd)).as_bool() {
+                return;
+            }
+            if IsIconic(hwnd).as_bool() {
+                let _ = ShowWindow(hwnd, SW_RESTORE);
+            } else {
+                let _ = ShowWindow(hwnd, SW_SHOW);
+            }
+
+            let mut pid = 0;
+            let target_thread = GetWindowThreadProcessId(hwnd, Some(&mut pid));
+            let current_thread = GetCurrentThreadId();
+            let foreground_hwnd = GetForegroundWindow();
+            let foreground_thread = if !foreground_hwnd.0.is_null() {
+                GetWindowThreadProcessId(foreground_hwnd, None)
+            } else {
+                0
+            };
+
+            if current_thread != target_thread && foreground_thread != 0 {
+                let _ = AttachThreadInput(current_thread, foreground_thread, true);
+                let _ = BringWindowToTop(hwnd);
+                let _ = SetForegroundWindow(hwnd);
+                let _ = AttachThreadInput(current_thread, foreground_thread, false);
+            } else {
+                let _ = BringWindowToTop(hwnd);
+                let _ = SetForegroundWindow(hwnd);
+            }
+        }
+    }
+}
+
 /// Whether `window` is the foreground window.
 pub fn is_foreground_window<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) -> bool {
     use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;

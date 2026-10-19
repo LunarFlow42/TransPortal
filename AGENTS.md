@@ -42,6 +42,22 @@ Backend (`src-tauri/`):
 - **严禁无故修改 `Cargo.toml`**：只要不修改 `Cargo.toml`，增量检查与编译仅需 **~1 秒**。改动 `Cargo.toml` 或清理 target 会触发全量依赖元数据重新扫描（耗时 ~3 分钟）。
 - **禁止 Agent 自动执行 Git Push**：可以且鼓励在本地进行规范的原子化 `git commit`。推送（Git Push）由开发者人工掌控，严禁 Agent 自动执行 `git push`。
 
+## Anti-Regression & GSD Workflow (防功能回退规范)
+
+为了彻底杜绝“改 A 坏 B”的隐性功能回退（例如优化时误删关键窗口配置或破坏原生状态同步），严格执行以下防回退准则：
+
+### 1. 核心系统不变式 (Core Invariants)
+- **多窗口配置完整性**：`src-tauri/tauri.conf.json` 中必须始终保留 `shell`、`settings`、`ocr-region` 三大核心窗口声明，禁止将其降级为随意的纯动态构建（以保证 WebView2 路由解析和 `noRedirectionBitmap` 亚克力透传正常）。已接入 `src/utils/systemInvariants.test.ts` 自动化死守测试。
+- **Win32 与 Tao 状态必须同步**：凡是调用 `force_hide_window` (Win32 `SW_HIDE`) 隐藏的窗口，再次显示时必须通过 `force_show_window` (Win32 `SW_SHOW`/`SW_RESTORE`) 配合 `window.show()` 强制唤醒并抢回前台焦点，严禁只调用单侧 API。
+- **IPC 同步性与异常回滚**：窗口控制命令（如 `open_settings_window`）禁止无故声明为后台非必要 `async`，若打开目标窗口失败必须具有即时回滚机制，防止主浮层被误关后遗留空无一物的桌面。
+- **路由表与哈希映射**：前端必须完整维护 `#/shell`、`#/settings`、`#/ocr-region` 路由，任何改动不得破坏这三条主线路由。
+
+### 2. GSD 阶段性防回退流程 (Invariant-First Flow)
+- **Step 1: 影响面与不变式推演**：修改任何共享文件（`tauri.conf.json`、`lib.rs`、`commands.rs`、`ShellView.tsx`、`LookupCard.tsx` 等）前，先显式列出“哪些既有功能绝对不能被破坏”。
+- **Step 2: 最小扰动原则**：禁止借修复某小点之名，顺手实施未经推演的架构大改或配置清理。
+- **Step 3: 目标与防回退双重验证**：除了验证当前目标问题已修复，必须确认受影响模块原有的关键交互（如设置窗口弹窗、快捷键、主浮层生命周期）依然完全正常。
+- **Step 4: GSD 技能协同**：项目已启用 `.agents/skills/gsd/`，涉及跨模块重构、多阶段功能开发或复杂调试时，严格依照 GSD 计划与验证流执行。
+
 ## Conventions
 
 - Rust edition 2024.
