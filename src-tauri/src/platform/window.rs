@@ -60,6 +60,9 @@ pub trait WindowOps {
     /// state if needed, even when it was hidden with [`force_hide_window`].
     fn force_show_window<R: Runtime>(window: &WebviewWindow<R>);
 
+    /// Whether `window` is currently visible in the OS window manager.
+    fn is_window_visible<R: Runtime>(window: &WebviewWindow<R>) -> bool;
+
     /// Whether `window` is the OS foreground window.
     fn is_foreground<R: Runtime>(window: &WebviewWindow<R>) -> bool;
 

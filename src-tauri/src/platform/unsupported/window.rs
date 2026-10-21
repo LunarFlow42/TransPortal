@@ -45,6 +45,10 @@ pub fn force_show_window<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
     let _ = window.set_focus();
 }
 
+pub fn is_window_visible<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) -> bool {
+    window.is_visible().unwrap_or(false)
+}
+
 /// Global pointer sampling is Windows-only; the overlay relies on blur here.
 pub struct PointerProbe;
 

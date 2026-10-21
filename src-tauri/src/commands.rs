@@ -490,26 +490,21 @@ pub static SHELL_RESUME_AFTER_SETTINGS: AtomicBool = AtomicBool::new(false);
 pub fn open_settings_window(app: AppHandle) -> Result<(), String> {
     let was_shell_visible =
         if let Some(shell) = app.get_webview_window(crate::core::shell::SHELL_LABEL) {
-            let visible = shell.is_visible().unwrap_or(false);
-            if visible {
-                crate::core::shell::hide_now(&app);
-            }
-            visible
+            crate::platform::PlatformWindow::is_window_visible(&shell)
         } else {
             false
         };
+
     if was_shell_visible {
         SHELL_RESUME_AFTER_SETTINGS.store(true, Ordering::SeqCst);
     }
-    if let Err(e) = crate::open_or_focus_settings(&app) {
-        if was_shell_visible {
-            SHELL_RESUME_AFTER_SETTINGS.store(false, Ordering::SeqCst);
-            crate::core::shell::present(&app, false, |w| {
-                let _ = w.show();
-                let _ = w.set_focus();
-            });
-        }
-        return Err(e);
+
+    // 1. Open and focus settings FIRST while shell still holds the foreground
+    crate::open_or_focus_settings(&app)?;
+
+    // 2. Now that settings is safely displayed and in the foreground, hide shell
+    if was_shell_visible {
+        crate::core::shell::hide_now(&app);
     }
     Ok(())
 }

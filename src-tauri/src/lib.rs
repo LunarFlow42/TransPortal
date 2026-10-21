@@ -50,10 +50,10 @@ pub fn open_or_focus_settings<R: tauri::Runtime>(
     app: &AppHandle<R>,
 ) -> Result<tauri::WebviewWindow<R>, String> {
     if let Some(window) = app.get_webview_window("settings") {
-        PlatformWindow::force_show_window(&window);
         let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();
+        PlatformWindow::force_show_window(&window);
         Ok(window)
     } else {
         let window = tauri::WebviewWindowBuilder::new(
@@ -77,9 +77,9 @@ pub fn open_or_focus_settings<R: tauri::Runtime>(
 
         PlatformWindow::configure_transparent_window(&window);
         attach_settings_window_events(&window, app);
-        PlatformWindow::force_show_window(&window);
         let _ = window.show();
         let _ = window.set_focus();
+        PlatformWindow::force_show_window(&window);
         Ok(window)
     }
 }

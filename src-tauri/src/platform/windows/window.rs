@@ -167,13 +167,14 @@ pub fn force_hide_window<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
 }
 
 /// Force show and activate `window` using Win32 directly, restoring from minimized
-/// state and bypassing foreground lockouts.
+/// state, lifting to top of Z-order, and bypassing foreground lockouts.
 pub fn force_show_window<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
     use windows::Win32::Foundation::HWND;
-    use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
+    use windows::Win32::System::Threading::AttachThreadInput;
     use windows::Win32::UI::WindowsAndMessaging::{
-        BringWindowToTop, GetForegroundWindow, GetWindowThreadProcessId, IsIconic, IsWindow,
-        SW_RESTORE, SW_SHOW, SetForegroundWindow, ShowWindow,
+        BringWindowToTop, GetForegroundWindow, GetWindowThreadProcessId, HWND_NOTOPMOST,
+        HWND_TOPMOST, IsIconic, IsWindow, SW_RESTORE, SW_SHOW, SWP_NOMOVE, SWP_NOSIZE,
+        SWP_SHOWWINDOW, SetForegroundWindow, SetWindowPos, ShowWindow,
     };
 
     if let Ok(handle) = window.hwnd() {
@@ -188,9 +189,29 @@ pub fn force_show_window<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
                 let _ = ShowWindow(hwnd, SW_SHOW);
             }
 
+            // Z-Order promotion: temporarily elevate to HWND_TOPMOST then HWND_NOTOPMOST
+            // to ensure Windows DWM lifts this window above background/maximized windows.
+            let _ = SetWindowPos(
+                hwnd,
+                Some(HWND_TOPMOST),
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW,
+            );
+            let _ = SetWindowPos(
+                hwnd,
+                Some(HWND_NOTOPMOST),
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW,
+            );
+
             let mut pid = 0;
             let target_thread = GetWindowThreadProcessId(hwnd, Some(&mut pid));
-            let current_thread = GetCurrentThreadId();
             let foreground_hwnd = GetForegroundWindow();
             let foreground_thread = if !foreground_hwnd.0.is_null() {
                 GetWindowThreadProcessId(foreground_hwnd, None)
@@ -198,16 +219,29 @@ pub fn force_show_window<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
                 0
             };
 
-            if current_thread != target_thread && foreground_thread != 0 {
-                let _ = AttachThreadInput(current_thread, foreground_thread, true);
+            // Attach input queues between the GUI thread owning `hwnd` and the current foreground thread
+            if target_thread != 0 && foreground_thread != 0 && target_thread != foreground_thread {
+                let _ = AttachThreadInput(target_thread, foreground_thread, true);
                 let _ = BringWindowToTop(hwnd);
                 let _ = SetForegroundWindow(hwnd);
-                let _ = AttachThreadInput(current_thread, foreground_thread, false);
+                let _ = AttachThreadInput(target_thread, foreground_thread, false);
             } else {
                 let _ = BringWindowToTop(hwnd);
                 let _ = SetForegroundWindow(hwnd);
             }
         }
+    }
+}
+
+/// Whether `window` is currently visible according to the OS window manager.
+pub fn is_window_visible<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) -> bool {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::IsWindowVisible;
+
+    if let Ok(handle) = window.hwnd() {
+        unsafe { IsWindowVisible(HWND(handle.0)).as_bool() }
+    } else {
+        window.is_visible().unwrap_or(false)
     }
 }
 
