@@ -90,10 +90,10 @@ impl Default for ShortcutConfig {
             selection: "Alt+Q".into(),
             ocr_card: "Alt+Shift+X".into(),
             ocr_picture: "Alt+S".into(),
-            ocr_search: "Alt+Shift+S".into(),
+            ocr_search: "Alt+Shift+C".into(),
             double_copy: "Ctrl+C+C".into(),
             replace_selection: "Alt+Z".into(),
-            silent_ocr: "Alt+Shift+C".into(),
+            silent_ocr: "Alt+Shift+S".into(),
             input_translate: "Alt+Space".into(),
         }
     }
@@ -152,6 +152,7 @@ struct BindingState {
     bindings: BTreeMap<ShortcutAction, Binding>,
     ready: bool,
     revision: u64,
+    recording: bool,
 }
 impl Default for BindingState {
     fn default() -> Self {
@@ -159,6 +160,7 @@ impl Default for BindingState {
         Self {
             ready: false,
             revision: 0,
+            recording: false,
             bindings: ACTIONS
                 .into_iter()
                 .map(|action| {
@@ -299,8 +301,12 @@ fn apply_locked(
                         }
                     })
                     .map_err(|e| format!("无法注册 {value}，可能已被其他程序占用：{e}"))?;
+                if state.recording {
+                    let _ = manager.unregister(shortcut);
+                }
             }
-            if let Some(BindingKey::Chord(shortcut)) = previous
+            if !state.recording
+                && let Some(BindingKey::Chord(shortcut)) = previous
                 && let Err(error) = manager.unregister(shortcut)
             {
                 if let Some(BindingKey::Chord(new)) = key {
@@ -345,6 +351,44 @@ pub fn set_shortcut(
     );
     publish_status(app);
     result
+}
+
+fn unregister_chords(app: &AppHandle, state: &BindingState) {
+    let manager = app.global_shortcut();
+    for binding in state.bindings.values() {
+        if let Some(BindingKey::Chord(shortcut)) = binding.key {
+            let _ = manager.unregister(shortcut);
+        }
+    }
+}
+
+fn register_chords(app: &AppHandle, state: &BindingState) {
+    let manager = app.global_shortcut();
+    for (&action, binding) in &state.bindings {
+        if let Some(BindingKey::Chord(shortcut)) = binding.key {
+            let _ = manager.on_shortcut(shortcut, move |app, _, event| {
+                if event.state == ShortcutState::Pressed {
+                    trigger(app, action);
+                }
+            });
+        }
+    }
+}
+
+pub fn set_recording(app: &AppHandle, recording: bool) {
+    let bindings = app.state::<ShortcutBindings>();
+    let mut state = bindings.state.lock().unwrap();
+    if state.recording == recording {
+        return;
+    }
+    state.recording = recording;
+    RECORDING.store(recording, Ordering::SeqCst);
+    if recording {
+        unregister_chords(app, &state);
+    } else {
+        unregister_chords(app, &state);
+        register_chords(app, &state);
+    }
 }
 
 /// Restore the whole mapping together, allowing saved bindings to swap keys.
@@ -455,7 +499,16 @@ pub fn retry(app: &AppHandle) -> ShortcutReport {
     status(app)
 }
 
+static RECORDING: AtomicBool = AtomicBool::new(false);
+
+pub fn is_recording() -> bool {
+    RECORDING.load(Ordering::Relaxed)
+}
+
 fn trigger(app: &AppHandle, action: ShortcutAction) {
+    if is_recording() {
+        return;
+    }
     if let Some(settings) = app.get_webview_window("settings") {
         let _ = settings.hide();
         PlatformWindow::force_hide_window(&settings);
@@ -504,6 +557,9 @@ pub fn set_pinned(pinned: bool) {
 }
 
 pub fn on_input_translate(app: &AppHandle) {
+    if is_recording() {
+        return;
+    }
     if let Some(settings) = app.get_webview_window("settings") {
         let _ = settings.hide();
         PlatformWindow::force_hide_window(&settings);
@@ -549,6 +605,9 @@ fn resolve_replace_translation_config(
 }
 
 pub async fn on_replace_selection(app: &AppHandle) {
+    if is_recording() {
+        return;
+    }
     app.state::<crate::core::ocr::monitor::MonitorService>()
         .stop(app, true);
     app.state::<OcrService>().cancel(app);
@@ -642,6 +701,9 @@ pub async fn on_replace_selection(app: &AppHandle) {
 /// Only reached when the user explicitly bound the OS snip chord to an OCR
 /// action; the default bindings use the built-in region selector instead.
 pub fn on_system_snip(app: &AppHandle, revision: u32) {
+    if is_recording() {
+        return;
+    }
     let action = app
         .state::<ShortcutBindings>()
         .state
@@ -666,6 +728,9 @@ pub fn on_system_snip(app: &AppHandle, revision: u32) {
     }
 }
 pub fn on_hotkey(app: &AppHandle) {
+    if is_recording() {
+        return;
+    }
     app.state::<crate::core::ocr::monitor::MonitorService>()
         .stop(app, true);
     app.state::<OcrService>().cancel(app);
@@ -676,6 +741,9 @@ pub fn on_hotkey(app: &AppHandle) {
     show_shell_with_anchor(app, outcome.bounds.as_ref(), true);
 }
 pub fn on_double_copy(app: &AppHandle, revision: u32, window: usize) {
+    if is_recording() {
+        return;
+    }
     let enabled = app
         .state::<ShortcutBindings>()
         .state

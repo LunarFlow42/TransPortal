@@ -13,11 +13,12 @@ use tauri::{
 };
 
 /// Bring the shell bubble to the foreground.
-fn focus_shell<R: tauri::Runtime>(app: &AppHandle<R>) {
+pub(crate) fn focus_shell<R: tauri::Runtime>(app: &AppHandle<R>) {
     shell::present(app, false, |window| {
         PlatformWindow::configure_transparent_window(window);
         let _ = window.unminimize();
         let _ = window.show();
+        PlatformWindow::force_show_window(window);
         let _ = window.set_focus();
     });
 }
@@ -36,52 +37,101 @@ fn attach_settings_window_events<R: tauri::Runtime>(
             if commands::SHELL_RESUME_AFTER_SETTINGS
                 .swap(false, std::sync::atomic::Ordering::SeqCst)
             {
-                crate::core::shell::present(&app_handle, false, |w| {
-                    let _ = w.show();
-                    let _ = w.set_focus();
-                });
+                focus_shell(&app_handle);
             }
         }
     });
 }
 
-/// Dynamically create or focus the settings window on demand.
+/// Restore both the native host and its independent WebView rendering surface.
+fn show_settings_window<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) -> Result<(), String> {
+    window
+        .unminimize()
+        .map_err(|e| format!("恢复设置窗口失败：{e}"))?;
+    PlatformWindow::set_ignore_cursor_events(window, false)?;
+    window
+        .show()
+        .map_err(|e| format!("显示设置窗口失败：{e}"))?;
+
+    // WebviewWindow::show() only shows the host. A hidden or zero-sized WebView2
+    // controller otherwise leaves a visible border around a transparent client.
+    let webview: &tauri::Webview<R> = window.as_ref();
+    let size = window.inner_size().map_err(|e| e.to_string())?;
+    if size.width == 0 || size.height == 0 {
+        return Err("设置窗口尺寸无效，请重试。".into());
+    }
+    webview
+        .set_size(size)
+        .map_err(|e| format!("恢复设置内容尺寸失败：{e}"))?;
+    webview
+        .show()
+        .map_err(|e| format!("显示设置内容失败：{e}"))?;
+    PlatformWindow::force_show_window(window);
+    window
+        .set_focus()
+        .map_err(|e| format!("聚焦设置窗口失败：{e}"))?;
+    if !PlatformWindow::is_window_visible(window) {
+        return Err("设置窗口未能显示，请重试。".into());
+    }
+    if PlatformWindow::webview_visibility(window)? == Some(false) {
+        return Err("设置内容未能显示，请重试。".into());
+    }
+    Ok(())
+}
+
+/// Keep synchronous window IPC synchronous while serializing native and WebView
+/// operations on their owning UI thread. Tauri runs this inline when already on
+/// that thread, so receiving the result does not block the UI loop.
+pub(crate) fn run_window_task<R: tauri::Runtime, T: Send + 'static>(
+    app: &AppHandle<R>,
+    task: impl FnOnce(AppHandle<R>) -> Result<T, String> + Send + 'static,
+) -> Result<T, String> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let handle = app.clone();
+    app.run_on_main_thread(move || {
+        let _ = tx.send(task(handle));
+    })
+    .map_err(|e| e.to_string())?;
+    rx.recv().map_err(|e| e.to_string())?
+}
+
+/// Focus the declared settings window; recreate from its config only if missing.
 pub fn open_or_focus_settings<R: tauri::Runtime>(
     app: &AppHandle<R>,
 ) -> Result<tauri::WebviewWindow<R>, String> {
-    if let Some(window) = app.get_webview_window("settings") {
-        let _ = window.unminimize();
-        let _ = window.show();
-        let _ = window.set_focus();
-        PlatformWindow::force_show_window(&window);
-        Ok(window)
+    run_window_task(app, |app| open_or_focus_settings_on_main(&app))
+}
+
+fn open_or_focus_settings_on_main<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+) -> Result<tauri::WebviewWindow<R>, String> {
+    let window = if let Some(window) = app.get_webview_window("settings") {
+        window
     } else {
-        let window = tauri::WebviewWindowBuilder::new(
-            app,
-            "settings",
-            tauri::WebviewUrl::App("index.html#/settings".into()),
-        )
-        .title("TransPortal Settings")
-        .inner_size(640.0, 560.0)
-        .min_inner_size(560.0, 440.0)
-        .resizable(true)
-        .decorations(false)
-        .transparent(true)
-        .shadow(false)
-        .always_on_top(false)
-        .center()
-        .visible(true)
-        .skip_taskbar(false)
-        .build()
-        .map_err(|e| e.to_string())?;
+        let config = app
+            .config()
+            .app
+            .windows
+            .iter()
+            .find(|config| config.label == "settings")
+            .ok_or("设置窗口配置缺失")?;
+        let window = tauri::WebviewWindowBuilder::from_config(app, config)
+            .map_err(|e| e.to_string())?
+            .visible(false)
+            .build()
+            .map_err(|e| e.to_string())?;
 
         PlatformWindow::configure_transparent_window(&window);
         attach_settings_window_events(&window, app);
-        let _ = window.show();
-        let _ = window.set_focus();
-        PlatformWindow::force_show_window(&window);
-        Ok(window)
+        window
+    };
+    if let Err(error) = show_settings_window(&window) {
+        // Do not leave a partially shown, empty host intercepting desktop input.
+        let _ = window.hide();
+        PlatformWindow::force_hide_window(&window);
+        return Err(error);
     }
+    Ok(window)
 }
 
 /// Initialize the system tray with show/hide, settings, and quit options.
@@ -111,7 +161,9 @@ fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>>
                 "show" => focus_shell(app),
                 "hide" => shell::hide_now(app),
                 "settings" => {
-                    let _ = open_or_focus_settings(app);
+                    if let Err(error) = open_or_focus_settings(app) {
+                        eprintln!("[settings] {error}");
+                    }
                 }
                 "quit" => {
                     app.exit(0);
@@ -239,6 +291,7 @@ pub fn run() {
             commands::move_dict_source,
             commands::set_dict_source_order,
             commands::set_shortcut,
+            commands::set_shortcut_recording,
             commands::shortcut_status,
             commands::finish_startup_checks,
             commands::retry_shortcuts,

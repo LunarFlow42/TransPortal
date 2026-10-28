@@ -111,6 +111,11 @@ pub fn set_shortcut(
 }
 
 #[tauri::command]
+pub fn set_shortcut_recording(recording: bool, app: AppHandle) {
+    crate::core::shortcut::set_recording(&app, recording);
+}
+
+#[tauri::command]
 pub fn shortcut_status(app: AppHandle) -> crate::core::shortcut::ShortcutReport {
     crate::core::shortcut::status(&app)
 }
@@ -486,42 +491,59 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 pub static SHELL_RESUME_AFTER_SETTINGS: AtomicBool = AtomicBool::new(false);
 
-#[tauri::command]
-pub fn open_settings_window(app: AppHandle) -> Result<(), String> {
-    let was_shell_visible =
-        if let Some(shell) = app.get_webview_window(crate::core::shell::SHELL_LABEL) {
-            crate::platform::PlatformWindow::is_window_visible(&shell)
-        } else {
-            false
-        };
-
-    if was_shell_visible {
-        SHELL_RESUME_AFTER_SETTINGS.store(true, Ordering::SeqCst);
+fn transition_to_settings(
+    was_shell_visible: bool,
+    resume: &AtomicBool,
+    open: impl FnOnce() -> Result<(), String>,
+    hide_shell: impl FnOnce(),
+    restore_shell: impl FnOnce(),
+) -> Result<(), String> {
+    if let Err(error) = open() {
+        if was_shell_visible {
+            restore_shell();
+        }
+        return Err(error);
     }
-
-    // 1. Open and focus settings FIRST while shell still holds the foreground
-    crate::open_or_focus_settings(&app)?;
-
-    // 2. Now that settings is safely displayed and in the foreground, hide shell
     if was_shell_visible {
-        crate::core::shell::hide_now(&app);
+        resume.store(true, Ordering::SeqCst);
+        hide_shell();
     }
     Ok(())
 }
 
 #[tauri::command]
+pub fn open_settings_window(app: AppHandle) -> Result<(), String> {
+    crate::run_window_task(&app, |app| {
+        let was_shell_visible =
+            if let Some(shell) = app.get_webview_window(crate::core::shell::SHELL_LABEL) {
+                crate::platform::PlatformWindow::is_window_visible(&shell)
+            } else {
+                false
+            };
+
+        // Only remember/hide shell after both the settings host and content show.
+        transition_to_settings(
+            was_shell_visible,
+            &SHELL_RESUME_AFTER_SETTINGS,
+            || crate::open_or_focus_settings(&app).map(|_| ()),
+            || crate::core::shell::hide_now(&app),
+            || crate::focus_shell(&app),
+        )
+    })
+}
+
+#[tauri::command]
 pub fn close_settings_window(app: AppHandle) -> Result<(), String> {
-    if let Some(settings) = app.get_webview_window("settings") {
-        let _ = settings.hide();
-        crate::platform::PlatformWindow::force_hide_window(&settings);
-    }
-    if SHELL_RESUME_AFTER_SETTINGS.swap(false, Ordering::SeqCst) {
-        crate::core::shell::present(&app, false, |w| {
-            let _ = w.show();
-            let _ = w.set_focus();
-        });
-    }
-    Ok(())
+    crate::run_window_task(&app, |app| {
+        if let Some(settings) = app.get_webview_window("settings") {
+            let _ = settings.hide();
+            crate::platform::PlatformWindow::force_hide_window(&settings);
+        }
+        if SHELL_RESUME_AFTER_SETTINGS.swap(false, Ordering::SeqCst) {
+            crate::focus_shell(&app);
+        }
+        Ok(())
+    })
 }
 
 #[tauri::command]
@@ -592,4 +614,63 @@ pub async fn open_capture_debug_image(app: AppHandle) -> Result<String, String> 
         .open_path(&path_str, None::<&str>)
         .map_err(|e| format!("打开图片失败: {e}"))?;
     Ok(path_str)
+}
+
+#[cfg(test)]
+mod settings_window_tests {
+    use super::*;
+    use std::cell::RefCell;
+
+    #[test]
+    fn shell_is_hidden_only_after_settings_show_succeeds() {
+        let calls = RefCell::new(Vec::new());
+        let resume = AtomicBool::new(false);
+        transition_to_settings(
+            true,
+            &resume,
+            || {
+                calls.borrow_mut().push("show");
+                Ok(())
+            },
+            || calls.borrow_mut().push("hide"),
+            || calls.borrow_mut().push("restore"),
+        )
+        .unwrap();
+        assert_eq!(*calls.borrow(), ["show", "hide"]);
+        assert!(resume.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn failed_show_restores_shell_without_leaving_a_resume_flag() {
+        let calls = RefCell::new(Vec::new());
+        let resume = AtomicBool::new(false);
+        let error = transition_to_settings(
+            true,
+            &resume,
+            || {
+                calls.borrow_mut().push("show");
+                Err("content unavailable".into())
+            },
+            || calls.borrow_mut().push("hide"),
+            || calls.borrow_mut().push("restore"),
+        )
+        .unwrap_err();
+        assert_eq!(error, "content unavailable");
+        assert_eq!(*calls.borrow(), ["show", "restore"]);
+        assert!(!resume.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn refocusing_settings_preserves_the_original_shell_resume_request() {
+        let resume = AtomicBool::new(true);
+        transition_to_settings(
+            false,
+            &resume,
+            || Ok(()),
+            || panic!("hide"),
+            || panic!("restore"),
+        )
+        .unwrap();
+        assert!(resume.load(Ordering::SeqCst));
+    }
 }
