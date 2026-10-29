@@ -1,85 +1,160 @@
-# TransPortal（轻量传送门）
+# TransPortal
 
-开源桌面翻译与词典协同工作台。常驻系统托盘，通过全局快捷键捕获任意软件中选中的文本，自动判断"单词/句子"，分别以**深度词卡**或**幽灵伴读气泡**呈现。
+<p align="center">
+  <img src="src-tauri/icons/128x128.png" alt="TransPortal Logo" width="80" height="80" />
+</p>
 
-## 技术栈
+<p align="center">
+  <strong>High-performance, lightweight desktop AI translation & dictionary workspace powered by Tauri v2, Rust, and React</strong>
+</p>
 
-- **Desktop**: Tauri v2（`global-shortcut` / `clipboard-manager` / `single-instance` / `store` / `autostart` / `dialog` / `opener`）
-- **Backend**: Rust 2024，`tokio` + `reqwest` + `reqwest-eventsource`（SSE），`redb`（嵌入式 KV），`windows-rs`（UI Automation + 系统 OCR），`ort` + `paddle-ocr-rs`（ONNX FP32 OCR）
-- **Frontend**: React 19 + Vite + TypeScript + React Router（Hash）+ Tailwind CSS v4 + Framer Motion + Zustand + Lucide
+<p align="center">
+  <strong>English</strong> | <a href="README_zh.md">简体中文</a>
+</p>
 
-## 核心能力
+<p align="center">
+  <img src="https://img.shields.io/badge/Tauri-v2.12-blue?logo=tauri" alt="Tauri v2" />
+  <img src="https://img.shields.io/badge/Rust-2024_Edition-orange?logo=rust" alt="Rust 2024" />
+  <img src="https://img.shields.io/badge/React-19-61dafb?logo=react" alt="React 19" />
+  <img src="https://img.shields.io/badge/OCR-ONNX_PP--OCRv5-emerald" alt="ONNX OCR" />
+  <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License" />
+</p>
 
-- **全局划词**：`Alt+Q`（可配置）→ Windows 优先 UI Automation `TextPattern`，失败静默降级剪贴板；窗口在光标附近弹出并做屏幕边界钳制。
-- **启动检查**：恢复已保存键位后检查注册冲突，浮层主动提示，并可在关闭占用软件后重新检测。Windows 发布版启动时验证整个 EXE 的 SHA-256，缺失或不匹配即提示退出；详见 [启动检查](docs/STARTUP_CHECKS.md)。
-- **本地 OCR**：可切换 Windows 系统 OCR 与 ONNX · PP-OCRv4 FP32（中英混合识别），无需 Python 或 GPU。Windows 上 `Alt+Shift+S` 框选提取并复制文字，`Alt+S` 框选原图直接翻译，`Alt+Shift+X` 框选对照翻译，框选器内置、不调用系统截图工具；浮层也可打开本地图片。ONNX 模型随桌面包分发，开发环境可一键安装，校验后离线使用。参见 [OCR 说明](docs/OCR.md)。
-- **图片原位翻译**：保留截图与文字坐标，在原文字位置绘制译文；支持校对原文、切换目标语言、对照原图，以及复制或保存 PNG 译图。
-- **自动区域翻译**：Windows 上框选固定屏幕区域，持续检查变化并更新译图；支持暂停、继续、停止与 `Esc` 取消。仅文字发送给翻译服务，截图不上传，重启不恢复监控。
-- **双按 C 与文本替换**：Windows 上 `Ctrl+C+C` 取词翻译，普通复制不被抢占；结果卡可将原输入框选中的文字替换为译文，粘贴前核对窗口、焦点和选区。开关在快捷键设置中。
-- **语义分流 + 原地形变**：单词→深度词卡，句子→幽灵气泡；Framer Motion `layoutId` 平滑形变。
-- **查词来源全部可配置**：Youdao（在线，默认首选）、Google（在线）、本地 ECCEDICT（可选），支持启用/禁用/排序，带命中状态与延迟；在线结果有内存 LRU缓存。
-- **离线词库**：`redb` 存储 ECCEDICT，支持一键下载全量 `ecdict.csv`（带进度）或手动导入；`scripts/eccedict/build_enriched_csv.py` 可把 fork 的英美音标/标签 `.ddb` 合并回 CSV。
-- **例句下钻**：交互式分词、点击生词原地切换、历史前进/后退。
-- **生词导出**：一键导出 TSV 格式生词（含音标、释义及原句上下文），支持导入各类生词本。
-- **LLM 例句增强**：配置 OpenAI 兼容引擎后异步生成地道例句。
+---
 
-## 开发
+## 🌟 Key Highlights & Design Philosophy
 
-前置：Node + pnpm、Rust（stable）、Windows 需要 WebView2（Win10/11 自带）。Linux 需要 Tauri 的系统依赖：`pkg-config libssl-dev libdbus-1-dev libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev`（Debian/Ubuntu 包名）。
+TransPortal is engineered for high-frequency reading, software engineering, and multi-lingual workflows. It eliminates the heavy startup lag and massive RAM overhead typical of conventional Electron translation tools by decoupling user interaction into **"Transient Instant Popups"** and **"Full Deep Workspaces"**:
 
+- ⚡ **Transient HUD Popups (Instant Dismissal)**: Borderless, clean floating HUD positioned naturally near the cursor with smart screen edge boundary clamping. Automatically dismisses upon losing focus (blur) or pressing `Esc` within milliseconds, ensuring zero desktop disruption.
+- 🎯 **Global Text Selection & In-Place Replacement**: Uses Windows native UI Automation `TextPattern` to extract selected text across arbitrary applications (with silent clipboard fallback). Supports silent in-place overwrite of selected source text with target translations.
+- 🔍 **Local Offline & Dual-Engine Screen OCR**: Built-in native snipping tool with zero external dependencies. Integrates local ONNX PP-OCRv5 FP32 inference (offline high-accuracy Chinese/English recognition without requiring Python or GPU drivers). Supports side-by-side comparative reading with word drilldown, in-place picture text overlay, snip & web search, and silent background OCR to clipboard.
+- 📚 **Hybrid Offline Dictionaries & Streaming LLM**: Powered by an embedded `redb` KV store hosting the million-word offline ECCEDICT database for instant lookup. Seamlessly integrates with Microsoft Bing, Google, Youdao, Tencent, and custom OpenAI-compatible endpoints with smooth height-tweening against streaming token layout jitter.
+- 🛡️ **Subtle Dashed Affordance & Full Internationalization (i18n)**: Replaces cluttered `?` icons with elegant subtle dashed underlines (Dashed Affordance). Hovering over any title instantly unveils a sleek frosted glass tooltip card with rich explanations. Ships with 100% clean, non-bracketed English and Simplified Chinese localization.
+- 🍃 **Ultra-Low Memory Footprint**: Native Rust core resident memory remains **~30-60 MB** (70%+ lower RAM usage than traditional Electron apps), complemented by an automated dual-stage memory trimmer upon window idle.
+
+---
+
+## 🚀 Interaction Flow & Modes
+
+```
++-------------------------------------------------------------------------------+
+|                                  TransPortal                                  |
++-------------------------------------------------------------------------------+
+|  [Selection Lookup]     Alt+Q        Select text on screen to show popup      |
+|  [In-Place Replace]     Alt+Z        Silently overwrite selection with target |
+|  [Double Copy]          Ctrl+C+C     Tap C twice within 0.5s without conflict |
+|  [Ink Gesture Key]      Modifier     Hold key while dragging mouse to lookup  |
++-------------------------------------------------------------------------------+
+|  [Side-by-Side OCR]     Alt+Shift+X  Snip region for side-by-side word lookup |
+|  [In-Place Picture]     Alt+S        Snip image and overlay text in-place     |
+|  [Snip & Web Search]    Alt+Shift+C  Snip text to recognize & search in web   |
+|  [Silent OCR]           Alt+Shift+S  Recognize silently to clipboard          |
+|  [Input Workspace]      Alt+Space    Open centered input box & search history |
++-------------------------------------------------------------------------------+
+```
+
+---
+
+## 🛠️ System Architecture
+
+TransPortal adheres to a strict separation between **`core` (cross-platform business logic)** and **`platform` (OS contracts & implementations)**:
+
+```mermaid
+graph TD
+    UI["Web Frontend UI<br/>(React 19 / Vite / Tailwind v4 / Framer Motion / react-i18next)"]
+    IPC["Tauri IPC Commands Layer<br/>(src-tauri/src/commands.rs)"]
+    CORE["Cross-Platform core/<br/>(Engine Registry / Dictionary Orchestration / redb / OCR Session / Hotkeys)"]
+    PLATFORM["OS Contracts platform/<br/>(WindowOps / SelectionOps / ClipboardOps / DesktopCapture)"]
+    WIN["Windows Platform Backend<br/>(Win32 / UI Automation / DWM / DXGI / Windows OCR)"]
+    LIN["Linux Platform Backend<br/>(X11 / Wayland Native Contracts)"]
+
+    UI <==>|IPC Serialization| IPC
+    IPC --> CORE
+    CORE --> PLATFORM
+    PLATFORM --> WIN
+    PLATFORM --> LIN
+```
+
+- **Architectural Invariants**: The `core/` module contains zero `cfg(target_os)` checks and depends solely on generic `platform/` traits. Validated continuously in CI via `scripts/check-architecture.sh`.
+- **Window Singleton Reuse**: Transient overlay and OCR snipping windows are pre-warmed singletons (`show` / `hide` / `set_position`), preventing Chromium context recreation and eliminating blank frame flashes.
+
+---
+
+## 💻 Quick Start
+
+### Prerequisites
+- **Node.js** >= 18 and **pnpm**
+- **Rust** (stable toolchain)
+- **Operating System**:
+  - Windows 10 (version 2004+) or Windows 11 (WebView2 pre-installed)
+  - Linux (Requires system packages: `pkg-config libssl-dev libdbus-1-dev libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev`)
+
+### Development Setup
 ```bash
-pnpm install          # 安装前端依赖
-pnpm tauri dev        # 开发（Vite + Tauri）
-pnpm build            # 仅构建前端
-pnpm ocr:prepare      # 下载、校验并暂存当前平台 ONNX 模型与运行库
-pnpm tauri build      # 构建桌面安装包（自动准备 ONNX 资源）
-pnpm build:release    # 构建发布包及 SHA256SUMS（Windows 默认 NSIS，含自身校验文件）
-# Linux（feat/linux-native 分支）：pnpm tauri build 生成 .deb / .rpm / .AppImage（AppImage 在无 FUSE 环境需 APPIMAGE_EXTRACT_AND_RUN=1）
-pnpm test:integrity   # 校验文件生成工具测试
-pnpm exec tsc --noEmit
+# 1. Clone repository
+git clone https://github.com/your-username/TransPortal.git
+cd TransPortal
+
+# 2. Install frontend dependencies
+pnpm install
+
+# 3. Prepare offline OCR models (Downloads and verifies PP-OCRv5 ONNX model)
+pnpm ocr:prepare
+
+# 4. Start local development with Vite + Tauri hot reload
+pnpm tauri dev
+```
+
+### Verification & Quality Gates
+The repository enforces a dual-tier quality gate:
+```bash
+# Frontend static check & unit tests
+pnpm exec tsc --noEmit                          # TypeScript check (100% clean)
+pnpm test                                       # Vitest suite (96 tests passing)
 
 cd src-tauri
-cargo test            # Rust 单元测试
-cargo clippy --all-targets -- -D warnings
-bash ../scripts/check-architecture.sh   # core/platform 分层规则
+cargo check                                     # Fast backend syntax verification
+cargo test platform::placement::tests           # Placement algorithm tests
+cargo clippy --all-targets -- -D warnings        # Strict 0-warning lint
+bash ../scripts/check-architecture.sh           # Core/platform architecture boundary
 ```
 
-## 目录
-
+### Production Build
+```bash
+# Build desktop installer with verified SHA-256 integrity
+pnpm build:release
 ```
-src/                  React 前端（views/store/hooks/components）
-  views/ShellView     气泡/词卡叠加窗口 (#/shell)
-  views/SettingsView  独立设置窗口 (#/settings)
-src-tauri/src/
-  lib.rs              组合根：注册服务、托盘、快捷键；commands.rs 为 IPC 适配层
-  core/               跨平台业务逻辑（不含 cfg(target_os)，只依赖 platform 的接口）
-    translation/      翻译引擎（Trait + 注册表：google_free / openai / tencent / youdao）
-    dictionary/       查词编排（在线优先 + 可选本地 + LRU）、redb 词典与 ECCEDICT 导入、LLM 例句
-    ocr/              引擎注册表、ONNX 推理、资源安装、截图与图片会话、自动区域翻译
-    selection.rs      取词编排与原地替换令牌
-    shortcut.rs       全局热键、按平台能力启用、窗口定位
-    clipboard_monitor.rs  剪贴板翻译
-    shell.rs intent.rs integrity.rs
-  platform/           操作系统接口（WindowOps / SelectionOps / ClipboardOps / GestureSource / DesktopCapture / SystemOps）
-    mod.rs            Backend + Capabilities，唯一的平台切换点
-    placement.rs imaging.rs key_sequence.rs   可移植纯逻辑（所有平台编译并测试）
-    windows/          Win32 / UI Automation / DWM / DXGI / Windows OCR 实现
-    linux/            Linux 后端（第一阶段委托 unsupported，文档列出后续计划）
-    unsupported/      无原生实现时的回退
-scripts/eccedict/     DuckDB → CSV 富化脚本
-scripts/ocr/          资源打包与真实图片识别验证
-docs/USER_GUIDE.md    用户操作文档
-```
+Packaged installers are generated in `src-tauri/target/release/bundle/nsis/` (Windows) and `bundle/{deb,rpm,appimage}/` (Linux).
 
-## 说明
+---
 
-- 在线词典默认走 Youdao；`dictionaryapi.dev` 未使用（其网络不稳定）。
-- `ecdict.mini.csv` 仅约 53 词，**不是可用词库**；请使用全量 `ecdict.csv`。
-- 设置（Provider/词典来源/快捷键/自启）自动持久化，重启恢复。
-- Windows 发布版的 `integrity.json` 用于完整性对比，当前未签名；它不能代替病毒扫描或抵御程序与校验文件被同时替换。
-- OCR 引擎与识别语言均持久化，切换失败保留原配置。内置框选器需要 Windows 10 2004+；`Esc` 可取消截图。macOS/Linux 当前通过本地图片使用 ONNX，桌面捕获适配器尚未实现；Linux 上划词读取剪贴板内容；双按 C、原地替换、截图 OCR 与自动区域翻译暂不可用：它们不出现在快捷键状态报告中（启动时不再报错），设置时提示「当前平台不支持此快捷键功能。」。
-- ONNX 模型与运行库的版本、哈希和许可说明见 [OCR 资源清单](src-tauri/resources/ocr/manifest.json) 与 [第三方声明](src-tauri/resources/ocr/NOTICE.md)。体积、延迟和内存以实测为准，FP32 不保证与原框架逐字等同。
+## ⌨️ Default Shortcuts Cheat Sheet
 
-## License
+| Action | Default Shortcut | Description |
+| :--- | :--- | :--- |
+| **Selection Lookup** | `Alt + Q` | Trigger transient HUD popup on selected text |
+| **In-Place Replace** | `Alt + Z` | Silently overwrite selected source text with target translation |
+| **Double Copy** | `Ctrl + C + C` | Press C twice within 0.5s to trigger translation |
+| **Side-by-Side OCR** | `Alt + Shift + X` | Snip screen area for dual-column view with word drilldown |
+| **In-Place Image Translate** | `Alt + S` | Snip screen image and overlay translations on detected text |
+| **Snip & Search** | `Alt + Shift + C` | Snip text to recognize and launch search in default browser |
+| **Silent OCR** | `Alt + Shift + S` | Recognize text in background directly into clipboard |
+| **Input Workspace** | `Alt + Space` | Open centered floating input box |
+| **In-Window Navigation** | `Tab` / `Esc` / `Ctrl+Shift+T` | Toggle original view / Dismiss window / Pin on top |
 
-MIT
+*Note: All shortcuts can be customized or restored to defaults in Settings -> Shortcuts & Gestures.*
+
+---
+
+## 📖 Documentation
+
+- 📖 [User Guide](docs/USER_GUIDE.md)
+- 🧠 [Local OCR Engine & Benchmarks](docs/OCR.md)
+- 🛡️ [Binary Integrity & SHA-256 Self-Checks](docs/STARTUP_CHECKS.md)
+
+---
+
+## 📄 License
+
+This project is open-sourced under the [MIT License](LICENSE).

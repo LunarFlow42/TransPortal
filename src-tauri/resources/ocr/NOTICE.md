@@ -1,7 +1,7 @@
 # OCR third-party attribution
 
-TransPortal uses unmodified PP-OCRv4 mobile detection and recognition weights,
-and the legacy `ch_ppocr_mobile_v2.0` orientation classifier, converted to ONNX
+TransPortal uses unmodified PP-OCRv5 mobile detection and recognition weights,
+and the `ch_PP-LCNet_x0_25_textline_ori_cls_mobile` orientation classifier, converted to ONNX
 by RapidOCR. The upstream weights belong to Baidu and/or the PaddleOCR rights
 holders. RapidOCR's conversion and packaging do not transfer that ownership.
 No quantization or training is performed by TransPortal.

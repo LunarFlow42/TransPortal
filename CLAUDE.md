@@ -37,7 +37,7 @@ All paths below are under `src-tauri/src/`.
 - **Translation**: the `core::translation::Translator` trait, with engines registered in `core::translation::registry()`. Current engines: google, openai (OpenAI-compatible SSE streaming), tencent, youdao. `core/translation/lang.rs` handles language codes. `core/intent.rs` classifies text as word or sentence.
 - **Dictionary**: the `core::dictionary::DictSource` trait. `core/dictionary/lookup.rs` (`LookupService`) orders sources, enables them, caches results in an LRU, and reports status. `core/dictionary/mod.rs` holds `DictStore` (redb storage plus ECCEDICT CSV import); `eccedict.rs` downloads/imports the full CSV and `examples.rs` generates LLM example sentences.
 - **OCR**:
-  - The `core::ocr::OcrEngine` trait with `core/ocr/registry.rs`. Engines are Windows `Media.Ocr` (`platform/windows/ocr.rs`, injected via `Backend::native_ocr()`) and ONNX PP-OCRv4 (`core/ocr/onnx.rs`, using `ort` with `load-dynamic`, so the runtime library is loaded at runtime from staged assets managed by `core/ocr/assets.rs`).
+  - The `core::ocr::OcrEngine` trait with `core/ocr/registry.rs`. Engines are Windows `Media.Ocr` (`platform/windows/ocr.rs`, injected via `Backend::native_ocr()`) and ONNX PP-OCRv5 (`core/ocr/onnx.rs`, using `ort` with `load-dynamic`, so the runtime library is loaded at runtime from staged assets managed by `core/ocr/assets.rs`).
   - `core/ocr/workflow.rs` drives capture → recognize → optional translate sessions.
   - `core/ocr/picture.rs` keeps the image plus text boxes for in-place translation.
   - `core/ocr/region.rs` implements the frozen-desktop region picker.

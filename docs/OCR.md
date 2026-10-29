@@ -1,6 +1,6 @@
 # 本地截图 OCR
 
-支持 Windows 10/11 自带的 `Windows.Media.Ocr` 和 ONNX · PP-OCRv4 FP32 两种本地引擎，在设置的 **Screenshot OCR → 识别引擎** 中切换。识别在 Rust 工作线程中完成，无 Python 或 GPU 依赖。Windows 默认使用系统 OCR；ONNX 使用固定的中英混合模型，不需要系统语言包。
+支持 Windows 10/11 自带的 `Windows.Media.Ocr` 和 ONNX · PP-OCRv5 FP32 两种本地引擎，在设置的 **Screenshot OCR → 识别引擎** 中切换。识别在 Rust 工作线程中完成，无 Python 或 GPU 依赖。Windows 默认使用系统 OCR；ONNX 使用固定的中英混合模型，不需要系统语言包。
 
 Windows 截图使用 TransPortal 自带的框选器：按下快捷键时立即冻结整个桌面并覆盖一层可拖动的选区窗口，松开鼠标后直接裁切冻结图像识别，不再调用系统截图工具，也不依赖剪贴板。macOS/Linux 当前可通过浮层的 **打开图片** 使用 ONNX，尚未实现桌面捕获适配器。
 
@@ -61,7 +61,7 @@ Win+Shift+S（仅在用户显式绑定时） → ScreenCapture 观察系统截�
 
 ## ONNX 模型与分发
 
-当前固定使用 RapidOCR 发布的 PP-OCRv4 mobile 检测/识别模型与 `ch_ppocr_mobile_v2.0` 方向分类模型，通过 `paddle-ocr-rs` 0.6.1 + `ort` 2.0.0-rc.10 调用 ONNX Runtime 1.22.0 CPU。识别字典来自模型元数据。三份模型均为未量化 FP32；`onnx_inspect` 示例可以检查张量类型与量化算子。
+当前固定使用 RapidOCR 发布的 PP-OCRv5 mobile 检测/识别模型与 `ch_PP-LCNet_x0_25_textline_ori_cls_mobile` 方向分类模型，通过 `paddle-ocr-rs` 0.6.1 + `ort` 2.0.0-rc.10 调用 ONNX Runtime 1.22.0 CPU。识别字典来自模型元数据。三份模型均为未量化 FP32；`onnx_inspect` 示例可以检查张量类型与量化算子。
 
 - 支持准备 Windows / Linux / macOS 的 x86_64、aarch64 CPU 资源。当前实际运行验证在 Windows x86_64；其他平台的运行库已固定版本与哈希，仍需对应机器验证。
 - `pnpm tauri build` 自动执行 `pnpm ocr:prepare`，把目标平台资源放入 `resources/ocr-bundle/`，再随应用分发。不包含下载缓存、其他平台运行库或调试符号。macOS universal 构建会包括两种架构。
