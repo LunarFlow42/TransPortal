@@ -47,20 +47,6 @@ import { setAppLanguage } from '../i18n';
 import { cn } from '../utils/cn';
 import type { ProviderType, ShortcutActionId, ThemeMode } from '../types';
 
-const THEME_OPTIONS = [
-  { value: 'system', label: 'Follow system 跟随系统' },
-  { value: 'light', label: 'Light 明亮浅色' },
-  { value: 'dark', label: 'Dark 暗夜深色' },
-];
-
-const PROVIDER_OPTIONS = [
-  { value: 'bing_free', label: '微软必应' },
-  { value: 'google_free', label: 'Google Free 谷歌翻译' },
-  { value: 'youdao_free', label: 'Youdao Free 有道翻译' },
-  { value: 'tencent_free', label: 'Tencent Free 腾讯翻译君' },
-  { value: 'openai', label: 'OpenAI 兼容模型' },
-];
-
 const TARGET_LANGUAGE_OPTIONS = [
   { value: 'zh-CN', label: '简体中文' },
   { value: 'en', label: 'English' },
@@ -71,22 +57,6 @@ const TARGET_LANGUAGE_OPTIONS = [
   { value: 'de', label: 'Deutsch' },
   { value: 'es', label: 'Español' },
   { value: 'ru', label: 'Русский' },
-];
-
-const INK_KEY_OPTIONS = [
-  { value: 'None', label: '已禁用' },
-  { value: 'Control', label: 'Ctrl 键' },
-  { value: 'Alt', label: 'Alt 键' },
-  { value: 'Shift', label: 'Shift 键' },
-  { value: 'CapsLock', label: '大写锁定键' },
-];
-
-const SEARCH_ENGINE_OPTIONS = [
-  { value: 'auto', label: '智能自动分流匹配' },
-  { value: 'bing', label: '微软必应' },
-  { value: 'google', label: '谷歌 Google' },
-  { value: 'baidu', label: '百度 搜索' },
-  { value: 'custom', label: '自定义搜索引擎 URL' },
 ];
 
 interface ShortcutGroupItem {
@@ -163,6 +133,49 @@ const TABS: { id: SettingsTab; labelKey: string; icon: React.ReactNode }[] = [
  */
 export const SettingsView: React.FC = () => {
   const { i18n, t } = useTranslation();
+
+  const themeOptions = React.useMemo(
+    () => [
+      { value: 'system', label: t('settings.general.themeFollowSystem') },
+      { value: 'light', label: t('settings.general.themeLight') },
+      { value: 'dark', label: t('settings.general.themeDark') },
+    ],
+    [t],
+  );
+
+  const providerOptions = React.useMemo(
+    () => [
+      { value: 'bing_free', label: t('settings.translation.providerBing') },
+      { value: 'google_free', label: t('settings.translation.providerGoogle') },
+      { value: 'youdao_free', label: t('settings.translation.providerYoudao') },
+      { value: 'tencent_free', label: t('settings.translation.providerTencent') },
+      { value: 'openai', label: t('settings.translation.providerOpenai') },
+    ],
+    [t],
+  );
+
+  const inkKeyOptions = React.useMemo(
+    () => [
+      { value: 'None', label: t('settings.shortcuts.inkKeyNone') },
+      { value: 'Control', label: t('settings.shortcuts.inkKeyControl') },
+      { value: 'Alt', label: t('settings.shortcuts.inkKeyAlt') },
+      { value: 'Shift', label: t('settings.shortcuts.inkKeyShift') },
+      { value: 'CapsLock', label: t('settings.shortcuts.inkKeyCapsLock') },
+    ],
+    [t],
+  );
+
+  const searchEngineOptions = React.useMemo(
+    () => [
+      { value: 'auto', label: t('settings.general.searchEngineAuto') },
+      { value: 'bing', label: t('settings.general.searchEngineBing') },
+      { value: 'google', label: t('settings.general.searchEngineGoogle') },
+      { value: 'baidu', label: t('settings.general.searchEngineBaidu') },
+      { value: 'custom', label: t('settings.general.searchEngineCustom') },
+    ],
+    [t],
+  );
+
   const {
     provider,
     setProvider,
@@ -611,7 +624,7 @@ export const SettingsView: React.FC = () => {
                         ariaLabel="Theme"
                         value={theme}
                         onChange={(value) => setTheme(value as ThemeMode)}
-                        options={THEME_OPTIONS}
+                        options={themeOptions}
                       />
                     </div>
 
@@ -717,7 +730,7 @@ export const SettingsView: React.FC = () => {
                         ariaLabel="Translation engine"
                         value={provider}
                         onChange={(value) => setProvider(value as ProviderType)}
-                        options={PROVIDER_OPTIONS}
+                        options={providerOptions}
                       />
                     </div>
 
@@ -733,7 +746,7 @@ export const SettingsView: React.FC = () => {
                       />
                     </div>
                     <p className="text-[10px] text-[var(--faint)]">
-                      输入语言与目标语言相同时将自动互译对调。
+                      {t('settings.translation.targetLangHint')}
                     </p>
 
                     {provider === 'openai' ? (
@@ -768,7 +781,7 @@ export const SettingsView: React.FC = () => {
                       </>
                     ) : (
                       <p className="text-[10px] text-[var(--faint)]">
-                        免密钥在线通道，开箱即用；Bing / Google / 有道 / 腾讯 均支持智能语言识别。
+                        {t('settings.translation.freeProvidersHint')}
                       </p>
                     )}
                   </Surface>
@@ -796,15 +809,15 @@ export const SettingsView: React.FC = () => {
                             void saveSettings({ searchEngine: value });
                           }
                         }}
-                        options={SEARCH_ENGINE_OPTIONS}
+                        options={searchEngineOptions}
                       />
                     </div>
                     <p className="text-[10px] text-[var(--faint)]">
-                      用于截图文字搜索。默认“自动”将根据系统语言智能选择。
+                      {t('settings.general.searchEngineHint')}
                     </p>
                     {!['auto', 'bing', 'google', 'baidu'].includes(searchEngine) && (
                       <div className="flex items-center gap-3 pt-1">
-                        <label className="w-28 shrink-0 text-[13px] text-[var(--muted)]">URL 模板</label>
+                        <label className="w-28 shrink-0 text-[13px] text-[var(--muted)]">{t('settings.general.urlTemplate')}</label>
                         <Input
                           type="text"
                           value={searchEngine}
@@ -938,7 +951,7 @@ export const SettingsView: React.FC = () => {
                               ariaLabel="Ink key"
                               value={inkTranslateKey}
                               onChange={(value) => void setInkTranslateKey(value)}
-                              options={INK_KEY_OPTIONS}
+                              options={inkKeyOptions}
                             />
                           </div>
                         </div>
@@ -1117,7 +1130,7 @@ export const SettingsView: React.FC = () => {
                   <AlertCircle className="h-8 w-8 text-[var(--muted)] mb-2 opacity-50" />
                   <p>{i18n.language.startsWith('zh') ? `未找到与 “${searchQuery}” 匹配的设置项` : `No settings match "${searchQuery}"`}</p>
                   <p className="text-[11px] text-[var(--faint)] mt-1">
-                    {i18n.language.startsWith('zh') ? '请尝试搜索其他关键词（如：主题、快捷键、OCR、语言）' : 'Try searching for other terms like theme, shortcut, OCR, language'}
+                    {i18n.language.startsWith('zh') ? '请尝试搜索其他关键词 · 如：主题、快捷键、OCR、语言' : 'Try searching for other terms like theme, shortcut, OCR, language'}
                   </p>
                 </div>
               )}

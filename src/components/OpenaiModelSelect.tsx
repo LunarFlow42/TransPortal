@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { AlertCircle, Check, ChevronDown, Loader2, RotateCw, Search } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Button, Input } from './ui';
 import { useAppStore } from '../store/useAppStore';
 import { OpenAiConfig } from '../types';
@@ -19,6 +20,7 @@ export const OpenaiModelSelect: React.FC<OpenaiModelSelectProps> = ({
   config,
   disabled = false,
 }) => {
+  const { t } = useTranslation();
   const { openaiModels, setOpenaiModels } = useAppStore();
   const [fetching, setFetching] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,7 +70,7 @@ export const OpenaiModelSelect: React.FC<OpenaiModelSelectProps> = ({
       });
 
       setOpenaiModels(models);
-      setSuccessMsg(`已获取 ${models.length} 个可用模型`);
+      setSuccessMsg(t('settings.translation.fetchedModelsCount', { count: models.length }));
       if (models.length > 0) {
         setIsOpen(true);
         if (!value.trim()) {
@@ -89,7 +91,7 @@ export const OpenaiModelSelect: React.FC<OpenaiModelSelectProps> = ({
   return (
     <div className="flex flex-col gap-1.5" ref={containerRef}>
       <div className="flex items-center gap-3">
-        <label className="w-24 shrink-0 text-[13px] text-[var(--muted)]">Model</label>
+        <label className="w-24 shrink-0 text-[13px] text-[var(--muted)]">{t('settings.translation.model')}</label>
 
         {/* Input with dropdown toggle */}
         <div className="relative flex-1 min-w-0">
@@ -108,7 +110,7 @@ export const OpenaiModelSelect: React.FC<OpenaiModelSelectProps> = ({
                   type="button"
                   tabIndex={-1}
                   onClick={() => setIsOpen(!isOpen)}
-                  title="展开模型列表"
+                  title={t('settings.translation.expandModelList')}
                   className="flex h-5 w-5 items-center justify-center rounded text-[var(--muted)] hover:text-[var(--text)] transition-colors"
                 >
                   <ChevronDown
@@ -134,7 +136,7 @@ export const OpenaiModelSelect: React.FC<OpenaiModelSelectProps> = ({
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="搜索模型名称..."
+                    placeholder={t('settings.translation.searchModel')}
                     className="w-full bg-[var(--surface-2)] text-[12px] text-[var(--text)] pl-6 pr-2 py-1 rounded-[var(--r-ctrl)] border border-[var(--stroke)] outline-none focus:border-[var(--accent-b)] placeholder:text-[var(--faint)]"
                   />
                 </div>
@@ -144,7 +146,7 @@ export const OpenaiModelSelect: React.FC<OpenaiModelSelectProps> = ({
               <div className="overflow-y-auto max-h-48 flex flex-col gap-0.5">
                 {filteredModels.length === 0 ? (
                   <div className="py-3 text-center text-[11px] text-[var(--faint)]">
-                    无匹配模型
+                    {t('settings.translation.noMatchingModel')}
                   </div>
                 ) : (
                   filteredModels.map((model) => {
@@ -186,17 +188,16 @@ export const OpenaiModelSelect: React.FC<OpenaiModelSelectProps> = ({
           onClick={handleFetchModels}
           disabled={fetching || disabled}
           className="shrink-0 gap-1.5 text-[12px] h-[34px] px-3"
-          title="根据上方配置的 Base URL 与 API Key 自动拉取支持的模型列表"
         >
           {fetching ? (
             <>
               <Loader2 className="h-3.5 w-3.5 animate-spin text-[var(--accent-b)]" />
-              <span>获取中...</span>
+              <span>{t('settings.translation.fetchingModels')}</span>
             </>
           ) : (
             <>
               <RotateCw className="h-3.5 w-3.5 text-[var(--muted)]" />
-              <span>获取模型</span>
+              <span>{t('settings.translation.fetchModels')}</span>
             </>
           )}
         </Button>

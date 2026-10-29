@@ -52,7 +52,7 @@ export const TtsSettingsPanel: React.FC<{ disabled?: boolean }> = ({ disabled })
                 : 'text-[var(--faint)] hover:text-[var(--text)]',
             )}
           >
-            Kokoro ONNX (本地神经网络)
+            Kokoro ONNX 本地神经网络
           </button>
           <button
             type="button"
@@ -64,7 +64,7 @@ export const TtsSettingsPanel: React.FC<{ disabled?: boolean }> = ({ disabled })
                 : 'text-[var(--faint)] hover:text-[var(--text)]',
             )}
           >
-            Web Speech (系统自带)
+            Web Speech 系统自带
           </button>
         </div>
       </div>
@@ -86,7 +86,7 @@ export const TtsSettingsPanel: React.FC<{ disabled?: boolean }> = ({ disabled })
                   <div>
                     <span className="font-medium text-[var(--text)]">本地模型已就绪</span>
                     <span className="ml-1.5 text-[10px] text-[var(--faint)]">
-                      (INT8 量化 · ~{formatMb(status?.installed_bytes ?? 0)} MB)
+                      INT8 量化 · ~{formatMb(status?.installed_bytes ?? 0)} MB
                     </span>
                   </div>
                 </>
@@ -96,7 +96,7 @@ export const TtsSettingsPanel: React.FC<{ disabled?: boolean }> = ({ disabled })
                   <div>
                     <span className="font-medium text-[var(--text)]">未安装本地模型</span>
                     <span className="ml-1.5 text-[10px] text-[var(--faint)]">
-                      (需下载约 {formatMb(status?.download_bytes ?? 97000000)} MB)
+                      需下载约 {formatMb(status?.download_bytes ?? 97000000)} MB
                     </span>
                   </div>
                 </>
@@ -182,11 +182,11 @@ export const TtsSettingsPanel: React.FC<{ disabled?: boolean }> = ({ disabled })
                   ))
                 ) : (
                   <>
-                    <option value="af_heart">Heart (美音女声·推荐)</option>
-                    <option value="af_bella">Bella (美音女声)</option>
-                    <option value="am_adam">Adam (美音男声)</option>
-                    <option value="bf_emma">Emma (英音女声)</option>
-                    <option value="bm_george">George (英音男声)</option>
+                    <option value="af_heart">Heart · 美音女声 · 推荐</option>
+                    <option value="af_bella">Bella · 美音女声</option>
+                    <option value="am_adam">Adam · 美音男声</option>
+                    <option value="bf_emma">Emma · 英音女声</option>
+                    <option value="bm_george">George · 英音男声</option>
                   </>
                 )}
               </select>

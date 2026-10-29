@@ -2,16 +2,22 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Channel, invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { BookOpen, ChevronDown, ChevronUp, Download, Loader2, Upload } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Button, IconButton, Pill, Switch } from './ui';
 import { cn } from '../utils/cn';
 import { saveSettings } from '../store/persistence';
 import { suppressAutoHide } from '../utils/autoHide';
 import type { DictProgress, DictSourceInfo, DictStatus } from '../types';
 
-/** Format large entry counts in a Chinese-friendly way. */
-function formatCount(count: number): string {
-  if (count >= 10000) return `${(count / 10000).toFixed(2)} 万`;
-  if (count >= 1000) return `${(count / 1000).toFixed(1)} 千`;
+/** Format large entry counts in a locale-friendly way. */
+function formatCount(count: number, isZh: boolean): string {
+  if (isZh) {
+    if (count >= 10000) return `${(count / 10000).toFixed(2)} 万`;
+    if (count >= 1000) return `${(count / 1000).toFixed(1)} 千`;
+    return count.toLocaleString();
+  }
+  if (count >= 1000000) return `${(count / 1000000).toFixed(2)}M`;
+  if (count >= 1000) return `${(count / 1000).toFixed(1)}k`;
   return count.toLocaleString();
 }
 
@@ -23,6 +29,8 @@ function formatCount(count: number): string {
  * once a dictionary has been imported.
  */
 export const DictionaryPanel: React.FC = () => {
+  const { t, i18n } = useTranslation();
+  const isZh = i18n.language.startsWith('zh');
   const [status, setStatus] = useState<DictStatus | null>(null);
   const [sources, setSources] = useState<DictSourceInfo[]>([]);
   const [busy, setBusy] = useState<'import' | 'download' | null>(null);
@@ -79,9 +87,9 @@ export const DictionaryPanel: React.FC = () => {
       if (typeof selected !== 'string') return;
 
       setBusy('import');
-      setMessage('Importing dictionary… this can take a while.');
+      setMessage(t('settings.translation.importing'));
       const count = await invoke<number>('import_eccedict', { path: selected });
-      setMessage(`Imported ${formatCount(count)} 词条。`);
+      setMessage(t('settings.translation.importedCount', { count: formatCount(count, isZh) }));
       await refresh();
     } catch (error) {
       setMessage(String(error));
@@ -93,7 +101,7 @@ export const DictionaryPanel: React.FC = () => {
 
   const downloadFull = async () => {
     setBusy('download');
-    setMessage('Downloading full ECCEDICT (~63 MB)…');
+    setMessage(t('settings.translation.downloadingDict'));
     const channel = new Channel<DictProgress>();
     channel.onmessage = (progress) => {
       if (progress.stage === 'downloading') {
@@ -102,10 +110,10 @@ export const DictionaryPanel: React.FC = () => {
         const total = progress.total
           ? ` / ${(progress.total / 1048576).toFixed(1)} MB`
           : ' MB';
-        setMessage(`Downloading… ${mb}${total}`);
+        setMessage(`${isZh ? '正在下载…' : 'Downloading…'} ${mb}${total}`);
       } else if (progress.stage === 'importing') {
         setProgress(null);
-        setMessage('Importing into local dictionary… this can take a while.');
+        setMessage(t('settings.translation.importing'));
       } else {
         setProgress(null);
       }
@@ -113,7 +121,7 @@ export const DictionaryPanel: React.FC = () => {
 
     try {
       const count = await invoke<number>('download_eccedict', { onProgress: channel });
-      setMessage(`Imported ${formatCount(count)} 词条。`);
+      setMessage(t('settings.translation.importedCount', { count: formatCount(count, isZh) }));
       await refresh();
     } catch (error) {
       setMessage(String(error));
@@ -130,10 +138,12 @@ export const DictionaryPanel: React.FC = () => {
       <div className="flex items-center justify-between">
         <span className="flex items-center gap-1.5 text-[13px] font-semibold">
           <BookOpen className="h-3.5 w-3.5 text-emerald-400" />
-          Dictionary Sources
+          {t('settings.translation.dictSources')}
         </span>
         <span className="text-[10px] text-[var(--muted)]">
-          {status?.installed ? `${formatCount(status.entry_count)} 词条` : 'online only'}
+          {status?.installed
+            ? t('settings.translation.entriesCount', { count: formatCount(status.entry_count, isZh) })
+            : t('settings.translation.onlineOnly')}
         </span>
       </div>
 
@@ -147,7 +157,7 @@ export const DictionaryPanel: React.FC = () => {
               checked={source.enabled}
               disabled={disabled || (!source.available && source.kind === 'online')}
               onChange={() => void toggleSource(source)}
-              label={`Enable ${source.label}`}
+              label={t('settings.translation.enableSource', { name: source.label })}
               className="mt-0.5"
             />
             <div className="min-w-0 flex-1">
@@ -155,7 +165,7 @@ export const DictionaryPanel: React.FC = () => {
                 <span className="text-[12px] font-medium">{source.label}</span>
                 <Pill tone={source.kind === 'online' ? 'online' : 'local'}>{source.kind}</Pill>
                 {!source.available && (
-                  <span className="text-[9px] text-[var(--faint)]">not installed</span>
+                  <span className="text-[9px] text-[var(--faint)]">{t('settings.translation.notInstalled')}</span>
                 )}
                 {source.last_ok !== undefined && source.last_ok !== null && (
                   <span
@@ -174,7 +184,7 @@ export const DictionaryPanel: React.FC = () => {
             </div>
             <div className="flex flex-col text-[var(--muted)]">
               <IconButton
-                title="Move up"
+                title={t('settings.translation.moveUp')}
                 disabled={disabled || index === 0}
                 onClick={() => void moveSource(source, -1)}
                 className="h-4 w-4 disabled:opacity-25"
@@ -182,7 +192,7 @@ export const DictionaryPanel: React.FC = () => {
                 <ChevronUp className="h-3 w-3" />
               </IconButton>
               <IconButton
-                title="Move down"
+                title={t('settings.translation.moveDown')}
                 disabled={disabled || index === sources.length - 1}
                 onClick={() => void moveSource(source, 1)}
                 className="h-4 w-4 disabled:opacity-25"
@@ -201,7 +211,7 @@ export const DictionaryPanel: React.FC = () => {
           ) : (
             <Upload className="h-3 w-3" />
           )}
-          Import CSV
+          {t('settings.translation.importCsv')}
         </Button>
         <Button size="sm" disabled={disabled} onClick={() => void downloadFull()}>
           {busy === 'download' ? (
@@ -209,7 +219,7 @@ export const DictionaryPanel: React.FC = () => {
           ) : (
             <Download className="h-3 w-3" />
           )}
-          Download full
+          {t('settings.translation.downloadFull')}
         </Button>
       </div>
 
