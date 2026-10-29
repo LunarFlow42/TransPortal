@@ -96,7 +96,7 @@ export const TtsSettingsPanel: React.FC<{ disabled?: boolean }> = ({ disabled })
                   <div>
                     <span className="font-medium text-[var(--text)]">未安装本地模型</span>
                     <span className="ml-1.5 text-[10px] text-[var(--faint)]">
-                      需下载约 {formatMb(status?.download_bytes ?? 97000000)} MB
+                      需下载约 {formatMb(status?.download_bytes ?? 94972316)} MB
                     </span>
                   </div>
                 </>
