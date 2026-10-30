@@ -131,7 +131,7 @@ impl ShortcutStatus {
     }
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Default, Serialize)]
 pub struct ShortcutReport {
     pub revision: u64,
     pub ready: bool,

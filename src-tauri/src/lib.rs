@@ -220,6 +220,10 @@ pub fn run() {
     }
     tauri::Builder::default()
         .manage(integrity::IntegrityState(std::sync::Mutex::new(report)))
+        .manage(shortcut::ShortcutBindings::default())
+        .manage(selection::SelectionService::default())
+        .manage(ocr::region::RegionService::default())
+        .manage(ocr::monitor::MonitorService::default())
         // `single-instance` must be the first plugin registered.
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             focus_shell(app);
@@ -234,6 +238,7 @@ pub fn run() {
         ))
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
+            // Manage core services immediately before any slow I/O or window calls
             let ocr_data = app.path().app_data_dir()?.join("ocr");
             let ocr_resources = if cfg!(debug_assertions) {
                 Some(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/ocr"))
@@ -245,10 +250,11 @@ pub fn run() {
                 ocr_data.clone(),
                 ocr_data.join("downloads"),
             ));
-            if ocr_assets.resolve().is_ok() {
-                ocr_assets.clean_cache();
-            }
-            app.manage(ocr::OcrService::new(ocr_assets, platform::native_ocr()));
+            app.manage(ocr::OcrService::new(
+                ocr_assets.clone(),
+                platform::native_ocr(),
+            ));
+
             let tts_data = app.path().app_data_dir()?.join("tts");
             let tts_assets = std::sync::Arc::new(core::tts::assets::TtsAssets::new(
                 tts_data.clone(),
@@ -259,18 +265,19 @@ pub fn run() {
                         .join(core::ocr::assets::current_platform()),
                 ),
             ));
-            if tts_assets.status().installed {
-                tts_assets.clean_cache();
-            }
-            app.manage(core::tts::TtsService::new(tts_assets));
-            app.manage(ocr::region::RegionService::default());
-            ocr::region::RegionService::prewarm(app.handle());
-            app.manage(ocr::monitor::MonitorService::default());
-            app.manage(shortcut::ShortcutBindings::default());
-            app.manage(selection::SelectionService::default());
+            app.manage(core::tts::TtsService::new(tts_assets.clone()));
+
             if let Err(e) = setup_dictionary(app) {
                 eprintln!("Failed to initialize dictionary: {e}");
             }
+
+            if ocr_assets.resolve().is_ok() {
+                ocr_assets.clean_cache();
+            }
+            if tts_assets.status().installed {
+                tts_assets.clean_cache();
+            }
+            ocr::region::RegionService::prewarm(app.handle());
             if let Err(e) = setup_system_tray(app) {
                 eprintln!("Failed to setup system tray: {e}");
             }

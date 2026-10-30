@@ -117,7 +117,14 @@ pub fn set_shortcut_recording(recording: bool, app: AppHandle) {
 
 #[tauri::command]
 pub fn shortcut_status(app: AppHandle) -> crate::core::shortcut::ShortcutReport {
-    crate::core::shortcut::status(&app)
+    if app
+        .try_state::<crate::core::shortcut::ShortcutBindings>()
+        .is_some()
+    {
+        crate::core::shortcut::status(&app)
+    } else {
+        crate::core::shortcut::ShortcutReport::default()
+    }
 }
 
 #[tauri::command]
@@ -160,15 +167,25 @@ pub async fn verify_integrity(
 #[tauri::command]
 pub async fn ocr_status(app: AppHandle) -> Result<crate::core::ocr::OcrStatus, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        app.state::<crate::core::ocr::OcrService>().status()
+        let service = app
+            .try_state::<crate::core::ocr::OcrService>()
+            .ok_or_else(|| "OCR 服务正在初始化...".to_string())?;
+        Ok(service.status())
     })
     .await
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
 pub async fn get_ocr_config(app: AppHandle) -> crate::core::ocr::registry::OcrConfig {
-    app.state::<crate::core::ocr::OcrService>().config()
+    if let Some(service) = app.try_state::<crate::core::ocr::OcrService>() {
+        service.config()
+    } else {
+        crate::core::ocr::registry::OcrConfig {
+            engine: "windows".into(),
+            language: None,
+        }
+    }
 }
 
 #[tauri::command]
@@ -177,8 +194,10 @@ pub async fn set_ocr_config(
     app: AppHandle,
 ) -> Result<crate::core::ocr::registry::OcrConfig, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        app.state::<crate::core::ocr::OcrService>()
-            .configure(config)
+        let service = app
+            .try_state::<crate::core::ocr::OcrService>()
+            .ok_or_else(|| "OCR 服务正在初始化...".to_string())?;
+        service.configure(config)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -204,15 +223,22 @@ pub async fn tts_status(
     app: AppHandle,
 ) -> Result<crate::core::tts::assets::TtsInstallStatus, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        app.state::<crate::core::tts::TtsService>().status()
+        let tts = app
+            .try_state::<crate::core::tts::TtsService>()
+            .ok_or_else(|| "TTS 服务正在初始化...".to_string())?;
+        Ok(tts.status())
     })
     .await
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
 pub async fn tts_voices(app: AppHandle) -> Vec<crate::core::tts::assets::VoiceInfo> {
-    app.state::<crate::core::tts::TtsService>().voices()
+    if let Some(tts) = app.try_state::<crate::core::tts::TtsService>() {
+        tts.voices()
+    } else {
+        Vec::new()
+    }
 }
 
 #[tauri::command]
