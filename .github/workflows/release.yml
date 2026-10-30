@@ -44,6 +44,9 @@ jobs:
         with:
           workspaces: src-tauri
 
+      - name: Sync version from Git Tag
+        run: node scripts/sync-version.mjs ${{ github.event.inputs.tag_name || github.ref_name }}
+
       - name: Build Windows release bundle
         run: pnpm build:release
 

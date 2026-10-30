@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { getVersion } from '@tauri-apps/api/app';
 import {
   disable as autostartDisable,
   enable as autostartEnable,
@@ -225,8 +226,13 @@ export const SettingsView: React.FC = () => {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [savedPulse, setSavedPulse] = useState(false);
+  const [appVersion, setAppVersion] = useState('');
   const saveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const isInitialMount = React.useRef(true);
+
+  useEffect(() => {
+    void getVersion().then(setAppVersion).catch(() => {});
+  }, []);
 
   const triggerSaveNotice = React.useCallback(() => {
     setSavedPulse(true);
@@ -499,7 +505,12 @@ export const SettingsView: React.FC = () => {
             <span className="grid h-5 w-5 place-items-center rounded-[5px] bg-gradient-to-br from-[var(--accent-a)] to-[var(--accent-b)] shadow-[0_4px_12px_rgba(34,211,238,0.35)]">
               <Languages className="h-3 w-3 text-white" />
             </span>
-            TransPortal {t('settings.title')}
+            <span>TransPortal {t('settings.title')}</span>
+            {appVersion && (
+              <span className="rounded-[4px] bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] font-mono font-normal text-[var(--faint)]">
+                v{appVersion}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <SavedBadge saved={savedPulse} />
@@ -556,6 +567,10 @@ export const SettingsView: React.FC = () => {
                 </button>
               );
             })}
+            <div className="mt-auto pt-3 px-2.5 border-t border-[var(--stroke)]/50 flex items-center justify-between text-[10px] text-[var(--faint)] font-mono">
+              <span>TransPortal</span>
+              {appVersion && <span>v{appVersion}</span>}
+            </div>
           </aside>
 
           {/* 右侧设置内容区 */}

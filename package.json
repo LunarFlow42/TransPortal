@@ -13,6 +13,7 @@
     "test:integrity": "node --test scripts/integrity/checks.node.mjs",
     "preview": "vite preview",
     "test": "vitest run",
+    "version:set": "node scripts/sync-version.mjs",
     "tauri": "tauri"
   },
   "dependencies": {
