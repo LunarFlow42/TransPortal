@@ -246,7 +246,7 @@ pub fn run() {
                 app.path().resource_dir().ok().map(|path| path.join("ocr"))
             };
             let ocr_assets = std::sync::Arc::new(ocr::assets::OnnxAssets::new(
-                ocr_resources,
+                ocr_resources.clone(),
                 ocr_data.clone(),
                 ocr_data.join("downloads"),
             ));
@@ -256,14 +256,30 @@ pub fn run() {
             ));
 
             let tts_data = app.path().app_data_dir()?.join("tts");
+            let tts_ocr_runtime_dir = ocr_resources
+                .as_ref()
+                .map(|p| {
+                    p.join("ppocr-v5-fp32-ort-1.22.0")
+                        .join(core::ocr::assets::current_platform())
+                })
+                .filter(|p| p.exists())
+                .or_else(|| {
+                    let p = ocr_data
+                        .join("ppocr-v5-fp32-ort-1.22.0")
+                        .join(core::ocr::assets::current_platform());
+                    if p.exists() { Some(p) } else { None }
+                })
+                .or_else(|| {
+                    Some(
+                        ocr_data
+                            .join("ppocr-v5-fp32-ort-1.22.0")
+                            .join(core::ocr::assets::current_platform()),
+                    )
+                });
             let tts_assets = std::sync::Arc::new(core::tts::assets::TtsAssets::new(
                 tts_data.clone(),
                 tts_data.join("downloads"),
-                Some(
-                    ocr_data
-                        .join("ppocr-v5-fp32-ort-1.22.0")
-                        .join(core::ocr::assets::current_platform()),
-                ),
+                tts_ocr_runtime_dir,
             ));
             app.manage(core::tts::TtsService::new(tts_assets.clone()));
 

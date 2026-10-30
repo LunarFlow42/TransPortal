@@ -138,35 +138,56 @@ impl TtsAssets {
 
     /// Resolves the shared ONNX Runtime dynamic library (`onnxruntime.dll` / `.so`).
     pub fn resolve_runtime(&self) -> Result<PathBuf, String> {
+        let lib_name = match std::env::consts::OS {
+            "windows" => "onnxruntime.dll",
+            "linux" => "libonnxruntime.so.1.22.0",
+            "macos" => "libonnxruntime.1.22.0.dylib",
+            _ => "onnxruntime.dll",
+        };
+
         // 1. Check OCR runtime directory first if configured
         if let Some(ocr_dir) = &self.ocr_runtime_dir {
-            let lib_name = match std::env::consts::OS {
-                "windows" => "onnxruntime.dll",
-                "linux" => "libonnxruntime.so.1.22.0",
-                "macos" => "libonnxruntime.1.22.0.dylib",
-                _ => "onnxruntime.dll",
-            };
-
             let path = ocr_dir.join(lib_name);
             if path.exists() {
                 return Ok(path);
             }
+            let sub_path = ocr_dir
+                .join(&crate::core::ocr::assets::manifest().id)
+                .join(crate::core::ocr::assets::current_platform())
+                .join(lib_name);
+            if sub_path.exists() {
+                return Ok(sub_path);
+            }
         }
 
-        // 2. Fall back to current executable's directory
+        // 2. Fall back to current executable's directory and bundled resource layouts
         if let Ok(exe) = std::env::current_exe()
             && let Some(dir) = exe.parent()
         {
-            let lib_name = match std::env::consts::OS {
-                "windows" => "onnxruntime.dll",
-                "linux" => "libonnxruntime.so",
-                "macos" => "libonnxruntime.dylib",
-                _ => "onnxruntime.dll",
-            };
+            let direct = dir.join(lib_name);
+            if direct.exists() {
+                return Ok(direct);
+            }
 
-            let path = dir.join(lib_name);
-            if path.exists() {
-                return Ok(path);
+            // Bundled in exe_dir/ocr/... (production NSIS layout)
+            let bundled_ocr = dir
+                .join("ocr")
+                .join(&crate::core::ocr::assets::manifest().id)
+                .join(crate::core::ocr::assets::current_platform())
+                .join(lib_name);
+            if bundled_ocr.exists() {
+                return Ok(bundled_ocr);
+            }
+
+            // Bundled in exe_dir/resources/ocr/... (macOS/Linux layout)
+            let bundled_res = dir
+                .join("resources")
+                .join("ocr")
+                .join(&crate::core::ocr::assets::manifest().id)
+                .join(crate::core::ocr::assets::current_platform())
+                .join(lib_name);
+            if bundled_res.exists() {
+                return Ok(bundled_res);
             }
         }
 

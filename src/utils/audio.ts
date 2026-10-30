@@ -67,25 +67,27 @@ export function playPronunciation(
       speed,
     })
       .then((buffer) => {
-        playWavBuffer(buffer, onEnd, () => {
+        playWavBuffer(buffer, onEnd, (err) => {
           // If blob playback somehow fails, fall back to remote or Web Speech
-          fallbackPronunciation(word, audioUrl, onEnd);
+          console.warn('[TransPortal TTS] Blob playback failed, falling back:', err);
+          fallbackPronunciation(word, audioUrl, onEnd, voice);
         });
       })
-      .catch(() => {
+      .catch((err) => {
         // Fallback gracefully on UnsupportedLanguageOrEmpty or missing model
-        fallbackPronunciation(word, audioUrl, onEnd);
+        console.warn('[TransPortal TTS] Neural synthesis failed, falling back:', err);
+        fallbackPronunciation(word, audioUrl, onEnd, voice);
       });
     return;
   }
 
-  fallbackPronunciation(word, audioUrl, onEnd);
+  fallbackPronunciation(word, audioUrl, onEnd, voice);
 }
 
 function playWavBuffer(
   buffer: ArrayBuffer,
   onEnd: () => void,
-  onError: () => void,
+  onError: (err?: unknown) => void,
 ): void {
   const blob = new Blob([buffer], { type: 'audio/wav' });
   const blobUrl = URL.createObjectURL(blob);
@@ -105,7 +107,7 @@ function playWavBuffer(
     onEnd();
   };
 
-  const fail = () => {
+  const fail = (err?: unknown) => {
     if (currentAudio === audio) {
       currentAudio = null;
     }
@@ -113,11 +115,11 @@ function playWavBuffer(
       URL.revokeObjectURL(blobUrl);
       currentBlobUrl = null;
     }
-    onError();
+    onError(err);
   };
 
   audio.onended = finish;
-  audio.onerror = fail;
+  audio.onerror = (e) => fail(e);
   void audio.play().catch(fail);
 }
 
@@ -125,6 +127,7 @@ function fallbackPronunciation(
   word: string,
   audioUrl: string | null | undefined,
   onEnd: () => void,
+  preferredVoice?: string,
 ): void {
   if (audioUrl) {
     const audio = new Audio(audioUrl);
@@ -136,7 +139,7 @@ function fallbackPronunciation(
     const fallBack = () => {
       if (currentAudio !== audio) return;
       currentAudio = null;
-      speak(word, onEnd);
+      speak(word, onEnd, preferredVoice);
     };
     audio.onended = finish;
     audio.onerror = fallBack;
@@ -144,10 +147,10 @@ function fallbackPronunciation(
     return;
   }
 
-  speak(word, onEnd);
+  speak(word, onEnd, preferredVoice);
 }
 
-function speak(word: string, onEnd: () => void): void {
+function speak(word: string, onEnd: () => void, preferredVoice?: string): void {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
     isSpeaking = false;
     onEnd();
@@ -161,6 +164,31 @@ function speak(word: string, onEnd: () => void): void {
     utterance.lang = 'zh-CN';
   } else {
     utterance.lang = 'en-US';
+    // Match gender with preferred Kokoro voice when falling back to SAPI
+    const isFemale = preferredVoice
+      ? preferredVoice.startsWith('af_') || preferredVoice.startsWith('bf_')
+      : true;
+    try {
+      const voices = window.speechSynthesis.getVoices();
+      const enVoices = voices.filter((v) => v.lang.startsWith('en'));
+      if (isFemale) {
+        const femaleVoice = enVoices.find((v) =>
+          /female|zira|jenny|samantha|aria|eva|catherine/i.test(v.name),
+        );
+        if (femaleVoice) {
+          utterance.voice = femaleVoice;
+        }
+      } else {
+        const maleVoice = enVoices.find((v) =>
+          /male|david|george|guy|mark/i.test(v.name),
+        );
+        if (maleVoice) {
+          utterance.voice = maleVoice;
+        }
+      }
+    } catch {
+      // Ignore voice selection errors in environments where SAPI list is restricted
+    }
   }
   utterance.rate = 0.9;
   const handleEnd = () => {
