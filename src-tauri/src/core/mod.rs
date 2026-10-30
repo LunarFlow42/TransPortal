@@ -12,3 +12,4 @@ pub mod shell;
 pub mod shortcut;
 pub mod translation;
 pub mod tts;
+pub mod updater;

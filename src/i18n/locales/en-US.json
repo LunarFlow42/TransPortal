@@ -25,7 +25,8 @@
       "general": "General",
       "translation": "Translation & Dict",
       "shortcuts": "Shortcuts & Gestures",
-      "advanced": "Advanced & Diagnostics"
+      "advanced": "Advanced & Diagnostics",
+      "about": "About & Updates"
     },
     "general": {
       "appearance": "Appearance & UI",
@@ -320,6 +321,26 @@
       "panelTitle": "Capture Pipeline Diagnostics",
       "openedInViewer": "Opened in system viewer: {{path}}",
       "copyFailed": "Copy failed: {{error}}"
+    },
+    "about": {
+      "tabTitle": "About & Updates",
+      "slogan": "Immersive desktop text translation & offline multi-engine workbench",
+      "isLatest": "Up to date",
+      "newVersionBadge": "New version v{{version}}",
+      "updateCheckTitle": "Software Updates",
+      "checking": "Checking...",
+      "checkButton": "Check for Updates",
+      "updateFound": "New version v{{version}} available!",
+      "publishedAt": "Published on",
+      "downloadRelease": "Download",
+      "viewNotes": "Release Notes",
+      "upToDateMessage": "Current version (v{{version}}) is up to date.",
+      "checkFailed": "Failed to check for updates",
+      "linksTitle": "Project & Community",
+      "feedbackTitle": "Feedback & Issues",
+      "feedbackDesc": "Report bugs or propose new features",
+      "releaseHistoryTitle": "Release History",
+      "releaseHistoryDesc": "Browse release notes and changelogs"
     },
     "categoryTitle": "Categories"
   },

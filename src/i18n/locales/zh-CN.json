@@ -25,7 +25,8 @@
       "general": "常规",
       "translation": "翻译与词典",
       "shortcuts": "快捷键与手势",
-      "advanced": "高级与诊断"
+      "advanced": "高级与诊断",
+      "about": "关于与更新"
     },
     "general": {
       "appearance": "界面与外观",
@@ -320,6 +321,26 @@
       "panelTitle": "截图管线调试与诊断",
       "openedInViewer": "已在系统查看器中打开: {{path}}",
       "copyFailed": "复制失败: {{error}}"
+    },
+    "about": {
+      "tabTitle": "关于与更新",
+      "slogan": "轻量桌面沉浸式划词翻译与离线多引擎工作台",
+      "isLatest": "已是最新版",
+      "newVersionBadge": "新版本 v{{version}}",
+      "updateCheckTitle": "软件更新检查",
+      "checking": "正在检查...",
+      "checkButton": "检查更新",
+      "updateFound": "发现新版本 v{{version}}！",
+      "publishedAt": "发布于",
+      "downloadRelease": "下载更新",
+      "viewNotes": "更新日志",
+      "upToDateMessage": "当前版本 (v{{version}}) 已是最新版本，无需更新。",
+      "checkFailed": "检查更新时遇到错误",
+      "linksTitle": "项目与社区",
+      "feedbackTitle": "问题反馈与建议 (Issues)",
+      "feedbackDesc": "提交 Bug 报告或功能改进建议",
+      "releaseHistoryTitle": "版本发布记录 (Releases)",
+      "releaseHistoryDesc": "查看各版本的详细改动日志"
     },
     "categoryTitle": "配置导航"
   },

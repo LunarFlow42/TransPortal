@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { getVersion } from '@tauri-apps/api/app';
 import {
   disable as autostartDisable,
   enable as autostartEnable,
@@ -27,6 +26,7 @@ import {
   ShieldCheck,
   Camera,
   RotateCcw,
+  Info,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useBootstrap } from '../hooks/useBootstrap';
@@ -41,6 +41,7 @@ import { TtsSettingsPanel } from '../components/TtsSettingsPanel';
 import { IntegrityPanel } from '../components/IntegrityPanel';
 import { MemorySettingsPanel } from '../components/MemorySettingsPanel';
 import { CaptureDiagnosticsPanel } from '../components/CaptureDiagnosticsPanel';
+import { AboutPanel } from '../components/AboutPanel';
 import { ResizeHandles } from '../components/ResizeHandles';
 import { OpenaiModelSelect } from '../components/OpenaiModelSelect';
 import { Button, HoverTipText, IconButton, Input, SavedBadge, Section, Select, Surface, Switch } from '../components/ui';
@@ -120,13 +121,14 @@ const IN_WINDOW_SHORTCUTS = [
   { key: 'Esc', descKey: 'settings.shortcuts.inWindow.esc' },
 ];
 
-export type SettingsTab = 'general' | 'translation' | 'shortcuts' | 'advanced';
+export type SettingsTab = 'general' | 'translation' | 'shortcuts' | 'advanced' | 'about';
 
 const TABS: { id: SettingsTab; labelKey: string; icon: React.ReactNode }[] = [
   { id: 'general', labelKey: 'settings.tabs.general', icon: <Palette className="h-4 w-4" /> },
   { id: 'translation', labelKey: 'settings.tabs.translation', icon: <Languages className="h-4 w-4" /> },
   { id: 'shortcuts', labelKey: 'settings.tabs.shortcuts', icon: <Keyboard className="h-4 w-4" /> },
   { id: 'advanced', labelKey: 'settings.tabs.advanced', icon: <Sliders className="h-4 w-4" /> },
+  { id: 'about', labelKey: 'settings.tabs.about', icon: <Info className="h-4 w-4" /> },
 ];
 
 /**
@@ -226,13 +228,8 @@ export const SettingsView: React.FC = () => {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [savedPulse, setSavedPulse] = useState(false);
-  const [appVersion, setAppVersion] = useState('');
   const saveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const isInitialMount = React.useRef(true);
-
-  useEffect(() => {
-    void getVersion().then(setAppVersion).catch(() => {});
-  }, []);
 
   const triggerSaveNotice = React.useCallback(() => {
     setSavedPulse(true);
@@ -423,6 +420,7 @@ export const SettingsView: React.FC = () => {
   const matchIntegrity = isSearching && isMatch(['integrity', '完整性', '健康', '检测', 'checks', 'sha256', 'hash']);
   const matchCapture = isSearching && isMatch(['capture', 'screenshot', '截图', '诊断', 'wgc', 'dxgi', 'gdi', 'debug', '调试', 'pipeline']);
   const matchReset = isSearching && isMatch(['reset', 'restore', 'default', 'defaults', '默认', '重置', '恢复', '出厂']);
+  const matchAbout = isSearching && isMatch(['about', 'version', 'update', 'github', '关于', '版本', '更新', '检查更新', '开源', '作者']);
 
   const anyMatch =
     matchAppearance ||
@@ -436,7 +434,8 @@ export const SettingsView: React.FC = () => {
     matchMemory ||
     matchIntegrity ||
     matchCapture ||
-    matchReset;
+    matchReset ||
+    matchAbout;
 
   const renderShortcutRow = (item: ShortcutGroupItem) => {
     const status = report?.shortcuts.find((s) => s.id === item.id);
@@ -506,11 +505,6 @@ export const SettingsView: React.FC = () => {
               <Languages className="h-3 w-3 text-white" />
             </span>
             <span>TransPortal {t('settings.title')}</span>
-            {appVersion && (
-              <span className="rounded-[4px] bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] font-mono font-normal text-[var(--faint)]">
-                v{appVersion}
-              </span>
-            )}
           </div>
           <div className="flex items-center gap-2">
             <SavedBadge saved={savedPulse} />
@@ -567,10 +561,6 @@ export const SettingsView: React.FC = () => {
                 </button>
               );
             })}
-            <div className="mt-auto pt-3 px-2.5 border-t border-[var(--stroke)]/50 flex items-center justify-between text-[10px] text-[var(--faint)] font-mono">
-              <span>TransPortal</span>
-              {appVersion && <span>v{appVersion}</span>}
-            </div>
           </aside>
 
           {/* 右侧设置内容区 */}
@@ -1148,6 +1138,11 @@ export const SettingsView: React.FC = () => {
                     )}
                   </Surface>
                 </Section>
+              )}
+
+              {/* ====== TAB 5: 关于与更新 (About & Updates) ====== */}
+              {(isSearching ? matchAbout : activeTab === 'about') && (
+                <AboutPanel />
               )}
 
               {/* 搜索无结果提示 */}

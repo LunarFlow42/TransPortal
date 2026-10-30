@@ -378,7 +378,8 @@ pub fn run() {
             commands::set_window_pinned,
             commands::get_capture_diagnostics,
             commands::test_screen_capture,
-            commands::open_capture_debug_image
+            commands::open_capture_debug_image,
+            commands::check_update,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

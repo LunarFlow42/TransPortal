@@ -642,6 +642,14 @@ pub async fn open_capture_debug_image(app: AppHandle) -> Result<String, String> 
     Ok(path_str)
 }
 
+#[tauri::command]
+pub async fn check_update(
+    app: AppHandle,
+) -> Result<crate::core::updater::UpdateCheckResult, String> {
+    let current_version = app.package_info().version.to_string();
+    crate::core::updater::check_github_update(&current_version).await
+}
+
 #[cfg(test)]
 mod settings_window_tests {
     use super::*;

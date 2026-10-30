@@ -403,3 +403,14 @@ export interface TtsInstallProgress {
 }
 
 
+
+export interface UpdateCheckResult {
+  current_version: string;
+  latest_version: string;
+  has_update: boolean;
+  release_name?: string | null;
+  release_notes?: string | null;
+  release_url: string;
+  download_url?: string | null;
+  published_at?: string | null;
+}
