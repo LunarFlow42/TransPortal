@@ -10,7 +10,7 @@
     "ocr:prepare": "node scripts/ocr/prepare.mjs",
     "build:desktop": "pnpm ocr:prepare && pnpm build",
     "build:release": "node scripts/build-release.mjs",
-    "test:integrity": "node --test scripts/integrity/*.node.mjs",
+    "test:integrity": "node --test scripts/integrity/checks.node.mjs",
     "preview": "vite preview",
     "test": "vitest run",
     "tauri": "tauri"

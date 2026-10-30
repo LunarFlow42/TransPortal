@@ -353,9 +353,41 @@ fn to_bitmap(image: &OcrImage<'_>, width: u32, height: u32) -> Result<SoftwareBi
 mod tests {
     use super::*;
 
+    fn is_chinese_ocr_installed() -> bool {
+        let Ok(languages) = NativeOcrEngine::AvailableRecognizerLanguages() else {
+            return false;
+        };
+        for lang in languages {
+            if let Ok(tag) = lang.LanguageTag()
+                && tag.to_string().to_ascii_lowercase().starts_with("zh")
+            {
+                return true;
+            }
+        }
+        false
+    }
+
+    #[test]
+    fn test_normalize_chinese_alias() {
+        assert_eq!(normalize_chinese_alias("zh"), Some("zh-Hans-CN"));
+        assert_eq!(normalize_chinese_alias("zh-cn"), Some("zh-Hans-CN"));
+        assert_eq!(normalize_chinese_alias("zh-hans"), Some("zh-Hans-CN"));
+        assert_eq!(normalize_chinese_alias("zh-hans-cn"), Some("zh-Hans-CN"));
+        assert_eq!(normalize_chinese_alias("zh-tw"), Some("zh-Hant-TW"));
+        assert_eq!(normalize_chinese_alias("zh-hant"), Some("zh-Hant-TW"));
+        assert_eq!(normalize_chinese_alias("zh-hant-tw"), Some("zh-Hant-TW"));
+        assert_eq!(normalize_chinese_alias("zh-hk"), Some("zh-Hant-HK"));
+        assert_eq!(normalize_chinese_alias("zh-hant-hk"), Some("zh-Hant-HK"));
+        assert_eq!(normalize_chinese_alias("en-us"), None);
+    }
+
     #[test]
     fn test_windows_ocr_auto_prefers_chinese_when_installed() {
         let _apartment = Apartment::new().unwrap();
+        if !is_chinese_ocr_installed() {
+            eprintln!("Skipping test: Chinese OCR pack not installed in this environment");
+            return;
+        }
         let engine = create_engine(None);
         assert!(
             engine.is_ok(),
@@ -378,6 +410,10 @@ mod tests {
     #[test]
     fn test_windows_ocr_normalizes_zh_cn() {
         let _apartment = Apartment::new().unwrap();
+        if !is_chinese_ocr_installed() {
+            eprintln!("Skipping test: Chinese OCR pack not installed in this environment");
+            return;
+        }
         let engine = create_engine(Some("zh-CN"));
         assert!(
             engine.is_ok(),
@@ -397,6 +433,10 @@ mod tests {
     #[test]
     fn test_windows_ocr_normalizes_zh() {
         let _apartment = Apartment::new().unwrap();
+        if !is_chinese_ocr_installed() {
+            eprintln!("Skipping test: Chinese OCR pack not installed in this environment");
+            return;
+        }
         let engine = create_engine(Some("zh"));
         assert!(
             engine.is_ok(),

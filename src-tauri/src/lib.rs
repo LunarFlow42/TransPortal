@@ -276,10 +276,11 @@ pub fn run() {
             }
             app.state::<ocr::OcrService>()
                 .install_observer(app.handle());
-            if let Some(icon) = app.default_window_icon() {
-                if let Some(settings) = app.get_webview_window("settings") {
-                    let _ = settings.set_icon(icon.clone());
-                }
+            if let (Some(icon), Some(settings)) = (
+                app.default_window_icon(),
+                app.get_webview_window("settings"),
+            ) {
+                let _ = settings.set_icon(icon.clone());
             }
             if let Some(window) = app.get_webview_window("shell") {
                 PlatformWindow::configure_transparent_window(&window);
