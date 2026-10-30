@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { useTranslation } from 'react-i18next';
 import {
   Camera,
   Check,
@@ -15,6 +16,7 @@ import { Button, Surface } from './ui';
 import type { CaptureDiagnostics } from '../types';
 
 export const CaptureDiagnosticsPanel: React.FC<{ bare?: boolean }> = ({ bare = false }) => {
+  const { t, i18n } = useTranslation();
   const [diagnostics, setDiagnostics] = useState<CaptureDiagnostics | null>(null);
   const [loading, setLoading] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
@@ -42,53 +44,60 @@ export const CaptureDiagnosticsPanel: React.FC<{ bare?: boolean }> = ({ bare = f
   }, []);
 
   const formatMarkdown = (diag: CaptureDiagnostics): string => {
-    let md = `### 📸 截图管线诊断报告 (Capture Diagnostics)\n\n`;
-    md += `- **时间戳**: \`${diag.timestamp}\`\n`;
-    md += `- **最终采用后端**: \`${diag.finalBackend}\`\n`;
-    md += `- **捕获总耗时**: \`${diag.totalDurationMs} ms\`\n`;
-    md += `- **请求选区**: \`(${diag.targetRegion.x}, ${diag.targetRegion.y}) ${diag.targetRegion.width}×${diag.targetRegion.height}\`\n`;
+    const isZh = i18n.language.startsWith('zh');
+    let md = isZh
+      ? `### 📸 截图管线诊断报告 (Capture Diagnostics)\n\n`
+      : `### 📸 Capture Diagnostics Report\n\n`;
+    md += `- **${t('settings.capture.time')}**: \`${diag.timestamp}\`\n`;
+    md += `- **${t('settings.capture.backend')}**: \`${diag.finalBackend}\`\n`;
+    md += `- **${t('settings.capture.duration')}**: \`${diag.totalDurationMs} ms\`\n`;
+    md += `- **${t('settings.capture.targetRegion')}**: \`(${diag.targetRegion.x}, ${diag.targetRegion.y}) ${diag.targetRegion.width}×${diag.targetRegion.height}\`\n`;
     if (diag.monitorRect) {
-      md += `- **目标显示器**: \`(${diag.monitorRect.x}, ${diag.monitorRect.y}) ${diag.monitorRect.width}×${diag.monitorRect.height}\`\n`;
+      md += `- **${t('settings.capture.monitor')}**: \`(${diag.monitorRect.x}, ${diag.monitorRect.y}) ${diag.monitorRect.width}×${diag.monitorRect.height}\`\n`;
     }
     if (diag.savedImagePath) {
-      md += `- **调试图片落盘**: \`${diag.savedImagePath}\`\n`;
+      md += `- **${t('settings.capture.debugImage')}**: \`${diag.savedImagePath}\`\n`;
     }
 
-    md += `\n#### 🎯 前台窗口探针 (Foreground Window)\n`;
+    md += `\n#### 🎯 ${t('settings.capture.foregroundWindow')}\n`;
     if (diag.foregroundWindow) {
       const fg = diag.foregroundWindow;
-      md += `- **句柄 (HWND)**: \`0x${fg.hwnd.toString(16).toUpperCase().padStart(8, '0')}\`\n`;
-      md += `- **进程名 (EXE)**: \`${fg.processName}\` (PID: \`${fg.processId}\`)\n`;
-      md += `- **窗口标题**: \`${fg.title}\`\n`;
-      md += `- **窗口类名**: \`${fg.className}\`\n`;
-      md += `- **窗口边界**: \`(${fg.rect.x}, ${fg.rect.y}) ${fg.rect.width}×${fg.rect.height}\`\n`;
-      md += `- **状态**: Visible: \`${fg.isVisible}\`, Iconic (最小化): \`${fg.isIconic}\`, 覆盖选区: \`${fg.containsTarget}\`\n`;
+      md += `- **HWND**: \`0x${fg.hwnd.toString(16).toUpperCase().padStart(8, '0')}\`\n`;
+      md += `- **${t('settings.capture.process')}**: \`${fg.processName}\` (PID: \`${fg.processId}\`)\n`;
+      md += `- **${t('settings.capture.windowTitle')}**: \`${fg.title}\`\n`;
+      md += `- **Class**: \`${fg.className}\`\n`;
+      md += `- **${t('settings.capture.size')}**: \`(${fg.rect.x}, ${fg.rect.y}) ${fg.rect.width}×${fg.rect.height}\`\n`;
+      md += `- **${t('settings.capture.coverage')}**: Visible: \`${fg.isVisible}\`, Iconic: \`${fg.isIconic}\`, Contains: \`${fg.containsTarget}\`\n`;
     } else {
-      md += `- *未探测到有效前台窗口（或属于 TransPortal 自身）*\n`;
+      md += `- *${t('settings.capture.noFg')}*\n`;
     }
 
-    md += `\n#### ⚙️ 分层管线执行追踪 (Pipeline Tiers)\n`;
+    md += `\n#### ⚙️ ${t('settings.capture.pipelineTiers')}\n`;
     for (const tier of diag.tiers) {
-      const status = tier.success ? '✅ 成功' : tier.attempted ? '❌ 失败/跳过' : '⚪ 未尝试';
+      const status = tier.success
+        ? `✅ ${t('settings.capture.tierSuccess')}`
+        : tier.attempted
+        ? `❌ ${t('settings.capture.tierFailed')}`
+        : `⚪ ${t('settings.capture.tierNotAttempted')}`;
       md += `\n##### \`${tier.tier}\` (${status})\n`;
-      md += `- 耗时: \`${tier.durationMs} ms\`\n`;
+      md += `- Duration: \`${tier.durationMs} ms\`\n`;
       if (tier.frame0LatencyMs !== undefined && tier.frame0LatencyMs !== null) {
-        md += `- Frame 0 抵达延迟: \`${tier.frame0LatencyMs} ms\`\n`;
+        md += `- Frame 0 Latency: \`${tier.frame0LatencyMs} ms\`\n`;
       }
       if (tier.frame1LatencyMs !== undefined && tier.frame1LatencyMs !== null) {
-        md += `- Frame 1 探测耗时: \`${tier.frame1LatencyMs} ms\`\n`;
+        md += `- Frame 1 Latency: \`${tier.frame1LatencyMs} ms\`\n`;
       }
       if (tier.framesDrained > 0) {
-        md += `- 排空缓冲帧数: \`${tier.framesDrained} 帧\`\n`;
+        md += `- Drained Frames: \`${tier.framesDrained}\`\n`;
       }
       if (tier.stagingCopyMs !== undefined && tier.stagingCopyMs !== null) {
-        md += `- Staging 纹理拷贝与映射: \`${tier.stagingCopyMs} ms\`\n`;
+        md += `- Staging Copy & Map: \`${tier.stagingCopyMs} ms\`\n`;
       }
       if (tier.attempted) {
-        md += `- 是否纯黑画面: \`${tier.isAllBlack}\`\n`;
+        md += `- All-black: \`${tier.isAllBlack}\`\n`;
       }
       if (tier.error) {
-        md += `- 错误信息: \`${tier.error}\`\n`;
+        md += `- Error: \`${tier.error}\`\n`;
       }
     }
     return md;
@@ -109,7 +118,7 @@ export const CaptureDiagnosticsPanel: React.FC<{ bare?: boolean }> = ({ bare = f
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
       } catch (err) {
-        setError(`复制失败: ${err}`);
+        setError(t('settings.capture.copyFailed', { error: String(err) }));
       }
     }
   };
@@ -117,7 +126,7 @@ export const CaptureDiagnosticsPanel: React.FC<{ bare?: boolean }> = ({ bare = f
   const handleOpenImage = async () => {
     try {
       const path = await invoke<string>('open_capture_debug_image');
-      setFeedback(`已在系统查看器中打开: ${path}`);
+      setFeedback(t('settings.capture.openedInViewer', { path }));
       setTimeout(() => setFeedback(null), 3000);
     } catch (err) {
       setError(String(err));
@@ -130,7 +139,7 @@ export const CaptureDiagnosticsPanel: React.FC<{ bare?: boolean }> = ({ bare = f
     try {
       const res = await invoke<CaptureDiagnostics>('test_screen_capture', { delaySecs: 0 });
       setDiagnostics(res);
-      setFeedback('测试截屏成功，诊断报告已更新！');
+      setFeedback(t('settings.capture.successNotice'));
       setTimeout(() => setFeedback(null), 3000);
     } catch (err) {
       setError(String(err));
@@ -161,7 +170,7 @@ export const CaptureDiagnosticsPanel: React.FC<{ bare?: boolean }> = ({ bare = f
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--stroke)] pb-2.5">
         <div className="flex items-center gap-2">
           <span className="text-[13px] font-medium text-[var(--text)]">
-            最新截图通道：
+            {t('settings.capture.latestChannel')}
           </span>
           {diagnostics ? (
             <span
@@ -180,7 +189,7 @@ export const CaptureDiagnosticsPanel: React.FC<{ bare?: boolean }> = ({ bare = f
               {diagnostics.finalBackend}
             </span>
           ) : (
-            <span className="text-[11px] text-[var(--muted)]">暂无截图记录</span>
+            <span className="text-[11px] text-[var(--muted)]">{t('settings.capture.noRecord')}</span>
           )}
 
           {diagnostics && (
@@ -206,30 +215,30 @@ export const CaptureDiagnosticsPanel: React.FC<{ bare?: boolean }> = ({ bare = f
           <div className="rounded-[var(--r-inner)] border border-[var(--stroke)] bg-[var(--surface-2)] p-2 flex flex-col gap-1">
             <div className="flex items-center gap-1.5 font-medium text-[var(--text)]">
               <Monitor className="h-3.5 w-3.5 text-indigo-400" />
-              <span>前台活动窗口</span>
+              <span>{t('settings.capture.fgWindow')}</span>
             </div>
             {diagnostics.foregroundWindow ? (
               <div className="flex flex-col gap-0.5 text-[var(--muted)]">
                 <div className="flex justify-between">
-                  <span>进程:</span>
+                  <span>{t('settings.capture.process')}</span>
                   <span className="font-mono text-[var(--text)] font-semibold">
                     {diagnostics.foregroundWindow.processName} (PID: {diagnostics.foregroundWindow.processId})
                   </span>
                 </div>
                 <div className="flex justify-between truncate" title={diagnostics.foregroundWindow.title}>
-                  <span>标题:</span>
+                  <span>{t('settings.capture.windowTitle')}</span>
                   <span className="truncate max-w-[150px] text-[var(--text)] font-mono">
-                    {diagnostics.foregroundWindow.title || '(无标题)'}
+                    {diagnostics.foregroundWindow.title || t('settings.capture.noTitle')}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span>尺寸:</span>
+                  <span>{t('settings.capture.size')}</span>
                   <span className="font-mono text-[var(--text)]">
                     {diagnostics.foregroundWindow.rect.width}×{diagnostics.foregroundWindow.rect.height}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span>覆盖状态:</span>
+                  <span>{t('settings.capture.coverage')}</span>
                   <span
                     className={
                       diagnostics.foregroundWindow.containsTarget
@@ -238,13 +247,13 @@ export const CaptureDiagnosticsPanel: React.FC<{ bare?: boolean }> = ({ bare = f
                     }
                   >
                     {diagnostics.foregroundWindow.containsTarget
-                      ? '已完整覆盖选区'
-                      : '未完全覆盖选区'}
+                      ? t('settings.capture.fullyCovered')
+                      : t('settings.capture.notFullyCovered')}
                   </span>
                 </div>
               </div>
             ) : (
-              <p className="text-[var(--faint)] italic">无有效外部前台窗口</p>
+              <p className="text-[var(--faint)] italic">{t('settings.capture.noValidFg')}</p>
             )}
           </div>
 
@@ -252,33 +261,37 @@ export const CaptureDiagnosticsPanel: React.FC<{ bare?: boolean }> = ({ bare = f
           <div className="rounded-[var(--r-inner)] border border-[var(--stroke)] bg-[var(--surface-2)] p-2 flex flex-col gap-1">
             <div className="flex items-center gap-1.5 font-medium text-[var(--text)]">
               <Layers className="h-3.5 w-3.5 text-sky-400" />
-              <span>分层管道探测</span>
+              <span>{t('settings.capture.tierProbing')}</span>
             </div>
             <div className="flex flex-col gap-1 text-[var(--muted)]">
-              {diagnostics.tiers.map((t) => (
-                <div key={t.tier} className="flex items-center justify-between text-[10px]">
-                  <span className="font-mono">{t.tier}:</span>
+              {diagnostics.tiers.map((tierItem) => (
+                <div key={tierItem.tier} className="flex items-center justify-between text-[10px]">
+                  <span className="font-mono">{tierItem.tier}:</span>
                   <div className="flex items-center gap-1.5">
-                    {t.frame0LatencyMs !== undefined && t.frame0LatencyMs !== null && (
+                    {tierItem.frame0LatencyMs !== undefined && tierItem.frame0LatencyMs !== null && (
                       <span className="font-mono text-[var(--faint)]">
-                        F0: {t.frame0LatencyMs}ms
+                        F0: {tierItem.frame0LatencyMs}ms
                       </span>
                     )}
-                    {t.frame1LatencyMs !== undefined && t.frame1LatencyMs !== null && (
+                    {tierItem.frame1LatencyMs !== undefined && tierItem.frame1LatencyMs !== null && (
                       <span className="font-mono text-emerald-400">
-                        F1: {t.frame1LatencyMs}ms
+                        F1: {tierItem.frame1LatencyMs}ms
                       </span>
                     )}
                     <span
                       className={`font-semibold ${
-                        t.success
+                        tierItem.success
                           ? 'text-emerald-400'
-                          : t.attempted
+                          : tierItem.attempted
                           ? 'text-rose-400'
                           : 'text-[var(--faint)]'
                       }`}
                     >
-                      {t.success ? '成功' : t.attempted ? '失败' : '跳过'}
+                      {tierItem.success
+                        ? t('settings.capture.success')
+                        : tierItem.attempted
+                        ? t('settings.capture.failed')
+                        : t('settings.capture.skipped')}
                     </span>
                   </div>
                 </div>
@@ -310,7 +323,9 @@ export const CaptureDiagnosticsPanel: React.FC<{ bare?: boolean }> = ({ bare = f
           className="h-7 text-[11px]"
         >
           <Clock className="h-3 w-3" />
-          {countdown !== null ? `切回游戏 (${countdown}s)…` : '3 秒倒计时测试截屏'}
+          {countdown !== null
+            ? t('settings.capture.countdownGame', { count: countdown })
+            : t('settings.capture.countdownBtn')}
         </Button>
 
         <Button
@@ -320,7 +335,7 @@ export const CaptureDiagnosticsPanel: React.FC<{ bare?: boolean }> = ({ bare = f
           className="h-7 text-[11px]"
         >
           <Camera className="h-3 w-3" />
-          立即截屏
+          {t('settings.capture.captureNow')}
         </Button>
 
         <Button
@@ -330,7 +345,7 @@ export const CaptureDiagnosticsPanel: React.FC<{ bare?: boolean }> = ({ bare = f
           className="h-7 text-[11px]"
         >
           {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
-          {copied ? '已复制 Markdown' : '一键复制诊断日志'}
+          {copied ? t('settings.capture.copiedMarkdown') : t('settings.capture.copyMarkdown')}
         </Button>
 
         {diagnostics?.savedImagePath && (
@@ -340,7 +355,7 @@ export const CaptureDiagnosticsPanel: React.FC<{ bare?: boolean }> = ({ bare = f
             className="h-7 text-[11px]"
           >
             <ExternalLink className="h-3 w-3" />
-            查看截屏图片
+            {t('settings.capture.viewImage')}
           </Button>
         )}
 
@@ -351,7 +366,7 @@ export const CaptureDiagnosticsPanel: React.FC<{ bare?: boolean }> = ({ bare = f
           className="h-7 text-[11px] ml-auto"
         >
           <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
-          刷新
+          {t('settings.capture.refresh')}
         </Button>
       </div>
 
@@ -364,7 +379,7 @@ export const CaptureDiagnosticsPanel: React.FC<{ bare?: boolean }> = ({ bare = f
             className="flex items-center gap-1 text-[11px] text-[var(--muted)] hover:text-[var(--text)] cursor-pointer"
           >
             <Terminal className="h-3 w-3" />
-            <span>{showRaw ? '收起 Markdown 报告' : '展开 Markdown 报告'}</span>
+            <span>{showRaw ? t('settings.capture.collapseReport') : t('settings.capture.expandReport')}</span>
           </button>
 
           {showRaw && (
@@ -384,7 +399,7 @@ export const CaptureDiagnosticsPanel: React.FC<{ bare?: boolean }> = ({ bare = f
       <div className="flex items-center gap-2">
         <Camera className="h-4 w-4 text-[var(--accent-b)]" />
         <h3 className="text-sm font-medium text-[var(--text)]">
-          截图管线调试与诊断
+          {t('settings.capture.panelTitle')}
         </h3>
       </div>
       {content}

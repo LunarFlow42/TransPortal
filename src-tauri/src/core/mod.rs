@@ -6,6 +6,7 @@ pub mod dictionary;
 pub mod integrity;
 pub mod intent;
 pub mod ocr;
+pub(crate) mod onnx_runtime;
 pub mod selection;
 pub mod shell;
 pub mod shortcut;

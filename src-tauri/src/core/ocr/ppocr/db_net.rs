@@ -2,6 +2,7 @@ use super::types::{OcrError, Point, ScaleParam, TextBox};
 use super::utils::OcrUtils;
 use geo_clipper::{Clipper, EndType, JoinType};
 use geo_types::{Coord, LineString, Polygon};
+use ort::environment::Environment;
 use ort::inputs;
 use ort::session::builder::{GraphOptimizationLevel, SessionBuilder};
 use ort::session::{Session, SessionOutputs};
@@ -37,12 +38,13 @@ impl DbNet {
 
     pub fn init_model(
         &mut self,
+        environment: &Environment,
         path: &str,
         num_thread: usize,
         builder_fn: Option<fn(SessionBuilder) -> ort::Result<SessionBuilder>>,
     ) -> Result<(), OcrError> {
-        let builder = Session::builder()?;
-        let builder = match builder_fn {
+        let builder = Session::builder(environment)?;
+        let mut builder = match builder_fn {
             Some(custom) => custom(builder)?,
             None => builder
                 .with_optimization_level(GraphOptimizationLevel::Level2)?
@@ -51,9 +53,9 @@ impl DbNet {
         };
         let session = builder.commit_from_file(path)?;
         self.input_names = session
-            .inputs
+            .inputs()
             .iter()
-            .map(|input| input.name.clone())
+            .map(|input| input.name().to_string())
             .collect();
         self.session = Some(session);
         Ok(())

@@ -19,6 +19,12 @@ pub enum OcrError {
     InvalidImage(String),
 }
 
+impl From<ort::Error<ort::session::builder::SessionBuilder>> for OcrError {
+    fn from(error: ort::Error<ort::session::builder::SessionBuilder>) -> Self {
+        Self::Ort(error.into())
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Point {
     pub x: u32,

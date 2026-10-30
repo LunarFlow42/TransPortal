@@ -56,14 +56,13 @@ export const InteractiveSentence: React.FC<InteractiveSentenceProps> = ({
           <span
             key={index}
             onClick={(e) => handleWordClick(token.text, e)}
-            title={`Click to look up "${token.text}"`}
             className={cn(
-              '-mx-0.5 inline-block cursor-pointer rounded px-1 py-0.5 transition-all duration-150',
+              'cursor-pointer transition-colors duration-150',
               isCurrent
-                ? 'bg-[var(--pos-bg)] font-semibold text-[var(--pos-fg)] underline decoration-[var(--pos-stroke)] underline-offset-4'
+                ? 'font-semibold text-[var(--accent-b)] underline decoration-[var(--accent-b)]/60 underline-offset-4'
                 : muted
-                  ? 'text-[var(--muted)] hover:bg-[var(--surface-3)] hover:text-[var(--accent-b)]'
-                  : 'text-[var(--text)] hover:bg-[var(--surface-3)] hover:text-[var(--accent-b)] active:scale-95',
+                  ? 'hover:text-[var(--accent-b)] hover:underline decoration-[var(--accent-b)]/40 underline-offset-2'
+                  : 'hover:text-[var(--accent-b)] hover:underline decoration-[var(--accent-b)]/40 underline-offset-2 active:opacity-80',
             )}
           >
             {token.text}

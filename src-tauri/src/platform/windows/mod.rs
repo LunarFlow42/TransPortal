@@ -83,6 +83,10 @@ impl WindowOps for WindowsWindow {
         window::is_window_visible(window)
     }
 
+    fn webview_visibility<R: Runtime>(window: &WebviewWindow<R>) -> Result<Option<bool>, String> {
+        window::webview_visibility(window)
+    }
+
     fn is_foreground<R: Runtime>(window: &WebviewWindow<R>) -> bool {
         window::is_foreground_window(window)
     }

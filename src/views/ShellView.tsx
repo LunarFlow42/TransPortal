@@ -4,6 +4,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { open } from '@tauri-apps/plugin-dialog';
 import {
   CornerDownLeft,
+  History,
   ImagePlus,
   Languages,
   Search,
@@ -25,6 +26,7 @@ import { useAutoOcrEvents } from '../hooks/useAutoOcr';
 import { useWindowAnimation } from '../hooks/useWindowAnimation';
 import { invoke } from '@tauri-apps/api/core';
 import { useShortcutStatus } from '../hooks/useShortcutStatus';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store/useAppStore';
 import { startWindowDrag } from '../utils/drag';
 import { openSettingsWindow, resizeAndClampWindow } from '../utils/windows';
@@ -41,21 +43,6 @@ const WINDOW_SIZES: Record<Density, { width: number; height: number }> = {
   dense: { width: 460, height: 620 },
 };
 
-const PROVIDER_OPTIONS: { value: ProviderType; label: string }[] = [
-  { value: 'bing_free', label: 'Bing 微软' },
-  { value: 'google_free', label: 'Google 谷歌' },
-  { value: 'youdao_free', label: '有道翻译' },
-  { value: 'tencent_free', label: '腾讯翻译' },
-  { value: 'openai', label: 'OpenAI' },
-];
-
-const AUTO_INTERVAL_OPTIONS = [
-  { value: '1000', label: '1 秒' },
-  { value: '2000', label: '2 秒' },
-  { value: '5000', label: '5 秒' },
-  { value: '10000', label: '10 秒' },
-];
-
 const OCR_TARGET_OPTIONS = [
   { value: 'zh-CN', label: '简体中文' },
   { value: 'en', label: 'English' },
@@ -70,8 +57,31 @@ const OCR_TARGET_OPTIONS = [
  * emitted by the Rust core (`transportal://selection`).
  */
 export const ShellView: React.FC = () => {
+  const { t, i18n } = useTranslation();
+
+  const providerOptions = React.useMemo(
+    () => [
+      { value: 'bing_free' as ProviderType, label: t('shell.providerBing') },
+      { value: 'google_free' as ProviderType, label: t('shell.providerGoogle') },
+      { value: 'youdao_free' as ProviderType, label: t('shell.providerYoudao') },
+      { value: 'tencent_free' as ProviderType, label: t('shell.providerTencent') },
+      { value: 'openai' as ProviderType, label: t('shell.providerOpenai') },
+    ],
+    [t],
+  );
+
+  const autoIntervalOptions = React.useMemo(
+    () => [
+      { value: '1000', label: t('shell.intervalSeconds', { count: 1 }) },
+      { value: '2000', label: t('shell.intervalSeconds', { count: 2 }) },
+      { value: '5000', label: t('shell.intervalSeconds', { count: 5 }) },
+      { value: '10000', label: t('shell.intervalSeconds', { count: 10 }) },
+    ],
+    [t],
+  );
   const applyCapture = useAppStore((state) => state.applyCapture);
   const lookupStack = useAppStore((state) => state.lookupStack);
+  const history = useAppStore((state) => state.history);
   const capture = useAppStore((state) => state.capture);
   const hotkey = useAppStore((state) => state.hotkey);
   const errorMessage = useAppStore((state) => state.errorMessage);
@@ -339,13 +349,13 @@ export const ShellView: React.FC = () => {
         return;
       }
 
-      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === 'p') {
+      if (((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === 'p') || (event.altKey && event.key === 'ArrowLeft')) {
         event.preventDefault();
         store.navigateHistory('prev');
         return;
       }
 
-      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === 'n') {
+      if (((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === 'n') || (event.altKey && event.key === 'ArrowRight')) {
         event.preventDefault();
         store.navigateHistory('next');
         return;
@@ -437,7 +447,7 @@ export const ShellView: React.FC = () => {
   const pickImage = async () => {
     try {
       const path = await open({ multiple: false, directory: false,
-        filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'bmp', 'webp', 'tif', 'tiff'] }],
+        filters: [{ name: i18n.language.startsWith('zh') ? '图片' : 'Image', extensions: ['png', 'jpg', 'jpeg', 'bmp', 'webp', 'tif', 'tiff'] }],
       });
       if (typeof path === 'string') await useAppStore.getState().startImageOcr(path);
     } catch (error) {
@@ -516,11 +526,11 @@ export const ShellView: React.FC = () => {
                   setProvider(p);
                   void saveSettings({ provider: p });
                 }}
-                options={PROVIDER_OPTIONS}
-                title="切换翻译引擎"
+                options={providerOptions}
+                title={t('settings.translation.providers')}
               />
             </div>
-            <IconButton title="打开设置 (Ctrl+A)" onClick={() => void openSettingsWindow()}>
+            <IconButton title={t('settings.title')} onClick={() => void openSettingsWindow()}>
               <Settings className="h-3.5 w-3.5" />
             </IconButton>
           </div>
@@ -540,7 +550,7 @@ export const ShellView: React.FC = () => {
                     setManualInput('');
                   }
                 }}
-                placeholder="输入单词或句子，按 Enter 翻译..."
+                placeholder={t('shell.placeholder')}
                 className="w-full flex-1 bg-transparent px-2.5 py-1.5 text-xs text-[var(--text)] placeholder:text-[var(--faint)] outline-none"
               />
               {manualInput.length > 0 && (
@@ -550,7 +560,7 @@ export const ShellView: React.FC = () => {
                     setManualInput('');
                     inputRef.current?.focus();
                   }}
-                  title="清空输入"
+                  title={t('shell.clearInput')}
                   className="mr-1.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[var(--muted)] hover:bg-[var(--hover)] hover:text-[var(--text)] cursor-pointer transition-colors"
                 >
                   <span className="text-xs leading-none">×</span>
@@ -564,7 +574,7 @@ export const ShellView: React.FC = () => {
                     setManualInput('');
                   }
                 }}
-                title="按 Enter 提交翻译"
+                title={t('shell.enterSubmit')}
                 className="mr-2 flex shrink-0 items-center gap-0.5 rounded border border-[var(--stroke)] bg-[var(--surface-3)] px-1.5 py-0.5 font-mono text-[9px] text-[var(--muted)] hover:text-[var(--text)] cursor-pointer select-none transition-colors"
               >
                 <span>Enter</span>
@@ -574,7 +584,7 @@ export const ShellView: React.FC = () => {
           </div>
 
           <p className="text-[11px] text-[var(--muted)]">
-            划选文字后按{' '}
+            {t('shell.selectWordHintPrefix')}
             {hotkeyParts.map((part, index) => (
               <React.Fragment key={part}>
                 {index > 0 && ' + '}
@@ -583,77 +593,97 @@ export const ShellView: React.FC = () => {
                 </kbd>
               </React.Fragment>
             ))}{' '}
-            取词翻译
+            {t('shell.selectWordHintSuffix')}
           </p>
+
+          {history.length > 0 && (
+            <div className="mt-2.5 flex flex-wrap items-center justify-center gap-1.5 max-w-full">
+              <span className="text-[10px] text-[var(--faint)] flex items-center gap-1">
+                <History className="h-2.5 w-2.5" />
+                {t('shell.recentQueries')}:
+              </span>
+              {history.slice(-4).reverse().map((item, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => void useAppStore.getState().processText(item)}
+                  className="rounded bg-[var(--surface-2)] hover:bg-[var(--surface-3)] px-1.5 py-0.5 text-[10.5px] text-[var(--muted)] hover:text-[var(--text)] transition-colors truncate max-w-[130px] cursor-pointer border border-[var(--stroke)]"
+                  title={item}
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
+          )}
 
           {ocrStatus && (
             <div className="mt-3.5 flex flex-col gap-2 border-t border-[var(--stroke)] pt-3">
               {ocrStatus.supported && (
                 <div className="flex flex-wrap items-center justify-center gap-1.5">
-                  <span className="mr-0.5 text-[10px] font-semibold text-[var(--faint)]">截图:</span>
+                  <span className="mr-0.5 text-[10px] font-semibold text-[var(--faint)]">{t('shell.ocrGroup')}</span>
                   <Button
                     size="sm"
                     variant="primary"
-                    title={withKey('框选屏幕文字，图文双栏对照并支持点词查词', 'ocr_card')}
+                    title={withKey(t('shell.ocrCardTip'), 'ocr_card')}
                     disabled={!ocrStatus.engine.available}
                     onClick={() => void startOcr('card')}
                   >
-                    <Languages className="h-3.5 w-3.5" />对照翻译
+                    <Languages className="h-3.5 w-3.5" />{t('shell.ocrCard')}
                   </Button>
                   <Button
                     size="sm"
-                    title={withKey('框选屏幕文字，原位置覆盖译文', 'ocr_picture')}
+                    title={withKey(t('shell.ocrPictureTip'), 'ocr_picture')}
                     disabled={!ocrStatus.engine.available}
                     onClick={() => void startOcr('picture')}
                   >
-                    <Sparkles className="h-3.5 w-3.5" />原图翻译
+                    <Sparkles className="h-3.5 w-3.5" />{t('shell.ocrPicture')}
                   </Button>
                   <Button
                     size="sm"
-                    title={withKey('框选屏幕文字，自动在默认浏览器中搜索', 'ocr_search')}
+                    title={withKey(t('shell.ocrSearchTip'), 'ocr_search')}
                     disabled={!ocrStatus.engine.available}
                     onClick={() => void startOcr('search')}
                   >
-                    <Search className="h-3.5 w-3.5" />截图搜索
+                    <Search className="h-3.5 w-3.5" />{t('shell.ocrSearch')}
                   </Button>
                 </div>
               )}
 
               <div className="flex flex-wrap items-center justify-center gap-1.5">
-                <span className="mr-0.5 text-[10px] font-semibold text-[var(--faint)]">扩展:</span>
+                <span className="mr-0.5 text-[10px] font-semibold text-[var(--faint)]">{t('shell.extGroup')}</span>
                 <Button
                   size="sm"
-                  title="打开本地图片并提取文字"
+                  title={t('shell.openImageTip')}
                   disabled={!ocrStatus.engine.available}
                   onClick={() => void pickImage()}
                 >
-                  <ImagePlus className="h-3.5 w-3.5" />打开图片
+                  <ImagePlus className="h-3.5 w-3.5" />{t('shell.openImage')}
                 </Button>
                 {ocrStatus.supported && (
                   <>
                     <Button
                       size="sm"
-                      title="持续监控选定区域，内容变化后自动更新译图"
+                      title={t('shell.autoMonitorTip')}
                       disabled={!ocrStatus.engine.available}
                       onClick={() => void useAppStore.getState().startAutoOcr(autoInterval)}
                     >
-                      <Monitor className="h-3.5 w-3.5" />自动监控
+                      <Monitor className="h-3.5 w-3.5" />{t('shell.autoMonitor')}
                     </Button>
                     <Select
                       size="xs"
-                      ariaLabel="自动翻译刷新间隔"
+                      ariaLabel={t('shell.autoIntervalLabel')}
                       value={String(autoInterval)}
                       onChange={(val) => setAutoInterval(Number(val))}
-                      options={AUTO_INTERVAL_OPTIONS}
-                      title="区域监控刷新频率"
+                      options={autoIntervalOptions}
+                      title={t('shell.autoIntervalTip')}
                     />
                     <Select
                       size="xs"
-                      ariaLabel="自动翻译目标语言"
+                      ariaLabel={t('shell.ocrTargetLabel')}
                       value={ocrTarget}
                       onChange={(val) => useAppStore.setState({ ocrTarget: val })}
                       options={OCR_TARGET_OPTIONS}
-                      title="目标语言"
+                      title={t('shell.ocrTargetLabel')}
                     />
                   </>
                 )}
@@ -672,7 +702,7 @@ export const ShellView: React.FC = () => {
         <div
           onMouseDown={handleResizeMouseDown}
           onDoubleClick={handleResizeDoubleClick}
-          title="拖拽边缘直角调整长宽，双击恢复自动大小"
+          title={t('shell.resizeGripTip')}
           className="group absolute bottom-0.5 right-0.5 z-50 flex h-4 w-4 cursor-se-resize items-end justify-end p-0.5 select-none"
         >
           <svg

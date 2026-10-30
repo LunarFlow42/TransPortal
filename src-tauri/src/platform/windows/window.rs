@@ -172,9 +172,10 @@ pub fn force_show_window<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
     use windows::Win32::Foundation::HWND;
     use windows::Win32::System::Threading::AttachThreadInput;
     use windows::Win32::UI::WindowsAndMessaging::{
-        BringWindowToTop, GetForegroundWindow, GetWindowThreadProcessId, HWND_NOTOPMOST,
-        HWND_TOPMOST, IsIconic, IsWindow, SW_RESTORE, SW_SHOW, SWP_NOMOVE, SWP_NOSIZE,
-        SWP_SHOWWINDOW, SetForegroundWindow, SetWindowPos, ShowWindow,
+        BringWindowToTop, GWL_EXSTYLE, GetForegroundWindow, GetWindowLongPtrW,
+        GetWindowThreadProcessId, HWND_NOTOPMOST, HWND_TOPMOST, IsIconic, IsWindow, SW_RESTORE,
+        SW_SHOW, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, SetForegroundWindow, SetWindowPos,
+        ShowWindow, WS_EX_TOPMOST,
     };
 
     if let Ok(handle) = window.hwnd() {
@@ -183,14 +184,15 @@ pub fn force_show_window<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
             if !IsWindow(Some(hwnd)).as_bool() {
                 return;
             }
+            let was_topmost = GetWindowLongPtrW(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST.0 as isize != 0;
             if IsIconic(hwnd).as_bool() {
                 let _ = ShowWindow(hwnd, SW_RESTORE);
             } else {
                 let _ = ShowWindow(hwnd, SW_SHOW);
             }
 
-            // Z-Order promotion: temporarily elevate to HWND_TOPMOST then HWND_NOTOPMOST
-            // to ensure Windows DWM lifts this window above background/maximized windows.
+            // Promote ordinary windows temporarily. Preserve an overlay's
+            // existing topmost flag when restoring it after settings closes.
             let _ = SetWindowPos(
                 hwnd,
                 Some(HWND_TOPMOST),
@@ -200,15 +202,17 @@ pub fn force_show_window<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {
                 0,
                 SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW,
             );
-            let _ = SetWindowPos(
-                hwnd,
-                Some(HWND_NOTOPMOST),
-                0,
-                0,
-                0,
-                0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW,
-            );
+            if !was_topmost {
+                let _ = SetWindowPos(
+                    hwnd,
+                    Some(HWND_NOTOPMOST),
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW,
+                );
+            }
 
             let mut pid = 0;
             let target_thread = GetWindowThreadProcessId(hwnd, Some(&mut pid));
@@ -243,6 +247,26 @@ pub fn is_window_visible<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) ->
     } else {
         window.is_visible().unwrap_or(false)
     }
+}
+
+/// Query the WebView2 controller on its owning UI thread, not just the HWND.
+pub fn webview_visibility<R: tauri::Runtime>(
+    window: &tauri::WebviewWindow<R>,
+) -> Result<Option<bool>, String> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    window
+        .with_webview(move |webview| {
+            let controller = webview.controller();
+            let mut visible = Default::default();
+            // SAFETY: with_webview runs on the controller's apartment thread and
+            // `visible` remains valid for the synchronous COM getter.
+            let result = unsafe { controller.IsVisible(&mut visible) }
+                .map(|_| Some(visible.as_bool()))
+                .map_err(|error| error.to_string());
+            let _ = tx.send(result);
+        })
+        .map_err(|error| error.to_string())?;
+    rx.recv().map_err(|error| error.to_string())?
 }
 
 /// Whether `window` is the foreground window.

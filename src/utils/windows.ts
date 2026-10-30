@@ -2,13 +2,16 @@ import { invoke } from '@tauri-apps/api/core';
 import { LogicalSize } from '@tauri-apps/api/dpi';
 import { currentMonitor, getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
 import { suppressAutoHide } from './autoHide';
+import { cancelDismiss } from '../hooks/useWindowAnimation';
 
 /**
- * Open or bring the dedicated settings window to the front dynamically.
+ * Open or bring the declared settings window to the front.
  * Backend automatically hides the shell overlay while settings is open.
  */
 export async function openSettingsWindow(): Promise<void> {
   suppressAutoHide(1000);
+  // A blur/outside-click may already have started fading out before this click.
+  cancelDismiss();
   try {
     await invoke('open_settings_window');
   } catch (error) {

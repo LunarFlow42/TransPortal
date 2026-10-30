@@ -1,6 +1,9 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
-import { resizeAndClampWindow, setWindowTheme } from './windows';
+import { openSettingsWindow, resizeAndClampWindow, setWindowTheme } from './windows';
+import { cancelDismiss } from '../hooks/useWindowAnimation';
+
+vi.mock('../hooks/useWindowAnimation', () => ({ cancelDismiss: vi.fn() }));
 
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
@@ -44,5 +47,15 @@ describe('windows utilities', () => {
     expect(invoke).toHaveBeenCalledWith('set_window_theme', {
       dark: true,
     });
+  });
+
+  it('cancels an already-started fade-out before requesting settings', async () => {
+    vi.mocked(invoke).mockResolvedValueOnce(undefined);
+    await openSettingsWindow();
+    expect(cancelDismiss).toHaveBeenCalledOnce();
+    expect(invoke).toHaveBeenCalledWith('open_settings_window');
+    expect(vi.mocked(cancelDismiss).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(invoke).mock.invocationCallOrder[0],
+    );
   });
 });

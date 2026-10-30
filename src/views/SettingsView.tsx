@@ -451,8 +451,8 @@ export const SettingsView: React.FC = () => {
           {status?.active && (
             <span className="text-[10px] text-emerald-400 font-mono shrink-0">
               {status.system
-                ? (i18n.language.startsWith('zh') ? '系统监听' : 'System Hook')
-                : (i18n.language.startsWith('zh') ? '已就绪' : 'Ready')}
+                ? t('settings.shortcuts.systemHook')
+                : t('settings.shortcuts.ready')}
             </span>
           )}
           {status?.error && (
@@ -527,9 +527,9 @@ export const SettingsView: React.FC = () => {
         {/* 主体两栏布局：左侧竖向导航侧边栏 + 右侧内容区 */}
         <div className="flex flex-1 min-h-0 overflow-hidden">
           {/* 左侧竖向导航栏 */}
-          <aside className="flex w-40 shrink-0 flex-col border-r border-[var(--stroke)] bg-[var(--surface-2)]/30 overflow-y-auto p-2.5 gap-1 select-none">
+          <aside className="flex w-56 shrink-0 flex-col border-r border-[var(--stroke)] bg-[var(--surface-2)]/30 overflow-y-auto p-2.5 gap-1 select-none">
             <div className="px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--faint)]">
-              {i18n.language.startsWith('zh') ? '配置导航' : 'Categories'}
+              {t('settings.categoryTitle')}
             </div>
             {TABS.map((tItem) => {
               const isActive = !isSearching && activeTab === tItem.id;
@@ -537,12 +537,13 @@ export const SettingsView: React.FC = () => {
                 <button
                   key={tItem.id}
                   type="button"
+                  title={t(tItem.labelKey)}
                   onClick={() => {
                     setActiveTab(tItem.id);
                     if (isSearching) setSearchQuery('');
                   }}
                   className={cn(
-                    'flex items-center gap-2.5 rounded-[var(--r-ctrl)] px-2.5 py-2 text-xs font-medium transition-all text-left cursor-pointer',
+                    'flex items-center gap-2 rounded-[var(--r-ctrl)] px-2.5 py-2 text-xs font-medium transition-all text-left cursor-pointer',
                     isActive
                       ? 'bg-[var(--surface-3)] text-[var(--text)] shadow-sm font-semibold'
                       : 'text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--surface-3)]/60',
@@ -617,9 +618,13 @@ export const SettingsView: React.FC = () => {
 
                     {/* 主题模式 */}
                     <div className="flex items-center gap-3">
-                      <label className="w-28 shrink-0 text-[13px] text-[var(--muted)]">
-                        {t('settings.general.theme')}
-                      </label>
+                      <div className="w-28 shrink-0">
+                        <HoverTipText
+                          text={t('settings.general.theme')}
+                          tip={t('settings.general.themeDesc')}
+                          className="text-[13px] text-[var(--muted)] font-normal"
+                        />
+                      </div>
                       <Select
                         ariaLabel="Theme"
                         value={theme}
@@ -630,9 +635,13 @@ export const SettingsView: React.FC = () => {
 
                     {/* 窗口透明度 */}
                     <div className="flex items-center gap-3">
-                      <label className="w-28 shrink-0 text-[13px] text-[var(--muted)]">
-                        {t('settings.general.overlayOpacity')}
-                      </label>
+                      <div className="w-28 shrink-0">
+                        <HoverTipText
+                          text={t('settings.general.overlayOpacity')}
+                          tip={t('settings.general.overlayOpacityDesc')}
+                          className="text-[13px] text-[var(--muted)] font-normal"
+                        />
+                      </div>
                       <input
                         type="range"
                         min={25}
@@ -649,9 +658,13 @@ export const SettingsView: React.FC = () => {
 
                     {/* 字号大小 */}
                     <div className="flex items-center gap-3">
-                      <label className="w-28 shrink-0 text-[13px] text-[var(--muted)]">
-                        {t('settings.general.fontSize')}
-                      </label>
+                      <div className="w-28 shrink-0">
+                        <HoverTipText
+                          text={t('settings.general.fontSize')}
+                          tip={t('settings.general.fontSizeDesc')}
+                          className="text-[13px] text-[var(--muted)] font-normal"
+                        />
+                      </div>
                       <input
                         type="range"
                         min={12}
@@ -665,9 +678,6 @@ export const SettingsView: React.FC = () => {
                         {fontSize}px
                       </span>
                     </div>
-                    <p className="text-[10px] text-[var(--faint)]">
-                      {t('settings.general.fontSizeDesc')}
-                    </p>
 
                     {/* 平滑动画动效 */}
                     <div className="flex items-center justify-between gap-3 border-t border-[var(--stroke)] pt-2.5">
@@ -723,9 +733,13 @@ export const SettingsView: React.FC = () => {
                 <Section label={t('settings.translation.providers')} icon={<Languages className="h-3.5 w-3.5" />}>
                   <Surface variant="inner" className="flex flex-col gap-2.5 p-3">
                     <div className="flex items-center gap-3">
-                      <label className="w-28 shrink-0 text-[13px] text-[var(--muted)]">
-                        {t('settings.translation.providerSelect')}
-                      </label>
+                      <div className="w-28 shrink-0">
+                        <HoverTipText
+                          text={t('settings.translation.providerSelect')}
+                          tip={t('settings.translation.freeProvidersHint')}
+                          className="text-[13px] text-[var(--muted)] font-normal"
+                        />
+                      </div>
                       <Select
                         ariaLabel="Translation engine"
                         value={provider}
@@ -735,9 +749,13 @@ export const SettingsView: React.FC = () => {
                     </div>
 
                     <div className="flex items-center gap-3">
-                      <label className="w-28 shrink-0 text-[13px] text-[var(--muted)]">
-                        {t('settings.translation.targetLanguage')}
-                      </label>
+                      <div className="w-28 shrink-0">
+                        <HoverTipText
+                          text={t('settings.translation.targetLanguage')}
+                          tip={t('settings.translation.targetLangHint')}
+                          className="text-[13px] text-[var(--muted)] font-normal"
+                        />
+                      </div>
                       <Select
                         ariaLabel="Target language"
                         value={targetLanguage}
@@ -745,11 +763,8 @@ export const SettingsView: React.FC = () => {
                         options={TARGET_LANGUAGE_OPTIONS}
                       />
                     </div>
-                    <p className="text-[10px] text-[var(--faint)]">
-                      {t('settings.translation.targetLangHint')}
-                    </p>
 
-                    {provider === 'openai' ? (
+                    {provider === 'openai' && (
                       <>
                         <div className="flex items-center gap-3">
                           <label className="w-28 shrink-0 text-[13px] text-[var(--muted)]">
@@ -779,10 +794,6 @@ export const SettingsView: React.FC = () => {
                           config={openaiConfig}
                         />
                       </>
-                    ) : (
-                      <p className="text-[10px] text-[var(--faint)]">
-                        {t('settings.translation.freeProvidersHint')}
-                      </p>
                     )}
                   </Surface>
                 </Section>
@@ -793,9 +804,13 @@ export const SettingsView: React.FC = () => {
                 <Section label={t('settings.general.searchEngine')} icon={<Search className="h-3.5 w-3.5" />}>
                   <Surface variant="inner" className="flex flex-col gap-2.5 p-3">
                     <div className="flex items-center gap-3">
-                      <label className="w-28 shrink-0 text-[13px] text-[var(--muted)]">
-                        {t('settings.general.searchEngineSelect')}
-                      </label>
+                      <div className="w-28 shrink-0">
+                        <HoverTipText
+                          text={t('settings.general.searchEngineSelect')}
+                          tip={t('settings.general.searchEngineHint')}
+                          className="text-[13px] text-[var(--muted)] font-normal"
+                        />
+                      </div>
                       <Select
                         ariaLabel="Web search engine"
                         value={['auto', 'bing', 'google', 'baidu'].includes(searchEngine) ? searchEngine : 'custom'}
@@ -812,9 +827,6 @@ export const SettingsView: React.FC = () => {
                         options={searchEngineOptions}
                       />
                     </div>
-                    <p className="text-[10px] text-[var(--faint)]">
-                      {t('settings.general.searchEngineHint')}
-                    </p>
                     {!['auto', 'bing', 'google', 'baidu'].includes(searchEngine) && (
                       <div className="flex items-center gap-3 pt-1">
                         <label className="w-28 shrink-0 text-[13px] text-[var(--muted)]">{t('settings.general.urlTemplate')}</label>
@@ -838,14 +850,13 @@ export const SettingsView: React.FC = () => {
                 <Section label={t('settings.translation.dictionaries')} icon={<BookOpen className="h-3.5 w-3.5" />} className="shrink-0">
                   <Surface variant="inner" className="flex flex-col gap-3 p-3">
                     <div className="flex items-center justify-between gap-3 border-b border-[var(--stroke)] pb-2.5">
-                      <div className="flex flex-col gap-0.5">
-                        <div className="flex items-center gap-1.5 text-[13px] font-medium">
-                          <Volume2 className="h-3.5 w-3.5 text-[var(--accent-b)]" />
-                          <span>{t('settings.general.autoPronounce')}</span>
-                        </div>
-                        <p className="text-[10px] text-[var(--faint)]">
-                          {t('settings.general.autoPronounceDesc')}
-                        </p>
+                      <div className="flex items-center gap-1.5">
+                        <Volume2 className="h-3.5 w-3.5 text-[var(--accent-b)]" />
+                        <HoverTipText
+                          text={t('settings.general.autoPronounce')}
+                          tip={t('settings.general.autoPronounceDesc')}
+                          className="text-[13px] font-medium text-[var(--text)]"
+                        />
                       </div>
                       <Switch
                         checked={autoPronounce}

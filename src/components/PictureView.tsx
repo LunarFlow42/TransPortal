@@ -98,7 +98,7 @@ export const PictureView: React.FC<Props> = ({ picture, translation, busy, error
         <button
           type="button"
           onClick={resetZoom}
-          title="点击复位为适应窗口 (双击图片也可复位)"
+          title="点击复位为适应窗口，双击图片亦可复位"
           className="flex items-center gap-1 rounded bg-[var(--surface-3)] px-1.5 py-0.5 text-[10px] font-mono text-[var(--accent-b)] hover:bg-[var(--accent-b)]/20 transition-colors cursor-pointer"
         >
           <RotateCcw className="h-2.5 w-2.5" />
@@ -130,7 +130,7 @@ export const PictureView: React.FC<Props> = ({ picture, translation, busy, error
       {isZoomed && (
         <div
           onClick={resetZoom}
-          title="点击一键复位（双击图片也可复位）"
+          title="点击一键复位，双击图片亦可复位"
           className="absolute bottom-2 left-2 z-10 flex items-center gap-1 rounded bg-[var(--popover-bg)] px-1.5 py-0.5 shadow-md border border-[var(--stroke)] text-[10px] font-mono text-[var(--text)] hover:text-[var(--accent-b)] transition-colors cursor-pointer backdrop-blur-sm"
         >
           <ZoomIn className="h-3 w-3 text-[var(--accent-b)]" />

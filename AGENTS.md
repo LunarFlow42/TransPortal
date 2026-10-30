@@ -7,7 +7,7 @@ Guidance for coding agents working in this repository.
 Frontend (repo root):
 
 - Install deps: `pnpm install`
-- Typecheck: `pnpm exec tsc --noEmit`
+- Typecheck: `pnpm exec tsc --noEmit; echo "TSC_EXIT: $LASTEXITCODE"` (PowerShell 显式输出退出码防空等，纯净通过为 0)
 - Unit tests (all): `pnpm test`
 - Single test file: `pnpm exec vitest run <path/to/test.ts>`
 - Build frontend: `pnpm build`
@@ -28,7 +28,7 @@ Backend (`src-tauri/`):
 
 ### Level 1: 实时高频迭代流 (0.5s ~ 2s 极速反馈)
 - **单模块极速单测**：验证逻辑时务必按模块过滤运行（例如 `cargo test platform::placement::tests` 仅需 **0.7 秒**，前端单测 `pnpm exec vitest run src/hooks/useWindowAnimation.test.ts` 仅需 **0.2 秒**），避免无谓链接 ONNX / 静态大模型。
-- **增量语法与类型检查**：直接执行 `cargo check`（实测 0.7s）与 `pnpm exec tsc --noEmit`（实测 1.5s）。
+- **增量语法与类型检查**：直接执行 `cargo check`（实测 0.7s）与 `pnpm exec tsc --noEmit; echo "TSC_EXIT: $LASTEXITCODE"`（实测 1.5s，带退出码防空等挂起）。
 - **日常热重载调试**：使用 `pnpm tauri dev` 即可，利用成熟的增量编译与 Vite 热重载缓存。
 
 ### Level 2: 阶段性落地与 Commit 前质量闭环 (3s ~ 8s 质量铁律)

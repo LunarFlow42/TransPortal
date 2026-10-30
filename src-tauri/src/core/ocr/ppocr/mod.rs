@@ -9,6 +9,7 @@ pub use types::{Angle, OcrError, OcrResult, Point, ScaleParam, TextBlock, TextBo
 use angle_net::AngleNet;
 use crnn_net::CrnnNet;
 use db_net::DbNet;
+use ort::environment::Environment;
 use ort::session::builder::SessionBuilder;
 use std::collections::HashMap;
 use utils::OcrUtils;
@@ -37,27 +38,35 @@ impl PpOcrEngine {
 
     pub fn init_models(
         &mut self,
+        environment: &Environment,
         det_path: &str,
         cls_path: &str,
         rec_path: &str,
         num_thread: usize,
     ) -> Result<(), OcrError> {
-        self.db_net.init_model(det_path, num_thread, None)?;
-        self.angle_net.init_model(cls_path, num_thread, None)?;
-        self.crnn_net.init_model(rec_path, num_thread, None)?;
+        self.db_net
+            .init_model(environment, det_path, num_thread, None)?;
+        self.angle_net
+            .init_model(environment, cls_path, num_thread, None)?;
+        self.crnn_net
+            .init_model(environment, rec_path, num_thread, None)?;
         Ok(())
     }
 
     pub fn init_models_custom(
         &mut self,
+        environment: &Environment,
         det_path: &str,
         cls_path: &str,
         rec_path: &str,
         builder_fn: fn(SessionBuilder) -> ort::Result<SessionBuilder>,
     ) -> Result<(), OcrError> {
-        self.db_net.init_model(det_path, 0, Some(builder_fn))?;
-        self.angle_net.init_model(cls_path, 0, Some(builder_fn))?;
-        self.crnn_net.init_model(rec_path, 0, Some(builder_fn))?;
+        self.db_net
+            .init_model(environment, det_path, 0, Some(builder_fn))?;
+        self.angle_net
+            .init_model(environment, cls_path, 0, Some(builder_fn))?;
+        self.crnn_net
+            .init_model(environment, rec_path, 0, Some(builder_fn))?;
         Ok(())
     }
 

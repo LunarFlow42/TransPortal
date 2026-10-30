@@ -5,6 +5,7 @@ import { useTheme } from './hooks/useTheme';
 import './App.css';
 
 import { RegionSelectView } from './views/RegionSelectView';
+import { SettingsWindowBoundary, SettingsWindowStatus } from './components/SettingsWindowBoundary';
 
 const SettingsView = React.lazy(() =>
   import('./views/SettingsView').then((m) => ({ default: m.SettingsView })),
@@ -37,7 +38,16 @@ export const App: React.FC = () => {
       <React.Suspense fallback={null}>
         <Routes>
           <Route path="/shell" element={<ShellView />} />
-          <Route path="/settings" element={<SettingsView />} />
+          <Route
+            path="/settings"
+            element={
+              <SettingsWindowBoundary>
+                <React.Suspense fallback={<SettingsWindowStatus />}>
+                  <SettingsView />
+                </React.Suspense>
+              </SettingsWindowBoundary>
+            }
+          />
           <Route path="/ocr-region" element={<RegionSelectView />} />
           <Route path="/region" element={<RegionSelectView />} />
           <Route path="*" element={<Navigate to="/shell" replace />} />

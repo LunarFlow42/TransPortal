@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { dismissShell } from '../hooks/useWindowAnimation';
 import { IconButton, Pill, Select } from './ui';
 import {
@@ -6,6 +7,7 @@ import {
   BookOpen,
   Check,
   ChevronLeft,
+  ChevronRight,
   Copy,
   Download,
   GripVertical,
@@ -25,21 +27,6 @@ import { cn } from '../utils/cn';
 import { isAudioPlaying, playPronunciation, stopPronunciation } from '../utils/audio';
 import { recallScrollTop, rememberScrollTop } from '../utils/scrollMemory';
 import type { LookupNode, ProviderType } from '../types';
-
-const CARD_PROVIDER_OPTIONS: { value: ProviderType; label: string }[] = [
-  { value: 'bing_free', label: 'Bing' },
-  { value: 'google_free', label: 'Google' },
-  { value: 'youdao_free', label: '有道' },
-  { value: 'tencent_free', label: '腾讯' },
-  { value: 'openai', label: 'OpenAI' },
-];
-
-const AI_TEMPLATE_OPTIONS = [
-  { value: 'direct', label: '直译' },
-  { value: 'academic', label: '学术' },
-  { value: 'code', label: '代码' },
-  { value: 'casual', label: '口语' },
-];
 
 const QUICK_LANG_OPTIONS = [
   { value: 'zh-CN', label: '中文' },
@@ -163,6 +150,28 @@ export const LookupCard: React.FC<LookupCardProps> = ({
   isTop,
   fillHeight = false,
 }) => {
+  const { t, i18n } = useTranslation();
+
+  const cardProviderOptions = React.useMemo(
+    () => [
+      { value: 'bing_free' as ProviderType, label: 'Bing' },
+      { value: 'google_free' as ProviderType, label: 'Google' },
+      { value: 'youdao_free' as ProviderType, label: i18n.language.startsWith('zh') ? '有道' : 'Youdao' },
+      { value: 'tencent_free' as ProviderType, label: i18n.language.startsWith('zh') ? '腾讯' : 'Tencent' },
+      { value: 'openai' as ProviderType, label: 'OpenAI' },
+    ],
+    [i18n.language],
+  );
+
+  const aiTemplateOptions = React.useMemo(
+    () => [
+      { value: 'direct', label: t('card.styleDirect') },
+      { value: 'academic', label: t('card.styleAcademic') },
+      { value: 'code', label: t('card.styleCode') },
+      { value: 'casual', label: t('card.styleCasual') },
+    ],
+    [t],
+  );
   const popLookup = useAppStore((state) => state.popLookup);
   const clearLookup = useAppStore((state) => state.clearLookup);
   const setDensity = useAppStore((state) => state.setDensity);
@@ -181,6 +190,9 @@ export const LookupCard: React.FC<LookupCardProps> = ({
   const startStreamTranslation = useAppStore((state) => state.startStreamTranslation);
   const provider = useAppStore((state) => state.provider);
   const setProvider = useAppStore((state) => state.setProvider);
+  const history = useAppStore((state) => state.history);
+  const historyIndex = useAppStore((state) => state.historyIndex);
+  const navigateHistory = useAppStore((state) => state.navigateHistory);
 
   const [copied, setCopied] = useState(false);
   const [playingTarget, setPlayingTarget] = useState<'word' | 'source' | 'translation' | null>(null);
@@ -286,7 +298,7 @@ export const LookupCard: React.FC<LookupCardProps> = ({
 
   const pinButton = (
     <IconButton
-      title={pinned ? '取消固定 (Ctrl+Shift+T)' : '固定浮层 (Ctrl+Shift+T)'}
+      title={pinned ? t('card.unpin') : t('card.pin')}
       active={pinned}
       onClick={togglePinned}
       className={pinned ? 'text-amber-400' : undefined}
@@ -297,7 +309,7 @@ export const LookupCard: React.FC<LookupCardProps> = ({
 
   const densityButton = (
     <IconButton
-      title={compact ? '展开卡片详情' : '折叠卡片'}
+      title={compact ? t('card.expand') : t('card.collapse')}
       onClick={() => setDensity(compact ? 'dense' : 'compact')}
     >
       {compact ? (
@@ -309,14 +321,14 @@ export const LookupCard: React.FC<LookupCardProps> = ({
   );
 
   const settingsButton = (
-    <IconButton title="设置中心 (Ctrl+A)" onClick={() => void openSettingsWindow()}>
+    <IconButton title={t('settings.title')} onClick={() => void openSettingsWindow()}>
       <Settings className="h-3.5 w-3.5" />
     </IconButton>
   );
 
   const closeButton = (
     <IconButton
-      title="关闭浮层 (Esc)"
+      title={t('card.close')}
       onClick={handleClose}
       className="hover:bg-rose-500/90 hover:text-white"
     >
@@ -341,9 +353,9 @@ export const LookupCard: React.FC<LookupCardProps> = ({
           <div className="h-3 w-1/2 animate-pulse rounded bg-[var(--surface-3)]" />
         </div>
       ) : node.status === 'error' ? (
-        <p className="text-sm text-rose-300">查询失败，请检查网络或 provider 设置。</p>
+        <p className="text-sm text-rose-300">{t('card.failed')}</p>
       ) : node.status === 'notfound' || !node.translation ? (
-        <p className="text-sm text-[var(--muted)]">未收录该词。</p>
+        <p className="text-sm text-[var(--muted)]">{t('card.notFound')}</p>
       ) : (
         <p className="select-text text-sm leading-relaxed">
           <InteractiveSentence sentence={node.translation} />
@@ -375,13 +387,13 @@ export const LookupCard: React.FC<LookupCardProps> = ({
           {isTop && (
             <div
               className="flex shrink-0 items-center text-[var(--muted)] opacity-40 hover:opacity-90 transition-opacity"
-              title="按住拖拽窗口"
+              title={t('card.drag')}
             >
               <GripVertical className="h-3.5 w-3.5" />
             </div>
           )}
           {(total > 1 || Boolean(ocr)) && (
-            <IconButton title={ocr && total === 1 ? "返回截图对照" : "返回上一层 (Alt+←)"} onClick={handleBack}>
+            <IconButton title={ocr && total === 1 ? t('card.backOcr') : t('card.back')} onClick={handleBack}>
               <ChevronLeft className="h-4 w-4" />
             </IconButton>
           )}
@@ -390,6 +402,26 @@ export const LookupCard: React.FC<LookupCardProps> = ({
             <span className="shrink-0 rounded-full bg-[var(--surface-3)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--muted)]">
               {depth}/{total}
             </span>
+          )}
+          {total === 1 && history.length > 1 && (
+            <div className="flex items-center gap-0.5 ml-0.5">
+              <IconButton
+                title={`${t('card.prevHistory')} (Ctrl+P)`}
+                onClick={() => navigateHistory('prev')}
+                disabled={historyIndex === 0}
+                className={cn('h-5 w-5', historyIndex === 0 && 'opacity-25 pointer-events-none')}
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+              </IconButton>
+              <IconButton
+                title={`${t('card.nextHistory')} (Ctrl+N)`}
+                onClick={() => navigateHistory('next')}
+                disabled={historyIndex === -1 || historyIndex === history.length - 1}
+                className={cn('h-5 w-5', (historyIndex === -1 || historyIndex === history.length - 1) && 'opacity-25 pointer-events-none')}
+              >
+                <ChevronRight className="h-3.5 w-3.5" />
+              </IconButton>
+            </div>
           )}
           {node.kind === 'sentence' && (
             <div className="flex items-center gap-1 ml-1">
@@ -400,10 +432,10 @@ export const LookupCard: React.FC<LookupCardProps> = ({
                   setTargetLanguage(nextLang);
                   void startStreamTranslation(node.text, node.id);
                 }}
-                title="点击在自动/中文与目标语言间快速互译"
+                title={t('card.quickSwapTip')}
                 className="flex items-center gap-0.5 rounded bg-[var(--surface-3)] px-1.5 py-0 font-mono text-[10px] text-[var(--muted)] hover:bg-[var(--hover)] hover:text-[var(--text)] transition-colors border border-[var(--stroke)] h-5 cursor-pointer"
               >
-                <span>自动 ⇄ {QUICK_LANG_OPTIONS.find((l) => l.value === targetLanguage)?.label ?? targetLanguage}</span>
+                <span>{t('card.auto')} ⇄ {QUICK_LANG_OPTIONS.find((l) => l.value === targetLanguage)?.label ?? targetLanguage}</span>
               </button>
               <Select
                 size="xs"
@@ -413,7 +445,7 @@ export const LookupCard: React.FC<LookupCardProps> = ({
                   void startStreamTranslation(node.text, node.id);
                 }}
                 options={QUICK_LANG_OPTIONS}
-                title="选择目标语言"
+                title={t('card.selectTarget')}
               />
               <Select
                 size="xs"
@@ -424,8 +456,8 @@ export const LookupCard: React.FC<LookupCardProps> = ({
                   void saveSettings({ provider: nextProvider });
                   void startStreamTranslation(node.text, node.id);
                 }}
-                options={CARD_PROVIDER_OPTIONS}
-                title="切换翻译引擎"
+                options={cardProviderOptions}
+                title={t('card.switchProvider')}
               />
               {provider === 'openai' && (
                 <Select
@@ -436,8 +468,8 @@ export const LookupCard: React.FC<LookupCardProps> = ({
                     setAiPromptTemplate(t);
                     void startStreamTranslation(node.text, node.id);
                   }}
-                  options={AI_TEMPLATE_OPTIONS}
-                  title="AI 提示词模板"
+                  options={aiTemplateOptions}
+                  title={t('card.aiTemplate')}
                 />
               )}
             </div>
@@ -446,20 +478,20 @@ export const LookupCard: React.FC<LookupCardProps> = ({
 
         <div className="flex shrink-0 items-center gap-0.5">
           {node.kind === 'word' ? (
-            <IconButton title="导出单词本 (TSV)" onClick={() => exportTsv()}>
+            <IconButton title={t('card.exportTsv')} onClick={() => exportTsv()}>
               <Download className="h-3.5 w-3.5" />
             </IconButton>
           ) : (
             <>
               <IconButton
-                title="回译验证 (⇌)"
+                title={t('card.backTranslate')}
                 onClick={() => void runBackTranslation()}
                 active={Boolean(backTranslation)}
                 className={backTranslation ? 'text-[var(--accent-b)]' : undefined}
               >
                 <ArrowLeftRight className="h-3.5 w-3.5" />
               </IconButton>
-              <IconButton title="复制译文" onClick={() => void handleCopy()}>
+              <IconButton title={t('card.copyTranslation')} onClick={() => void handleCopy()}>
                 {copied ? (
                   <Check className="h-3.5 w-3.5 text-emerald-400" />
                 ) : (
@@ -490,11 +522,11 @@ export const LookupCard: React.FC<LookupCardProps> = ({
             <InteractiveSentence
               sentence={node.text}
               muted
-              className="text-xs italic flex-1"
+              className={cn("leading-relaxed text-[var(--text)]/90 flex-1 font-normal tracking-normal select-text", compact ? "text-[14px]" : "text-[15px]")}
               currentWord={node.highlightWord}
             />
             <IconButton
-              title={playingTarget === 'source' ? '停止朗读原文' : '朗读原文'}
+              title={playingTarget === 'source' ? t('card.stopSource') : t('card.playSource')}
               onClick={() => handleTogglePronounce('source', node.text)}
               className={cn(
                 'h-5 w-5 shrink-0 text-[var(--faint)] hover:text-[var(--text)] transition-colors',
@@ -506,15 +538,15 @@ export const LookupCard: React.FC<LookupCardProps> = ({
           </div>
           <div
             className={cn(
-              'flex items-start justify-between gap-1.5 font-medium leading-relaxed group/trans',
-              compact ? 'text-sm' : 'text-base',
+              'flex items-start justify-between gap-1.5 font-medium leading-relaxed group/trans text-[var(--text)]',
+              compact ? 'text-[14.5px]' : 'text-base',
             )}
           >
             <div className="flex-1">
               {node.status === 'loading' ? (
                 <span className="animate-pulse text-[var(--faint)]">Analyzing…</span>
               ) : node.status === 'notfound' ? (
-                <span className="text-[var(--muted)]">未获得翻译。</span>
+                <span className="text-[var(--muted)]">{t('card.noTranslation')}</span>
               ) : (
                 <>
                   <InteractiveSentence
@@ -529,7 +561,7 @@ export const LookupCard: React.FC<LookupCardProps> = ({
             </div>
             {node.translation && node.status !== 'loading' && (
               <IconButton
-                title={playingTarget === 'translation' ? '停止朗读译文' : '朗读译文'}
+                title={playingTarget === 'translation' ? t('card.stopTranslation') : t('card.playTranslation')}
                 onClick={() => handleTogglePronounce('translation', node.translation)}
                 className={cn(
                   'h-5 w-5 shrink-0 text-[var(--muted)] hover:text-[var(--accent-b)] transition-colors mt-0.5',
@@ -546,7 +578,7 @@ export const LookupCard: React.FC<LookupCardProps> = ({
               <div className="flex items-center justify-between text-[10px] text-[var(--faint)] mb-1">
                 <span className="flex items-center gap-1 font-mono">
                   <ArrowLeftRight className="h-2.5 w-2.5" />
-                  <span>回译验证</span>
+                  <span>{t('card.backTranslate')}</span>
                 </span>
                 {backTranslation.loading && <span className="animate-pulse">翻译中...</span>}
               </div>
@@ -554,7 +586,7 @@ export const LookupCard: React.FC<LookupCardProps> = ({
                 <span className="text-rose-400">{backTranslation.error}</span>
               ) : (
                 <span className="text-[var(--text)] select-text">
-                  {backTranslation.text || (backTranslation.loading ? '正在反向翻译...' : '')}
+                  {backTranslation.text || (backTranslation.loading ? t('card.backTranslating') : '')}
                 </span>
               )}
             </div>
@@ -573,7 +605,7 @@ export const LookupCard: React.FC<LookupCardProps> = ({
           <div className="flex flex-wrap items-baseline gap-2.5">
             <h1
               onClick={handlePronounce}
-              title="点击发音"
+              title={t('card.playPhonetic')}
               className="cursor-pointer text-2xl font-bold capitalize tracking-tight transition-colors hover:text-[var(--accent-b)]"
             >
               {displayWord}
@@ -583,7 +615,7 @@ export const LookupCard: React.FC<LookupCardProps> = ({
                   <span
                     key={phone.label}
                     onClick={handlePronounce}
-                    title="点击发音"
+                    title={t('card.playPhonetic')}
                     className="cursor-pointer whitespace-nowrap font-mono text-xs text-[var(--accent-b)] transition-opacity hover:opacity-80"
                   >
                     <span className="mr-0.5 text-[var(--faint)]">{phone.label}</span>
@@ -593,7 +625,7 @@ export const LookupCard: React.FC<LookupCardProps> = ({
               : wordData?.phonetic && (
                   <span
                     onClick={handlePronounce}
-                    title="点击发音"
+                    title={t('card.playPhonetic')}
                     className="cursor-pointer font-mono text-sm text-[var(--accent-b)] transition-opacity hover:opacity-80"
                   >
                     {wordData.phonetic}
@@ -612,11 +644,11 @@ export const LookupCard: React.FC<LookupCardProps> = ({
           {/* Origin context (source sentence) */}
           {node.originText && (
             <div className="flex items-start gap-2 rounded-[var(--r-inner)] bg-[var(--surface-2)] px-2.5 py-1.5 text-[11px]">
-              <span className="shrink-0 text-[var(--faint)]">出处</span>
+              <span className="shrink-0 text-[var(--faint)]">{t('card.sourceDict')}</span>
               <InteractiveSentence
                 sentence={node.originText}
                 currentWord={node.originWord}
-                className="text-[11px] italic text-[var(--muted)]"
+                className="text-xs text-[var(--muted)]"
               />
             </div>
           )}
@@ -663,7 +695,7 @@ export const LookupCard: React.FC<LookupCardProps> = ({
                   <BookOpen className="h-3 w-3" />
                   <span>Context &amp; Drill-down</span>
                 </div>
-                <span className="text-[10px] italic text-[var(--faint)]">
+                <span className="text-[10px] text-[var(--faint)]">
                   Click words to drill down
                 </span>
               </div>

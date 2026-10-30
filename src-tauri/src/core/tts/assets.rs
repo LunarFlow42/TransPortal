@@ -215,6 +215,12 @@ impl TtsAssets {
         }
     }
 
+    pub fn clean_cache(&self) {
+        if self.cache_root.exists() {
+            let _ = fs::remove_dir_all(&self.cache_root);
+        }
+    }
+
     pub async fn install(
         &self,
         progress: &(dyn Fn(InstallProgress) + Send + Sync),
@@ -243,6 +249,7 @@ impl TtsAssets {
         fs::create_dir_all(&install_dir).map_err(|e| e.to_string())?;
         fs::create_dir_all(&voices_dir).map_err(|e| e.to_string())?;
         fs::create_dir_all(&self.cache_root).map_err(|e| e.to_string())?;
+        clean_stale_partial_files(&self.cache_root);
 
         let client = reqwest::Client::builder()
             .connect_timeout(Duration::from_secs(20))
@@ -293,6 +300,8 @@ impl TtsAssets {
             completed += voice.bytes;
         }
 
+        self.clean_cache();
+
         progress(InstallProgress {
             stage: "ready",
             file: String::new(),
@@ -308,7 +317,22 @@ impl TtsAssets {
         if dir.exists() {
             fs::remove_dir_all(&dir).map_err(|e| format!("删除 TTS 资源失败：{e}"))?;
         }
+        self.clean_cache();
         Ok(())
+    }
+}
+
+fn clean_stale_partial_files(dir: &Path) {
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file()
+                && let Some(name) = path.file_name().and_then(|s| s.to_str())
+                && name.contains(".part-")
+            {
+                let _ = fs::remove_file(path);
+            }
+        }
     }
 }
 
@@ -436,4 +460,36 @@ async fn download(
         }
     }
     Err(format!("下载 {} 失败：{last_error}", artifact.name))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn clean_cache_and_stale_partial_files_removes_downloads() {
+        let temp_dir =
+            std::env::temp_dir().join(format!("transportal-tts-cache-test-{}", std::process::id()));
+        let cache_root = temp_dir.join("downloads");
+        let install_root = temp_dir.join("install");
+        fs::create_dir_all(&cache_root).unwrap();
+
+        // Create a stale partial download and a completed download
+        let stale_part = cache_root.join("model.part-8888");
+        let complete_file = cache_root.join("model_quantized.onnx");
+        fs::write(&stale_part, b"partial data").unwrap();
+        fs::write(&complete_file, b"complete data").unwrap();
+
+        // Stale partial files should be cleaned up
+        clean_stale_partial_files(&cache_root);
+        assert!(!stale_part.exists());
+        assert!(complete_file.exists());
+
+        // clean_cache should remove the entire cache_root directory
+        let assets = TtsAssets::new(install_root, cache_root.clone(), None);
+        assets.clean_cache();
+        assert!(!cache_root.exists());
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
 }

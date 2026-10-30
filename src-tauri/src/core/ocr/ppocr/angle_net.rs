@@ -1,5 +1,6 @@
 use super::types::{Angle, OcrError};
 use super::utils::OcrUtils;
+use ort::environment::Environment;
 use ort::inputs;
 use ort::session::builder::{GraphOptimizationLevel, SessionBuilder};
 use ort::session::{Session, SessionOutputs};
@@ -37,12 +38,13 @@ impl AngleNet {
 
     pub fn init_model(
         &mut self,
+        environment: &Environment,
         path: &str,
         num_thread: usize,
         builder_fn: Option<fn(SessionBuilder) -> ort::Result<SessionBuilder>>,
     ) -> Result<(), OcrError> {
-        let builder = Session::builder()?;
-        let builder = match builder_fn {
+        let builder = Session::builder(environment)?;
+        let mut builder = match builder_fn {
             Some(custom) => custom(builder)?,
             None => builder
                 .with_optimization_level(GraphOptimizationLevel::Level2)?
@@ -51,14 +53,14 @@ impl AngleNet {
         };
         let session = builder.commit_from_file(path)?;
         self.input_names = session
-            .inputs
+            .inputs()
             .iter()
-            .map(|input| input.name.clone())
+            .map(|input| input.name().to_string())
             .collect();
 
         // 动态根据模型输入张量形状适配目标宽高（兼容 v4 的 48x192 与 v5 LCNet 的 80x160）
-        let (dst_height, dst_width) = if let Some(input) = session.inputs.first() {
-            if let ort::value::ValueType::Tensor { shape, .. } = &input.input_type {
+        let (dst_height, dst_width) = if let Some(input) = session.inputs().first() {
+            if let ort::value::ValueType::Tensor { shape, .. } = input.dtype() {
                 let h = shape.get(2).copied().filter(|&d| d > 0).unwrap_or(48) as u32;
                 let w = shape.get(3).copied().filter(|&d| d > 0).unwrap_or(192) as u32;
                 (h, w)

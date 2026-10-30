@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useWindowAnimation, dismissShell, getAnimationStage } from './useWindowAnimation';
+import { useWindowAnimation, dismissShell, cancelDismiss, getAnimationStage } from './useWindowAnimation';
 import { useAppStore } from '../store/useAppStore';
 import * as audioModule from '../utils/audio';
 
@@ -227,6 +227,27 @@ describe('useWindowAnimation & dismissShell', () => {
 
     focusCallback!({ payload: true });
     expect(getAnimationStage()).toBe('entered');
+  });
+
+  it('cancelling for settings restores content and settles the pending dismiss', async () => {
+    mount();
+    const dismiss = dismissShell();
+    expect(getAnimationStage()).toBe('exiting');
+    cancelDismiss();
+    expect(await dismiss).toBe(false);
+    expect(getAnimationStage()).toBe('entered');
+    await vi.advanceTimersByTimeAsync(100);
+    expect(mockHide).not.toHaveBeenCalled();
+  });
+
+  it('regaining focus during fade-out cancels the hide instead of leaving a transparent host', async () => {
+    mount();
+    const dismiss = dismissShell();
+    focusCallback!({ payload: true });
+    expect(await dismiss).toBe(false);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(getAnimationStage()).toBe('entered');
+    expect(mockHide).not.toHaveBeenCalled();
   });
 
   it('only blocks on auto-OCR while it is actively observing', async () => {

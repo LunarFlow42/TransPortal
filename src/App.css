@@ -82,6 +82,10 @@ body,
   padding: 0;
   width: 100%;
   height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "WenQuanYi Micro Hei", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
   /* Transparent host so the overlay can show its rounded glass card and the
      settings window can round its own opaque panel. */
   background-color: transparent;

@@ -1,5 +1,6 @@
 use super::types::{OcrError, TextLine};
 use super::utils::OcrUtils;
+use ort::environment::Environment;
 use ort::inputs;
 use ort::session::Session;
 use ort::session::builder::{GraphOptimizationLevel, SessionBuilder};
@@ -36,12 +37,13 @@ impl CrnnNet {
 
     pub fn init_model(
         &mut self,
+        environment: &Environment,
         path: &str,
         num_thread: usize,
         builder_fn: Option<fn(SessionBuilder) -> ort::Result<SessionBuilder>>,
     ) -> Result<(), OcrError> {
-        let builder = Session::builder()?;
-        let builder = match builder_fn {
+        let builder = Session::builder(environment)?;
+        let mut builder = match builder_fn {
             Some(custom) => custom(builder)?,
             None => builder
                 .with_optimization_level(GraphOptimizationLevel::Level2)?
@@ -50,14 +52,14 @@ impl CrnnNet {
         };
         let session = builder.commit_from_file(path)?;
         self.input_names = session
-            .inputs
+            .inputs()
             .iter()
-            .map(|input| input.name.clone())
+            .map(|input| input.name().to_string())
             .collect();
 
         // 动态根据模型输入张量高度适配（默认 48）
-        let dst_height = if let Some(input) = session.inputs.first() {
-            if let ort::value::ValueType::Tensor { shape, .. } = &input.input_type {
+        let dst_height = if let Some(input) = session.inputs().first() {
+            if let ort::value::ValueType::Tensor { shape, .. } = input.dtype() {
                 shape.get(2).copied().filter(|&d| d > 0).unwrap_or(48) as u32
             } else {
                 CRNN_DST_HEIGHT
@@ -78,9 +80,12 @@ impl CrnnNet {
             .as_ref()
             .ok_or(OcrError::SessionNotInitialized)?;
         let metadata = session.metadata()?;
-        let character_list = metadata
-            .custom("character")?
-            .ok_or_else(|| OcrError::MetadataNotFound("character".into()))?;
+        Self::keys_from_metadata(metadata.custom("character"))
+    }
+
+    fn keys_from_metadata(character_list: Option<String>) -> Result<Vec<String>, OcrError> {
+        let character_list =
+            character_list.ok_or_else(|| OcrError::MetadataNotFound("character".into()))?;
 
         let mut keys = Vec::with_capacity(character_list.len() / 3);
         keys.push("#".to_string());
@@ -196,5 +201,24 @@ impl CrnnNet {
             0.0
         };
         Ok(text_line)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn missing_character_metadata_returns_ocr_error() {
+        assert!(matches!(
+            CrnnNet::keys_from_metadata(None),
+            Err(OcrError::MetadataNotFound(key)) if key == "character"
+        ));
+    }
+
+    #[test]
+    fn character_metadata_preserves_blank_and_space_tokens() {
+        let keys = CrnnNet::keys_from_metadata(Some("中\r\n\nA\r\n文\n".into())).unwrap();
+        assert_eq!(keys, ["#", "中", "A", "文", " "]);
     }
 }

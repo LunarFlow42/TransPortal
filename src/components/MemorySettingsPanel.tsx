@@ -117,18 +117,16 @@ export function MemorySettingsPanel({ bare = false }: { bare?: boolean } = {}) {
               </div>
 
               <div className="flex flex-col gap-0.5 rounded-[var(--r-inner)] border border-[var(--stroke)] bg-[var(--surface-2)] p-2">
-                <span className="text-[10px] text-[var(--faint)]">
-                  {t('settings.advanced.totalCommit')}
-                </span>
+                <HoverTipText
+                  text={t('settings.advanced.totalCommit')}
+                  tip={t('settings.advanced.memoryFootnote')}
+                  className="text-[10px] text-[var(--faint)]"
+                />
                 <span className="font-mono font-medium text-[var(--text)]">
                   {report ? formatMb(report.total_private_bytes) : '--'}
                 </span>
               </div>
             </div>
-
-            <p className="text-[10px] text-[var(--faint)] leading-relaxed">
-              * 注：进程树总额包含 WebView2 渲染器与显存进程的预分配虚拟页及共享库映射，属于系统正常缓存机制。
-            </p>
           </div>
         )}
       </div>
@@ -147,9 +145,11 @@ export function MemorySettingsPanel({ bare = false }: { bare?: boolean } = {}) {
 
       {/* 释放按钮 */}
       <div className="flex items-center justify-between border-t border-[var(--stroke)] pt-2.5">
-        <p className="text-[10px] text-[var(--faint)]">
-          失焦或闲置 3 秒时，系统会在后台自动执行双阶段物理内存修剪。
-        </p>
+        <HoverTipText
+          text={t('settings.advanced.trimNoticeTitle')}
+          tip={t('settings.advanced.trimDesc')}
+          className="text-xs text-[var(--muted)]"
+        />
 
         <Button
           size="sm"

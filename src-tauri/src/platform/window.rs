@@ -63,6 +63,10 @@ pub trait WindowOps {
     /// Whether `window` is currently visible in the OS window manager.
     fn is_window_visible<R: Runtime>(window: &WebviewWindow<R>) -> bool;
 
+    /// Rendering-surface visibility, independent of the native host. `None`
+    /// means the backend cannot query its WebView controller directly.
+    fn webview_visibility<R: Runtime>(window: &WebviewWindow<R>) -> Result<Option<bool>, String>;
+
     /// Whether `window` is the OS foreground window.
     fn is_foreground<R: Runtime>(window: &WebviewWindow<R>) -> bool;
 

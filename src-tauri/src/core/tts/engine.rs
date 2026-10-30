@@ -3,7 +3,8 @@
 use super::assets::TtsAssets;
 use super::chunker::TtsError;
 use ndarray::{Array1, Array2};
-use ort::execution_providers::CPUExecutionProvider;
+use ort::environment::Environment;
+use ort::ep::CPU;
 use ort::inputs;
 use ort::session::Session;
 use ort::session::builder::GraphOptimizationLevel;
@@ -62,22 +63,21 @@ impl KokoroEngine {
             .resolve_runtime()
             .map_err(TtsError::AssetNotReady)?;
 
-        init_runtime(&runtime_path).map_err(TtsError::Inference)?;
+        let environment = init_runtime(&runtime_path).map_err(TtsError::Inference)?;
 
         let threads = std::thread::available_parallelism()
             .map(|n| (n.get() / 2).clamp(2, 4))
             .unwrap_or(2);
 
-        let builder = Session::builder()
+        let builder = Session::builder(&environment)
             .map_err(|e| TtsError::Inference(format!("创建会话构建器失败: {e}")))?;
-        let builder = builder
-            .with_execution_providers([CPUExecutionProvider::default()
-                .with_arena_allocator(false)
-                .build()])
+        let mut builder = builder
+            .with_execution_providers([CPU::default().with_arena_allocator(false).build()])
             .map_err(|e| TtsError::Inference(format!("配置 CPU Provider 失败: {e}")))?
-            .with_optimization_level(GraphOptimizationLevel::Level3)
+            // Preserve rc.10's ORT_ENABLE_ALL setting on the bundled 1.22 runtime.
+            .with_optimization_level(GraphOptimizationLevel::All)
             .map_err(|e| TtsError::Inference(format!("配置优化等级失败: {e}")))?
-            .with_intra_threads(threads as usize)
+            .with_intra_threads(threads)
             .map_err(|e| TtsError::Inference(format!("配置线程失败: {e}")))?
             .with_inter_threads(1)
             .map_err(|e| TtsError::Inference(format!("配置线程失败: {e}")))?
@@ -157,22 +157,22 @@ impl KokoroEngine {
 
         let (input_id_name, style_name, speed_name) = {
             let id_name = session
-                .inputs
+                .inputs()
                 .iter()
-                .find(|i| i.name == "input_ids" || i.name == "tokens")
-                .map(|i| i.name.clone())
+                .find(|i| i.name() == "input_ids" || i.name() == "tokens")
+                .map(|i| i.name().to_string())
                 .unwrap_or_else(|| "input_ids".into());
             let st_name = session
-                .inputs
+                .inputs()
                 .iter()
-                .find(|i| i.name == "style")
-                .map(|i| i.name.clone())
+                .find(|i| i.name() == "style")
+                .map(|i| i.name().to_string())
                 .unwrap_or_else(|| "style".into());
             let sp_name = session
-                .inputs
+                .inputs()
                 .iter()
-                .find(|i| i.name == "speed")
-                .map(|i| i.name.clone())
+                .find(|i| i.name() == "speed")
+                .map(|i| i.name().to_string())
                 .unwrap_or_else(|| "speed".into());
             (id_name, st_name, sp_name)
         };
@@ -265,14 +265,14 @@ pub fn pack_wav(samples: &[f32], sample_rate: u32) -> Vec<u8> {
     wav
 }
 
-fn init_runtime(path: &Path) -> Result<(), String> {
+fn init_runtime(path: &Path) -> Result<Environment, String> {
     static RUNTIME: Mutex<Option<libloading::Library>> = Mutex::new(None);
     let mut runtime = RUNTIME
         .lock()
         .map_err(|_| "ONNX Runtime 状态锁不可用".to_string())?;
 
     if runtime.is_some() {
-        return Ok(());
+        return crate::core::onnx_runtime::environment(path);
     }
 
     let path = path
@@ -295,27 +295,20 @@ fn init_runtime(path: &Path) -> Result<(), String> {
         if version.is_null() {
             return Err("无法读取 ONNX Runtime 版本".into());
         }
-        let _ = CStr::from_ptr(version)
+        let version = CStr::from_ptr(version)
             .to_str()
             .map_err(|e| e.to_string())?;
+        if ((*base).GetApi)(ort::sys::ORT_API_VERSION).is_null() {
+            return Err(format!(
+                "ONNX Runtime 版本不兼容：需要 API {}，实际版本 {version}",
+                ort::sys::ORT_API_VERSION
+            ));
+        }
     }
 
-    let path_str = path
-        .to_str()
-        .ok_or_else(|| "ONNX Runtime 路径无法编码为 Unicode".to_string())?;
-
-    match ort::init_from(path_str)
-        .with_name("TransPortal TTS")
-        .with_telemetry(false)
-        .commit()
-    {
-        Ok(_) => {}
-        Err(e) if e.to_string().contains("already initialized") => {}
-        Err(e) => return Err(format!("ONNX Runtime 初始化失败：{e}")),
-    }
-
+    let environment = crate::core::onnx_runtime::environment(&path)?;
     *runtime = Some(library);
-    Ok(())
+    Ok(environment)
 }
 
 #[cfg(test)]

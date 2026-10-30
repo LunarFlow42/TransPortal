@@ -212,6 +212,12 @@ impl OnnxAssets {
         }
     }
 
+    pub fn clean_cache(&self) {
+        if self.cache_root.exists() {
+            let _ = fs::remove_dir_all(&self.cache_root);
+        }
+    }
+
     pub async fn install(
         &self,
         progress: &(dyn Fn(InstallProgress) + Send + Sync),
@@ -238,6 +244,7 @@ impl OnnxAssets {
                 .map(|model| model.bytes)
                 .sum::<u64>();
         if let Ok(directory) = self.resolve() {
+            self.clean_cache();
             progress(InstallProgress {
                 stage: "ready",
                 file: String::new(),
@@ -249,6 +256,7 @@ impl OnnxAssets {
         let directory = self.install_dir();
         fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
         fs::create_dir_all(&self.cache_root).map_err(|e| e.to_string())?;
+        clean_stale_partial_files(&self.cache_root);
         let client = reqwest::Client::builder()
             .connect_timeout(Duration::from_secs(20))
             .timeout(Duration::from_secs(600))
@@ -305,6 +313,7 @@ impl OnnxAssets {
             fs::write(licenses.join(name), content).map_err(|e| e.to_string())?;
         }
         verify_pack(&directory, runtime)?;
+        self.clean_cache();
         progress(InstallProgress {
             stage: "ready",
             file: String::new(),
@@ -312,6 +321,20 @@ impl OnnxAssets {
             total,
         });
         Ok(directory)
+    }
+}
+
+fn clean_stale_partial_files(dir: &Path) {
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file()
+                && let Some(name) = path.file_name().and_then(|s| s.to_str())
+                && name.contains(".part-")
+            {
+                let _ = fs::remove_file(path);
+            }
+        }
     }
 }
 
@@ -612,5 +635,31 @@ mod tests {
         fs::write(&path, b"ab").unwrap();
         assert!(verify_file(&path, &artifact).is_err());
         fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn clean_cache_and_stale_partial_files_removes_downloads() {
+        let temp_dir =
+            std::env::temp_dir().join(format!("transportal-ocr-cache-test-{}", std::process::id()));
+        let cache_root = temp_dir.join("downloads");
+        fs::create_dir_all(&cache_root).unwrap();
+
+        // Create a stale partial download and a completed download
+        let stale_part = cache_root.join("runtime.part-9999");
+        let complete_file = cache_root.join("model.onnx");
+        fs::write(&stale_part, b"partial data").unwrap();
+        fs::write(&complete_file, b"complete data").unwrap();
+
+        // Stale partial files should be cleaned up
+        clean_stale_partial_files(&cache_root);
+        assert!(!stale_part.exists());
+        assert!(complete_file.exists());
+
+        // clean_cache should remove the entire cache_root directory
+        let assets = OnnxAssets::new(None, temp_dir.join("install"), cache_root.clone());
+        assets.clean_cache();
+        assert!(!cache_root.exists());
+
+        let _ = fs::remove_dir_all(&temp_dir);
     }
 }

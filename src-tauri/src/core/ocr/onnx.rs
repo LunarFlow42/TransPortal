@@ -4,7 +4,8 @@ use super::assets::{OnnxAssets, manifest};
 use super::picture::OcrBlock;
 use super::ppocr::{PpOcrEngine as OcrLite, TextBlock};
 use super::{OcrEngine, OcrEngineInfo, OcrImage, OcrLanguage, RecognizedText};
-use ort::execution_providers::CPUExecutionProvider;
+use ort::environment::Environment;
+use ort::ep::CPU;
 use ort::session::builder::{GraphOptimizationLevel, SessionBuilder};
 use std::ffi::CStr;
 use std::path::Path;
@@ -29,7 +30,7 @@ impl OnnxOcrEngine {
     fn load(&self) -> Result<OcrLite, String> {
         let directory = self.assets.resolve()?;
         let runtime = self.assets.runtime()?;
-        init_runtime(&directory.join(&runtime.library))?;
+        let environment = init_runtime(&directory.join(&runtime.library))?;
         let models = &manifest().models;
         let paths: Vec<String> = models
             .iter()
@@ -41,7 +42,7 @@ impl OnnxOcrEngine {
             })
             .collect::<Result<_, _>>()?;
         let mut ocr = OcrLite::new();
-        ocr.init_models_custom(&paths[0], &paths[1], &paths[2], cpu_session)
+        ocr.init_models_custom(&environment, &paths[0], &paths[1], &paths[2], cpu_session)
             .map_err(|e| format!("ONNX 模型初始化失败：{e}"))?;
         Ok(ocr)
     }
@@ -159,29 +160,28 @@ fn cpu_session(builder: SessionBuilder) -> ort::Result<SessionBuilder> {
     let threads = std::thread::available_parallelism()
         .map(|n| (n.get() / 2).clamp(2, 8))
         .unwrap_or(4);
-    builder
-        .with_execution_providers([CPUExecutionProvider::default()
-            .with_arena_allocator(false)
-            .build()])?
-        .with_optimization_level(GraphOptimizationLevel::Level3)?
-        .with_intra_threads(threads as usize)?
+    Ok(builder
+        .with_execution_providers([CPU::default().with_arena_allocator(false).build()])?
+        // rc.10's Level3 mapped to ORT_ENABLE_ALL; rc.15 names it All.
+        .with_optimization_level(GraphOptimizationLevel::All)?
+        .with_intra_threads(threads)?
         .with_inter_threads(1)?
         .with_parallel_execution(false)?
         .with_memory_pattern(false)?
         .with_config_entry("session.intra_op.allow_spinning", "0")?
-        .with_config_entry("session.inter_op.allow_spinning", "0")
+        .with_config_entry("session.inter_op.allow_spinning", "0")?)
 }
 
-/// Keep the preflight library loaded. `ort`'s dynamic loader panics on a missing
-/// DLL or incompatible API, so validate both through libloading first and return
-/// a normal settings error, even in release builds using panic=abort.
-fn init_runtime(path: &Path) -> Result<(), String> {
+/// Keep the preflight library loaded. Validate its entry point and ABI before
+/// calling `ort` APIs, which can panic on invalid pointers or API tables even
+/// in release builds using panic=abort.
+fn init_runtime(path: &Path) -> Result<Environment, String> {
     static RUNTIME: Mutex<Option<libloading::Library>> = Mutex::new(None);
     let mut runtime = RUNTIME
         .lock()
         .map_err(|_| "ONNX Runtime 状态不可用，请重启应用。")?;
     if runtime.is_some() {
-        return Ok(());
+        return crate::core::onnx_runtime::environment(path);
     }
     let path = path
         .canonicalize()
@@ -217,14 +217,9 @@ fn init_runtime(path: &Path) -> Result<(), String> {
             ));
         }
     }
-    let path = path.to_str().ok_or("ONNX Runtime 路径无法编码为 Unicode")?;
-    ort::init_from(path)
-        .with_name("TransPortal OCR")
-        .with_telemetry(false)
-        .commit()
-        .map_err(|e| format!("ONNX Runtime 初始化失败：{e}"))?;
+    let environment = crate::core::onnx_runtime::environment(&path)?;
     *runtime = Some(library);
-    Ok(())
+    Ok(environment)
 }
 
 /// Detector contour order is not reading order. Sort rows top-to-bottom and

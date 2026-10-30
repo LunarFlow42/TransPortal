@@ -17,6 +17,7 @@
   <img src="https://img.shields.io/badge/Rust-2024_Edition-orange?logo=rust" alt="Rust 2024" />
   <img src="https://img.shields.io/badge/React-19-61dafb?logo=react" alt="React 19" />
   <img src="https://img.shields.io/badge/OCR-ONNX_PP--OCRv5-emerald" alt="ONNX OCR" />
+  <img src="https://img.shields.io/badge/TTS-Kokoro_ONNX-indigo" alt="Kokoro TTS" />
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License" />
 </p>
 
@@ -28,9 +29,11 @@ TransPortal is engineered for high-frequency reading, software engineering, and 
 
 - ⚡ **Transient HUD Popups (Instant Dismissal)**: Borderless, clean floating HUD positioned naturally near the cursor with smart screen edge boundary clamping. Automatically dismisses upon losing focus (blur) or pressing `Esc` within milliseconds, ensuring zero desktop disruption.
 - 🎯 **Global Text Selection & In-Place Replacement**: Uses Windows native UI Automation `TextPattern` to extract selected text across arbitrary applications (with silent clipboard fallback). Supports silent in-place overwrite of selected source text with target translations.
-- 🔍 **Local Offline & Dual-Engine Screen OCR**: Built-in native snipping tool with zero external dependencies. Integrates local ONNX PP-OCRv5 FP32 inference (offline high-accuracy Chinese/English recognition without requiring Python or GPU drivers). Supports side-by-side comparative reading with word drilldown, in-place picture text overlay, snip & web search, and silent background OCR to clipboard.
-- 📚 **Hybrid Offline Dictionaries & Streaming LLM**: Powered by an embedded `redb` KV store hosting the million-word offline ECCEDICT database for instant lookup. Seamlessly integrates with Microsoft Bing, Google, Youdao, Tencent, and custom OpenAI-compatible endpoints with smooth height-tweening against streaming token layout jitter.
+- 🔍 **Local Offline & Dual-Engine Screen OCR**: Built-in native snipping tool with zero external dependencies. Integrates local **ONNX PP-OCRv5 FP32** inference (offline high-accuracy Chinese/English recognition without requiring Python or GPU drivers). Supports side-by-side comparative reading with word drilldown, in-place picture text overlay, snip & web search, and silent background OCR to clipboard.
+- 🔊 **Offline Neural TTS (Kokoro ONNX)**: Integrated INT8 quantized neural voice synthesis engine (~**90.6 MB** asset bundle), delivering offline English & Chinese speech with natural prosody and dynamic subword compound phonemization fallback.
+- 📚 **Hybrid Offline Dictionaries & Streaming LLM**: Powered by an embedded `redb` KV store hosting the million-word offline ECCEDICT database for instant lookup. Seamlessly integrates with Microsoft Bing, Google, Youdao, Tencent, and custom OpenAI-compatible endpoints with **auto-fetch model lists** and smooth height-tweening against streaming token layout jitter.
 - 🛡️ **Subtle Dashed Affordance & Full Internationalization (i18n)**: Replaces cluttered `?` icons with elegant subtle dashed underlines (Dashed Affordance). Hovering over any title instantly unveils a sleek frosted glass tooltip card with rich explanations. Ships with 100% clean, non-bracketed English and Simplified Chinese localization.
+- 📊 **Hardware-Accelerated Capture Diagnostics**: Multi-tier screen capture probe (DXGI / WGC Window / WGC Monitor / GDI) with latency measurement and instant Markdown report generation.
 - 🍃 **Ultra-Low Memory Footprint**: Native Rust core resident memory remains **~30-60 MB** (70%+ lower RAM usage than traditional Electron apps), complemented by an automated dual-stage memory trimmer upon window idle.
 
 ---
@@ -135,7 +138,7 @@ Packaged installers are generated in `src-tauri/target/release/bundle/nsis/` (Wi
 | :--- | :--- | :--- |
 | **Selection Lookup** | `Alt + Q` | Trigger transient HUD popup on selected text |
 | **In-Place Replace** | `Alt + Z` | Silently overwrite selected source text with target translation |
-| **Double Copy** | `Ctrl + C + C` | Press C twice within 0.5s to trigger translation |
+| **Double Copy** | `Ctrl + C + C` | Press C twice within 0.5s to trigger translation without stealing normal copy |
 | **Side-by-Side OCR** | `Alt + Shift + X` | Snip screen area for dual-column view with word drilldown |
 | **In-Place Image Translate** | `Alt + S` | Snip screen image and overlay translations on detected text |
 | **Snip & Search** | `Alt + Shift + C` | Snip text to recognize and launch search in default browser |
@@ -143,7 +146,7 @@ Packaged installers are generated in `src-tauri/target/release/bundle/nsis/` (Wi
 | **Input Workspace** | `Alt + Space` | Open centered floating input box |
 | **In-Window Navigation** | `Tab` / `Esc` / `Ctrl+Shift+T` | Toggle original view / Dismiss window / Pin on top |
 
-*Note: All shortcuts can be customized or restored to defaults in Settings -> Shortcuts & Gestures.*
+*Note: All shortcuts can be customized or restored to defaults in Settings -> Shortcuts & Gestures (active shortcuts are suppressed during recording to prevent accidental triggers).*
 
 ---
 

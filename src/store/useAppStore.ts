@@ -141,7 +141,7 @@ interface AppState {
   startAutoOcr: (intervalMs?: number) => Promise<void>;
 
   // Stack navigation
-  processText: (text: string, forceDensity?: Density, forceIntent?: TextIntent) => Promise<void>;
+  processText: (text: string, forceDensity?: Density, forceIntent?: TextIntent, skipHistoryPush?: boolean) => Promise<void>;
   pushLookup: (
     word: string,
     origin?: { text: string; word: string },
@@ -189,11 +189,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   hotkey: 'Alt+Q',
   ocrCardHotkey: 'Alt+Shift+X',
   ocrPictureHotkey: 'Alt+S',
-  ocrTextHotkey: 'Alt+Shift+S',
-  ocrSearchHotkey: 'Alt+Shift+S',
+  ocrTextHotkey: 'Alt+Shift+C',
+  ocrSearchHotkey: 'Alt+Shift+C',
   searchEngine: 'auto',
   replaceSelectionHotkey: 'Alt+Z',
-  silentOcrHotkey: 'Alt+Shift+C',
+  silentOcrHotkey: 'Alt+Shift+S',
   inputTranslateHotkey: 'Alt+Space',
   inkTranslateKey: 'None',
   doubleCopyEnabled: true,
@@ -337,7 +337,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ historyIndex: newIndex });
       const item = history[newIndex];
       if (item) {
-        void get().processText(item);
+        void get().processText(item, undefined, undefined, true);
       }
     }
   },
@@ -419,11 +419,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       hotkey: 'Alt+Q',
       ocrCardHotkey: 'Alt+Shift+X',
       ocrPictureHotkey: 'Alt+S',
-      ocrTextHotkey: 'Alt+Shift+S',
-      ocrSearchHotkey: 'Alt+Shift+S',
-      searchEngine: 'auto',
-      replaceSelectionHotkey: 'Alt+Z',
-      silentOcrHotkey: 'Alt+Shift+C',
+      ocrTextHotkey: 'Alt+Shift+C',
+  ocrSearchHotkey: 'Alt+Shift+C',
+  searchEngine: 'auto',
+  replaceSelectionHotkey: 'Alt+Z',
+  silentOcrHotkey: 'Alt+Shift+S',
       inputTranslateHotkey: 'Alt+Space',
       inkTranslateKey: 'None',
       doubleCopyEnabled: true,
@@ -465,11 +465,20 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   applyCapture: (outcome) => {
-    get().clearLookup();
-    set({ capture: outcome, autoOcr: null });
     const text = outcome.text.trim();
     if (text) {
+      get().clearLookup();
+      set({ capture: outcome, autoOcr: null });
       void get().processText(text);
+    } else {
+      const { lookupStack, history } = get();
+      if (lookupStack.length === 0 && history.length > 0) {
+        const lastQuery = history[history.length - 1];
+        if (lastQuery) {
+          set({ autoOcr: null });
+          void get().processText(lastQuery);
+        }
+      }
     }
   },
 
@@ -583,7 +592,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (error) { set({ errorMessage: String(error) }); }
   },
 
-  processText: async (text, forceDensity, forceIntent) => {
+  processText: async (text, forceDensity, forceIntent, skipHistoryPush = false) => {
     const clean = text.trim();
     if (!clean) return;
 
@@ -591,17 +600,22 @@ export const useAppStore = create<AppState>((set, get) => ({
     streamTokens.clear();
     forgetScrollTops();
     set((state) => {
-      const history = [...state.history];
-      if (history[history.length - 1] !== clean) {
-        history.push(clean);
-        if (history.length > 50) history.shift();
+      let history = state.history;
+      let historyIndex = state.historyIndex;
+      if (!skipHistoryPush) {
+        history = [...state.history];
+        if (history[history.length - 1] !== clean) {
+          history.push(clean);
+          if (history.length > 50) history.shift();
+        }
+        historyIndex = -1;
       }
       return {
         lookupStack: [],
         ocr: null,
         errorMessage: null,
         history,
-        historyIndex: -1,
+        historyIndex,
         backTranslation: null,
       };
     });

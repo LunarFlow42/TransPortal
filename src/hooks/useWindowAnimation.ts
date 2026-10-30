@@ -25,6 +25,7 @@ export const SHELL_SHOWN_EVENT = 'transportal://shell-shown';
 let currentStage: WindowAnimationStage = 'entered';
 const listeners = new Set<(stage: WindowAnimationStage) => void>();
 let exitTimer: ReturnType<typeof setTimeout> | null = null;
+let exitResolve: ((hidden: boolean) => void) | null = null;
 let enterTimer: ReturnType<typeof setTimeout> | null = null;
 /** Generation of the last `shell-shown` event; lets Rust reject stale hides. */
 let shownGeneration: number | null = null;
@@ -32,6 +33,14 @@ let shownGeneration: number | null = null;
 function setStage(next: WindowAnimationStage) {
   currentStage = next;
   listeners.forEach((listener) => listener(next));
+}
+
+function cancelExitTimer() {
+  if (exitTimer === null) return;
+  clearTimeout(exitTimer);
+  exitTimer = null;
+  exitResolve?.(false);
+  exitResolve = null;
 }
 
 /**
@@ -85,10 +94,7 @@ export async function dismissShell(options: DismissOptions = {}): Promise<boolea
   // Always stop pronunciation immediately when starting dismissal
   stopPronunciation();
 
-  if (exitTimer !== null) {
-    clearTimeout(exitTimer);
-    exitTimer = null;
-  }
+  cancelExitTimer();
   if (enterTimer !== null) {
     clearTimeout(enterTimer);
     enterTimer = null;
@@ -108,8 +114,10 @@ export async function dismissShell(options: DismissOptions = {}): Promise<boolea
   }
 
   return new Promise<boolean>((resolve) => {
+    exitResolve = resolve;
     exitTimer = setTimeout(() => {
       exitTimer = null;
+      exitResolve = null;
       void finishHide().then(resolve);
     }, 100);
   });
@@ -121,8 +129,7 @@ export async function dismissShell(options: DismissOptions = {}): Promise<boolea
  */
 export function cancelDismiss(): void {
   if (exitTimer === null) return;
-  clearTimeout(exitTimer);
-  exitTimer = null;
+  cancelExitTimer();
   const win = getCurrentWindow();
   if (typeof win.setIgnoreCursorEvents === 'function') {
     void win.setIgnoreCursorEvents(false).catch(() => {});
@@ -158,10 +165,7 @@ export function useWindowAnimation(): {
         shownGeneration = event.payload.generation;
       }
       // If an exit timer was scheduled, abort it immediately!
-      if (exitTimer !== null) {
-        clearTimeout(exitTimer);
-        exitTimer = null;
-      }
+      cancelExitTimer();
       if (enterTimer !== null) {
         clearTimeout(enterTimer);
         enterTimer = null;
@@ -183,7 +187,9 @@ export function useWindowAnimation(): {
     // Safety net: a window that gains focus is on screen, so never leave its
     // content transparent even if a show path failed to announce itself.
     const unlistenFocus = getCurrentWindow().onFocusChanged(({ payload: focused }) => {
-      if (focused && currentStage === 'idle') setStage('entered');
+      if (!focused) return;
+      cancelDismiss();
+      if (currentStage === 'idle') setStage('entered');
     });
 
     return () => {

@@ -73,6 +73,10 @@ impl WindowOps for UnsupportedWindow {
         window::is_window_visible(window)
     }
 
+    fn webview_visibility<R: Runtime>(_window: &WebviewWindow<R>) -> Result<Option<bool>, String> {
+        Ok(None)
+    }
+
     /// Unknown without native window APIs; callers treat it as "not ours".
     fn is_foreground<R: Runtime>(_window: &WebviewWindow<R>) -> bool {
         false

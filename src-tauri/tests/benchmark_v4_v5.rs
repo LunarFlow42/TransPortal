@@ -15,10 +15,12 @@ fn benchmark_ppocr_v4_vs_v5() {
         return;
     }
 
-    let _ = ort::init_from(dll_path.to_str().unwrap())
+    let environment = ort::init_from(&dll_path)
+        .expect("ONNX Runtime loading failed")
         .with_name("TransPortal Benchmark")
         .with_telemetry(false)
-        .commit();
+        .build()
+        .expect("ONNX Runtime environment initialization failed");
 
     let v4_det = base_dir.join(
         "resources/ocr-bundle/ppocr-v4-fp32-ort-1.22.0/windows-x86_64/ch_PP-OCRv4_det_mobile.onnx",
@@ -44,6 +46,7 @@ fn benchmark_ppocr_v4_vs_v5() {
     let mut v4_engine = PpOcrEngine::new();
     v4_engine
         .init_models(
+            &environment,
             v4_det.to_str().unwrap(),
             v4_cls.to_str().unwrap(),
             v4_rec.to_str().unwrap(),
@@ -54,6 +57,7 @@ fn benchmark_ppocr_v4_vs_v5() {
     let mut v5_engine = PpOcrEngine::new();
     v5_engine
         .init_models(
+            &environment,
             v5_det.to_str().unwrap(),
             v5_cls.to_str().unwrap(),
             v5_rec.to_str().unwrap(),

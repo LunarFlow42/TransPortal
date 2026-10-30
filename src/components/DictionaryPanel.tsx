@@ -3,7 +3,7 @@ import { Channel, invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { BookOpen, ChevronDown, ChevronUp, Download, Loader2, Upload } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Button, IconButton, Pill, Switch } from './ui';
+import { Button, HoverTipText, IconButton, Pill, Switch } from './ui';
 import { cn } from '../utils/cn';
 import { saveSettings } from '../store/persistence';
 import { suppressAutoHide } from '../utils/autoHide';
@@ -160,9 +160,13 @@ export const DictionaryPanel: React.FC = () => {
               label={t('settings.translation.enableSource', { name: source.label })}
               className="mt-0.5"
             />
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1 flex flex-col justify-center">
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-[12px] font-medium">{source.label}</span>
+                <HoverTipText
+                  text={source.label}
+                  tip={source.description}
+                  className="text-[12px] font-medium text-[var(--text)]"
+                />
                 <Pill tone={source.kind === 'online' ? 'online' : 'local'}>{source.kind}</Pill>
                 {!source.available && (
                   <span className="text-[9px] text-[var(--faint)]">{t('settings.translation.notInstalled')}</span>
@@ -178,9 +182,6 @@ export const DictionaryPanel: React.FC = () => {
                   </span>
                 )}
               </div>
-              <p className="mt-0.5 text-[10.5px] leading-tight text-[var(--muted)]">
-                {source.description}
-              </p>
             </div>
             <div className="flex flex-col text-[var(--muted)]">
               <IconButton

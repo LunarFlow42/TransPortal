@@ -1,5 +1,6 @@
 import React, { forwardRef, useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { cn } from '../utils/cn';
 
 /* ------------------------------------------------------------------ *
@@ -221,7 +222,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
               e.stopPropagation();
               onClear?.();
             }}
-            title="清空"
+            title="Clear"
             className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[var(--muted)] hover:bg-[var(--hover)] hover:text-[var(--text)] transition-colors"
           >
             <span className="text-xs leading-none">×</span>
@@ -443,7 +444,9 @@ export const Select: React.FC<{
 export const SavedBadge: React.FC<{
   saved: boolean;
   className?: string;
-}> = ({ saved, className }) => (
+}> = ({ saved, className }) => {
+  const { t } = useTranslation();
+  return (
   <div
     className={cn(
       'inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-400 transition-all duration-300 select-none shadow-[0_2px_8px_rgba(16,185,129,0.15)]',
@@ -454,9 +457,10 @@ export const SavedBadge: React.FC<{
     )}
   >
     <Check className="h-2.5 w-2.5 shrink-0 text-emerald-400" />
-    <span>已自动保存</span>
+    <span>{t('common.saved')}</span>
   </div>
-);
+  );
+};
 
 /* ------------------------------------------------------------------ *
  * Pill
@@ -485,3 +489,71 @@ export const Pill: React.FC<{
     {children}
   </span>
 );
+
+
+/* ------------------------------------------------------------------ *
+ * Tooltip & HoverTipText — elegant hover explanations without '?' icons
+ * ------------------------------------------------------------------ */
+export const Tooltip: React.FC<{
+  content: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+  side?: 'top' | 'bottom';
+  align?: 'left' | 'center';
+}> = ({ content, children, className, side = 'top', align = 'left' }) => {
+  const [visible, setVisible] = useState(false);
+  return (
+    <div
+      className={cn('relative inline-flex items-center', className)}
+      onMouseEnter={() => setVisible(true)}
+      onMouseLeave={() => setVisible(false)}
+      onFocus={() => setVisible(true)}
+      onBlur={() => setVisible(false)}
+    >
+      {children}
+      {visible && (
+        <div
+          role="tooltip"
+          className={cn(
+            'pointer-events-none absolute z-50 w-max max-w-xs rounded-[var(--r-inner)] border border-[var(--stroke)] bg-[var(--surface-1)] px-2.5 py-1.5 text-[11px] font-normal leading-relaxed text-[var(--text)] shadow-[0_8px_24px_rgba(0,0,0,0.5)] backdrop-blur-xl transition-all duration-150 animate-in fade-in select-none',
+            side === 'top' ? 'bottom-full mb-1.5' : 'top-full mt-1.5',
+            align === 'left' ? 'left-0' : 'left-1/2 -translate-x-1/2',
+          )}
+        >
+          {content}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export const HoverTipText: React.FC<{
+  text: React.ReactNode;
+  tip: React.ReactNode;
+  className?: string;
+}> = ({ text, tip, className }) => (
+  <Tooltip content={tip} align="left">
+    <span
+      className={cn(
+        'cursor-help transition-colors border-b border-dashed border-[var(--stroke-strong)]/60 hover:border-[var(--accent-b)] hover:text-[var(--accent-b)] select-none',
+        className,
+      )}
+    >
+      {text}
+    </span>
+  </Tooltip>
+);
+
+export const InfoHint: React.FC<{ text: React.ReactNode; className?: string }> = ({
+  text,
+  className,
+}) => {
+  const { i18n } = useTranslation();
+  return (
+    <HoverTipText
+      text={i18n.language.startsWith('zh') ? '详情' : 'Info'}
+      tip={text}
+      className={className}
+    />
+  );
+};
