@@ -18,6 +18,7 @@ import { OcrCardView } from '../components/OcrCardView';
 import { AutoOcrPanel } from '../components/AutoOcrPanel';
 import { StartupShortcutNotice } from '../components/ShortcutStatusPanel';
 import { Button, IconButton, Select, Surface } from '../components/ui';
+import appIcon from '../assets/app-icon.png';
 import { useBootstrap } from '../hooks/useBootstrap';
 import { useHideOnBlur } from '../hooks/useHideOnBlur';
 import { useMemoryManager } from '../hooks/useMemoryManager';
@@ -513,9 +514,13 @@ export const ShellView: React.FC = () => {
             className="flex cursor-grab active:cursor-grabbing items-center justify-between pb-1.5"
           >
             <div className="flex items-center gap-1.5">
-              <span className="grid h-4.5 w-4.5 place-items-center rounded bg-gradient-to-br from-[var(--accent-a)] to-[var(--accent-b)] shadow-[0_2px_8px_rgba(34,211,238,0.3)]">
-                <Languages className="h-2.5 w-2.5 text-white" />
-              </span>
+              <img
+                src={appIcon}
+                alt="TransPortal"
+                className="h-4.5 w-4.5 rounded object-cover shadow-[0_2px_8px_rgba(34,211,238,0.3)] select-none"
+              />
+
+
               <span className="text-[11px] font-semibold tracking-wide text-[var(--text)]">TransPortal</span>
               <span className="text-[10px] text-[var(--faint)]">/</span>
               <Select
@@ -602,6 +607,7 @@ export const ShellView: React.FC = () => {
                 <History className="h-2.5 w-2.5" />
                 {t('shell.recentQueries')}:
               </span>
+
               {history.slice(-4).reverse().map((item, idx) => (
                 <button
                   key={idx}

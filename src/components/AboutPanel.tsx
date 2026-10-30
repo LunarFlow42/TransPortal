@@ -13,8 +13,8 @@ import {
   Download,
   Info,
   Layers,
-  Languages,
 } from 'lucide-react';
+import appIcon from '../assets/app-icon.png';
 import { Surface, Button } from './ui';
 import type { UpdateCheckResult } from '../types';
 
@@ -85,9 +85,11 @@ export const AboutPanel: React.FC = () => {
       {/* 软件主视标与信息 */}
       <Surface className="flex flex-col items-center justify-center p-6 text-center bg-gradient-to-b from-[var(--surface-muted)]/40 to-transparent">
         <div className="relative mb-3">
-          <div className="grid h-16 w-16 place-items-center rounded-2xl bg-gradient-to-br from-[var(--accent-a)] to-[var(--accent-b)] shadow-[0_8px_24px_rgba(34,211,238,0.35)]">
-            <Languages className="h-8 w-8 text-white" />
-          </div>
+          <img
+            src={appIcon}
+            alt="TransPortal Logo"
+            className="h-16 w-16 rounded-2xl object-cover shadow-[0_8px_24px_rgba(34,211,238,0.35)] ring-1 ring-white/10 select-none"
+          />
           <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--surface-2)] shadow-sm">
             <Sparkles className="h-3 w-3 text-amber-400" />
           </span>

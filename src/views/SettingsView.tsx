@@ -42,6 +42,7 @@ import { IntegrityPanel } from '../components/IntegrityPanel';
 import { MemorySettingsPanel } from '../components/MemorySettingsPanel';
 import { CaptureDiagnosticsPanel } from '../components/CaptureDiagnosticsPanel';
 import { AboutPanel } from '../components/AboutPanel';
+import appIcon from '../assets/app-icon.png';
 import { ResizeHandles } from '../components/ResizeHandles';
 import { OpenaiModelSelect } from '../components/OpenaiModelSelect';
 import { Button, HoverTipText, IconButton, Input, SavedBadge, Section, Select, Surface, Switch } from '../components/ui';
@@ -501,9 +502,11 @@ export const SettingsView: React.FC = () => {
           className="flex shrink-0 cursor-move items-center justify-between border-b border-[var(--stroke)] px-3.5 py-3"
         >
           <div className="flex items-center gap-2 text-[13px] font-semibold">
-            <span className="grid h-5 w-5 place-items-center rounded-[5px] bg-gradient-to-br from-[var(--accent-a)] to-[var(--accent-b)] shadow-[0_4px_12px_rgba(34,211,238,0.35)]">
-              <Languages className="h-3 w-3 text-white" />
-            </span>
+            <img
+              src={appIcon}
+              alt="TransPortal Logo"
+              className="h-5 w-5 rounded-[5px] object-cover shadow-[0_2px_8px_rgba(34,211,238,0.35)] ring-1 ring-white/10 select-none"
+            />
             <span>TransPortal {t('settings.title')}</span>
           </div>
           <div className="flex items-center gap-2">
