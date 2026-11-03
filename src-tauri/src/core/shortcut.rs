@@ -776,27 +776,42 @@ pub fn show_shell_with_anchor(
     anchor_bounds: Option<&crate::platform::selection::SelectionBounds>,
     no_activate: bool,
 ) {
-    if let Some(settings) = app.get_webview_window("settings") {
-        let _ = settings.hide();
-        PlatformWindow::force_hide_window(&settings);
-    }
-    if let Some(window) = app.get_webview_window("shell") {
-        let reposition = !is_pinned() || !window.is_visible().unwrap_or(false);
-        crate::core::shell::present(app, no_activate, |window| {
-            // In no-activate mode the placement call is what shows the window.
-            if reposition {
-                let _ =
-                    PlatformWindow::place_window_smartly(window, anchor_bounds, false, no_activate);
-            }
-            if !no_activate || !window.is_visible().unwrap_or(false) {
-                let _ = window.unminimize();
-                let _ = window.show();
-                if !no_activate {
-                    let _ = window.set_focus();
+    let handle = app.clone();
+    let anchor_bounds = anchor_bounds.cloned();
+    let _ = app.run_on_main_thread(move || {
+        // Selection, clipboard, OCR and startup checks can finish after the
+        // user opens settings. Their result must not hide that newer window.
+        // Explicit shortcuts hide settings at dispatch (trigger / input
+        // translate), so those requests can still switch back to the shell.
+        // Check and show together on the UI thread to avoid racing settings IPC.
+        if handle
+            .get_webview_window("settings")
+            .is_some_and(|settings| PlatformWindow::is_window_visible(&settings))
+        {
+            return;
+        }
+        if let Some(window) = handle.get_webview_window("shell") {
+            let reposition = !is_pinned() || !window.is_visible().unwrap_or(false);
+            crate::core::shell::present(&handle, no_activate, |window| {
+                // In no-activate mode the placement call is what shows the window.
+                if reposition {
+                    let _ = PlatformWindow::place_window_smartly(
+                        window,
+                        anchor_bounds.as_ref(),
+                        false,
+                        no_activate,
+                    );
                 }
-            }
-        });
-    }
+                if !no_activate || !window.is_visible().unwrap_or(false) {
+                    let _ = window.unminimize();
+                    let _ = window.show();
+                    if !no_activate {
+                        let _ = window.set_focus();
+                    }
+                }
+            });
+        }
+    });
 }
 
 #[cfg(test)]

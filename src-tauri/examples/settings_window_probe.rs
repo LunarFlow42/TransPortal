@@ -147,6 +147,73 @@ fn main() -> Result<(), String> {
         "off-thread open: completed synchronously with content visible={:?}",
         PlatformWindow::webview_visibility(&window)?
     );
+    // A late selection/clipboard/OCR/startup result must not undo the user's
+    // newer settings-open action. Both no-activate and ordinary result paths
+    // used to hide settings unconditionally here.
+    for no_activate in [true, false] {
+        let handle = app.handle().clone();
+        let late = std::thread::spawn(move || {
+            transportal_lib::core::shortcut::show_shell_with_anchor(&handle, None, no_activate);
+        });
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !late.is_finished() && Instant::now() < deadline {
+            pump(&mut app, Duration::from_millis(20));
+        }
+        if !late.is_finished() {
+            return Err("late result did not complete".into());
+        }
+        late.join().map_err(|_| "late result thread failed")?;
+        pump(&mut app, Duration::from_millis(200));
+        let shell = app.get_webview_window("shell").ok_or("missing shell")?;
+        if !PlatformWindow::is_window_visible(&window) || PlatformWindow::is_window_visible(&shell)
+        {
+            return Err(format!(
+                "late background result displaced settings (no_activate={no_activate})"
+            ));
+        }
+        println!("late result no_activate={no_activate}: settings retained, shell hidden");
+    }
+    // Native taskbar restoration does not call our settings-open command.
+    for cycle in 0..12 {
+        window.minimize().map_err(|error| error.to_string())?;
+        pump(&mut app, Duration::from_millis(50));
+        window.unminimize().map_err(|error| error.to_string())?;
+        window.show().map_err(|error| error.to_string())?;
+        window
+            .set_size(tauri::LogicalSize::new(
+                680.0 + (cycle % 2) as f64 * 40.0,
+                580.0,
+            ))
+            .map_err(|error| error.to_string())?;
+        pump(&mut app, Duration::from_millis(80));
+        if PlatformWindow::webview_visibility(&window)? == Some(false)
+            || webview.size().map_err(|error| error.to_string())?
+                != window.inner_size().map_err(|error| error.to_string())?
+        {
+            return Err(format!(
+                "native restore/resize cycle {cycle} lost settings content"
+            ));
+        }
+    }
+    println!("12 native restore/resize cycles: content visible with full bounds");
+    // A new explicit shortcut can still switch away from settings; only late
+    // result callbacks are prevented from taking over the desktop.
+    transportal_lib::core::shortcut::on_input_translate(app.handle());
+    pump(&mut app, Duration::from_millis(100));
+    let shell = app.get_webview_window("shell").ok_or("missing shell")?;
+    if PlatformWindow::is_window_visible(&window) || !PlatformWindow::is_window_visible(&shell) {
+        return Err("explicit input shortcut could not switch from settings to shell".into());
+    }
+    println!("explicit input shortcut: settings hidden, shell visible");
+    transportal_lib::commands::open_settings_window(app.handle().clone())?;
+    transportal_lib::commands::close_settings_window(app.handle().clone())?;
+    transportal_lib::core::shortcut::show_shell(app.handle());
+    pump(&mut app, Duration::from_millis(100));
+    let shell = app.get_webview_window("shell").ok_or("missing shell")?;
+    if PlatformWindow::is_window_visible(&window) || !PlatformWindow::is_window_visible(&shell) {
+        return Err("shell results did not resume after settings closed".into());
+    }
+    println!("settings closed: shell presentation resumed");
     window.destroy().map_err(|error| error.to_string())?;
     if let Some(shell) = app.get_webview_window("shell") {
         shell.destroy().map_err(|error| error.to_string())?;

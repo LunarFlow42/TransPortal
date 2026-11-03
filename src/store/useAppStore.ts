@@ -41,6 +41,14 @@ const streamTokens = new Map<number, number>();
 let examplesInFlight = 0;
 const MAX_EXAMPLE_REQUESTS = 3;
 
+// Store JSON and inter-window events are runtime data, despite their TS types.
+// Invalid alpha must never reach App's theme effect (which calls toFixed).
+function overlayAlpha(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.min(1, Math.max(0.25, value))
+    : fallback;
+}
+
 interface AppState {
   // Drill-down lookup stack (top of the array = current frame)
   lookupStack: LookupNode[];
@@ -371,7 +379,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
   setTheme: (theme) => set({ theme }),
-  setOverlayOpacity: (overlayOpacity) => set({ overlayOpacity }),
+  setOverlayOpacity: (value) => set((state) => ({
+    overlayOpacity: overlayAlpha(value, state.overlayOpacity),
+  })),
   setSmoothTransitions: (smoothTransitions) => set({ smoothTransitions }),
   togglePinned: () =>
     set((state) => {
@@ -400,7 +410,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       ocrEngine: settings.ocrEngine ?? state.ocrEngine,
       ocrLanguage: settings.ocrLanguage ?? state.ocrLanguage,
       theme: settings.theme ?? state.theme,
-      overlayOpacity: settings.overlayOpacity ?? state.overlayOpacity,
+      overlayOpacity: overlayAlpha(settings.overlayOpacity, state.overlayOpacity),
       fontSize: settings.fontSize ?? state.fontSize,
       showCrosshairs: settings.showCrosshairs ?? state.showCrosshairs,
       aiPromptTemplate: settings.aiPromptTemplate ?? state.aiPromptTemplate,
