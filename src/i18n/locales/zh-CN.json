@@ -319,6 +319,13 @@
       "collapseReport": "收起 Markdown 报告",
       "expandReport": "展开 Markdown 报告",
       "panelTitle": "截图管线调试与诊断",
+      "enableDebug": "启用截图管线调试与图片缓存",
+      "enableDebugDesc": "默认关闭。开启后将在每次截屏时保存最后一帧调试快照至临时目录并输出分层诊断日志；关闭时不生成任何磁盘缓存图片，建议日常使用保持关闭。",
+      "debugCacheOff": "默认关闭 · 零磁盘缓存",
+      "debugCacheOn": "已开启 · 调试图片落盘",
+      "debugEnabledNotice": "已启用截屏管线调试，后续截屏将保存调试快照并输出诊断日志",
+      "debugDisabledNotice": "已关闭截屏管线调试并清理临时缓存图片",
+      "noImageNotice": "（调试已关闭 · 未缓存图片）",
       "openedInViewer": "已在系统查看器中打开: {{path}}",
       "copyFailed": "复制失败: {{error}}"
     },

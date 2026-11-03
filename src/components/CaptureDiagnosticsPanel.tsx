@@ -12,12 +12,13 @@ import {
   RefreshCw,
   Terminal,
 } from 'lucide-react';
-import { Button, Surface } from './ui';
+import { Button, Surface, Switch } from './ui';
 import type { CaptureDiagnostics } from '../types';
 
 export const CaptureDiagnosticsPanel: React.FC<{ bare?: boolean }> = ({ bare = false }) => {
   const { t, i18n } = useTranslation();
   const [diagnostics, setDiagnostics] = useState<CaptureDiagnostics | null>(null);
+  const [debugEnabled, setDebugEnabled] = useState(false);
   const [loading, setLoading] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
@@ -29,8 +30,28 @@ export const CaptureDiagnosticsPanel: React.FC<{ bare?: boolean }> = ({ bare = f
 
   const fetchDiagnostics = async () => {
     try {
-      const res = await invoke<CaptureDiagnostics | null>('get_capture_diagnostics');
+      const [res, isEnabled] = await Promise.all([
+        invoke<CaptureDiagnostics | null>('get_capture_diagnostics'),
+        invoke<boolean>('is_capture_debug_enabled'),
+      ]);
       if (res) setDiagnostics(res);
+      setDebugEnabled(isEnabled);
+    } catch (err) {
+      setError(String(err));
+    }
+  };
+
+  const handleToggleDebug = async (checked: boolean) => {
+    try {
+      await invoke('set_capture_debug_enabled', { enabled: checked });
+      setDebugEnabled(checked);
+      if (!checked) {
+        setFeedback(t('settings.capture.debugDisabledNotice'));
+        setDiagnostics((prev) => (prev ? { ...prev, savedImagePath: undefined } : null));
+      } else {
+        setFeedback(t('settings.capture.debugEnabledNotice'));
+      }
+      setTimeout(() => setFeedback(null), 3000);
     } catch (err) {
       setError(String(err));
     }
@@ -166,6 +187,32 @@ export const CaptureDiagnosticsPanel: React.FC<{ bare?: boolean }> = ({ bare = f
 
   const content = (
     <Surface variant="inner" className="flex flex-col gap-3 p-3">
+      {/* 调试管线与图片缓存开关 */}
+      <div className="flex items-center justify-between rounded-[var(--r-inner)] border border-[var(--stroke)] bg-[var(--surface-2)] p-2.5">
+        <div className="flex flex-col gap-0.5 pr-2">
+          <div className="flex items-center gap-2 text-xs font-medium text-[var(--text)]">
+            <span>{t('settings.capture.enableDebug')}</span>
+            <span
+              className={`rounded px-1.5 py-0.5 font-mono text-[10px] font-bold ${
+                debugEnabled
+                  ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                  : 'bg-zinc-500/15 text-zinc-400 border border-zinc-500/30'
+              }`}
+            >
+              {debugEnabled ? t('settings.capture.debugCacheOn') : t('settings.capture.debugCacheOff')}
+            </span>
+          </div>
+          <span className="text-[11px] text-[var(--muted)] leading-tight">
+            {t('settings.capture.enableDebugDesc')}
+          </span>
+        </div>
+        <Switch
+          checked={debugEnabled}
+          onChange={(checked) => void handleToggleDebug(checked)}
+          label={t('settings.capture.enableDebug')}
+        />
+      </div>
+
       {/* 状态徽标与概要 */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--stroke)] pb-2.5">
         <div className="flex items-center gap-2">
@@ -348,7 +395,7 @@ export const CaptureDiagnosticsPanel: React.FC<{ bare?: boolean }> = ({ bare = f
           {copied ? t('settings.capture.copiedMarkdown') : t('settings.capture.copyMarkdown')}
         </Button>
 
-        {diagnostics?.savedImagePath && (
+        {diagnostics?.savedImagePath ? (
           <Button
             size="sm"
             onClick={() => void handleOpenImage()}
@@ -357,6 +404,10 @@ export const CaptureDiagnosticsPanel: React.FC<{ bare?: boolean }> = ({ bare = f
             <ExternalLink className="h-3 w-3" />
             {t('settings.capture.viewImage')}
           </Button>
+        ) : (
+          <span className="text-[11px] text-[var(--faint)] italic self-center">
+            {t('settings.capture.noImageNotice')}
+          </span>
         )}
 
         <Button

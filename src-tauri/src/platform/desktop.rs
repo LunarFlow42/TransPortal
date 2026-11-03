@@ -93,6 +93,33 @@ pub struct CaptureDiagnostics {
 static LAST_CAPTURE_DIAGNOSTICS: std::sync::Mutex<Option<CaptureDiagnostics>> =
     std::sync::Mutex::new(None);
 
+static CAPTURE_DEBUG_ENABLED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// Returns whether capture pipeline debugging (and debug frame disk caching) is enabled.
+/// Disabled by default (`false`) to prevent generating cached image files during normal use.
+pub fn is_capture_debug_enabled() -> bool {
+    CAPTURE_DEBUG_ENABLED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Enable or disable capture pipeline debugging.
+/// When disabling, automatically cleans up any residual debug capture file in the temporary directory.
+pub fn set_capture_debug_enabled(enabled: bool) {
+    CAPTURE_DEBUG_ENABLED.store(enabled, std::sync::atomic::Ordering::Relaxed);
+    if !enabled {
+        cleanup_capture_debug_image();
+    }
+}
+
+/// Remove `transportal_last_capture.png` from the system temp directory if it exists.
+pub fn cleanup_capture_debug_image() {
+    let mut temp = std::env::temp_dir();
+    temp.push("transportal_last_capture.png");
+    if temp.exists() {
+        let _ = std::fs::remove_file(temp);
+    }
+}
+
 pub fn record_last_diagnostics(diag: CaptureDiagnostics) {
     if let Ok(mut lock) = LAST_CAPTURE_DIAGNOSTICS.lock() {
         *lock = Some(diag);
@@ -223,6 +250,19 @@ mod tests {
             .validate()
             .is_err()
         );
+    }
+
+    #[test]
+    fn capture_debug_disabled_by_default() {
+        assert!(!is_capture_debug_enabled());
+    }
+
+    #[test]
+    fn capture_debug_toggle_and_cleanup() {
+        set_capture_debug_enabled(true);
+        assert!(is_capture_debug_enabled());
+        set_capture_debug_enabled(false);
+        assert!(!is_capture_debug_enabled());
     }
 
     #[test]

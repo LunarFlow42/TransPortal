@@ -577,7 +577,12 @@ impl DesktopCapture for WindowsDesktop {
             }
         }
 
-        let saved_image_path = captured_image.as_ref().and_then(Self::save_debug_frame);
+        let debug_enabled = crate::platform::desktop::is_capture_debug_enabled();
+        let saved_image_path = if debug_enabled {
+            captured_image.as_ref().and_then(Self::save_debug_frame)
+        } else {
+            None
+        };
 
         let diag = CaptureDiagnostics {
             timestamp: Self::get_current_timestamp(),
@@ -590,7 +595,9 @@ impl DesktopCapture for WindowsDesktop {
             saved_image_path,
         };
 
-        eprintln!("\n{}", format_diagnostics_markdown(&diag));
+        if debug_enabled {
+            eprintln!("\n{}", format_diagnostics_markdown(&diag));
+        }
         record_last_diagnostics(diag);
 
         match captured_image {

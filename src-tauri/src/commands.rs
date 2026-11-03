@@ -609,6 +609,16 @@ pub fn get_capture_diagnostics() -> Option<crate::platform::desktop::CaptureDiag
 }
 
 #[tauri::command]
+pub fn is_capture_debug_enabled() -> bool {
+    crate::platform::desktop::is_capture_debug_enabled()
+}
+
+#[tauri::command]
+pub fn set_capture_debug_enabled(enabled: bool) {
+    crate::platform::desktop::set_capture_debug_enabled(enabled);
+}
+
+#[tauri::command]
 pub async fn test_screen_capture(
     delay_secs: u32,
 ) -> Result<crate::platform::desktop::CaptureDiagnostics, String> {
@@ -632,7 +642,7 @@ pub async fn open_capture_debug_image(app: AppHandle) -> Result<String, String> 
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     }
     if !temp.exists() {
-        return Err("未找到已保存的调试截图图片，请先触发一次截屏。".into());
+        return Err("未找到已保存的调试截图图片。请先开启截图管线调试并完成一次截屏。".into());
     }
     let path_str = temp.to_string_lossy().into_owned();
     use tauri_plugin_opener::OpenerExt;

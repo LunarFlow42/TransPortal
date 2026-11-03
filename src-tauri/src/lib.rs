@@ -293,6 +293,7 @@ pub fn run() {
             if tts_assets.status().installed {
                 tts_assets.clean_cache();
             }
+            platform::desktop::cleanup_capture_debug_image();
             ocr::region::RegionService::prewarm(app.handle());
             if let Err(e) = setup_system_tray(app) {
                 eprintln!("Failed to setup system tray: {e}");
@@ -377,6 +378,8 @@ pub fn run() {
             commands::trim_memory,
             commands::set_window_pinned,
             commands::get_capture_diagnostics,
+            commands::is_capture_debug_enabled,
+            commands::set_capture_debug_enabled,
             commands::test_screen_capture,
             commands::open_capture_debug_image,
             commands::check_update,

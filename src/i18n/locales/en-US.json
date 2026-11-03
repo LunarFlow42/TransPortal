@@ -319,6 +319,13 @@
       "collapseReport": "Collapse Markdown Report",
       "expandReport": "Expand Markdown Report",
       "panelTitle": "Capture Pipeline Diagnostics",
+      "enableDebug": "Enable Capture Pipeline Debugging & Image Cache",
+      "enableDebugDesc": "Disabled by default. When enabled, saves the last debug capture frame to the temporary directory and logs pipeline metrics; keep disabled during normal use to avoid generating disk cache files.",
+      "debugCacheOff": "Default Off · Zero Disk Cache",
+      "debugCacheOn": "Enabled · Cached to Disk",
+      "debugEnabledNotice": "Pipeline debugging enabled. Captures will save debug snapshots and output diagnostics.",
+      "debugDisabledNotice": "Pipeline debugging disabled and temporary cached images removed.",
+      "noImageNotice": "(Debug Off · No Cached Image)",
       "openedInViewer": "Opened in system viewer: {{path}}",
       "copyFailed": "Copy failed: {{error}}"
     },
