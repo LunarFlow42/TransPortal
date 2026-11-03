@@ -347,7 +347,10 @@
       "feedbackTitle": "Feedback & Issues",
       "feedbackDesc": "Report bugs or propose new features",
       "releaseHistoryTitle": "Release History",
-      "releaseHistoryDesc": "Browse release notes and changelogs"
+      "releaseHistoryDesc": "Browse release notes and changelogs",
+      "devModeEnabled": "Developer mode enabled (Pipeline diagnostics unlocked)",
+      "devModeDisabled": "Developer mode disabled",
+      "devModeSteps": "Click {{count}} more times to enable developer mode"
     },
     "categoryTitle": "Categories"
   },

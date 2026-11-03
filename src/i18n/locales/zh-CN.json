@@ -347,7 +347,10 @@
       "feedbackTitle": "问题反馈与建议 (Issues)",
       "feedbackDesc": "提交 Bug 报告或功能改进建议",
       "releaseHistoryTitle": "版本发布记录 (Releases)",
-      "releaseHistoryDesc": "查看各版本的详细改动日志"
+      "releaseHistoryDesc": "查看各版本的详细改动日志",
+      "devModeEnabled": "已启用开发者模式（截图管线调试面板已解锁）",
+      "devModeDisabled": "已退出开发者模式",
+      "devModeSteps": "再点击 {{count}} 次解锁开发者模式"
     },
     "categoryTitle": "配置导航"
   },

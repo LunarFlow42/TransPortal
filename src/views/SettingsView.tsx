@@ -229,6 +229,20 @@ export const SettingsView: React.FC = () => {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [savedPulse, setSavedPulse] = useState(false);
+  const [devUnlocked, setDevUnlocked] = useState(
+    () => typeof window !== 'undefined' && localStorage.getItem('transportal_dev_mode') === 'true',
+  );
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const custom = e as CustomEvent<boolean>;
+      setDevUnlocked(custom.detail);
+    };
+    window.addEventListener('transportal:dev-mode-changed', handler);
+    return () => window.removeEventListener('transportal:dev-mode-changed', handler);
+  }, []);
+
+  const isDev = import.meta.env.DEV || devUnlocked;
   const saveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const isInitialMount = React.useRef(true);
 
@@ -419,7 +433,7 @@ export const SettingsView: React.FC = () => {
   const matchTts = isSearching && isMatch(['tts', '语音', '发音', '朗读', 'speech', 'kokoro', '声音', '音色']);
   const matchMemory = isSearching && isMatch(['memory', '系统', '性能', '内存', '释放', 'ram', 'clean', 'working set']);
   const matchIntegrity = isSearching && isMatch(['integrity', '完整性', '健康', '检测', 'checks', 'sha256', 'hash']);
-  const matchCapture = isSearching && isMatch(['capture', 'screenshot', '截图', '诊断', 'wgc', 'dxgi', 'gdi', 'debug', '调试', 'pipeline']);
+  const matchCapture = isDev && isSearching && isMatch(['capture', 'screenshot', '截图', '诊断', 'wgc', 'dxgi', 'gdi', 'debug', '调试', 'pipeline']);
   const matchReset = isSearching && isMatch(['reset', 'restore', 'default', 'defaults', '默认', '重置', '恢复', '出厂']);
   const matchAbout = isSearching && isMatch(['about', 'version', 'update', 'github', '关于', '版本', '更新', '检查更新', '开源', '作者']);
 
@@ -1047,7 +1061,7 @@ export const SettingsView: React.FC = () => {
                 </Section>
               )}
 
-              {(isSearching ? matchCapture : activeTab === 'advanced') && (
+              {isDev && (isSearching ? matchCapture : activeTab === 'advanced') && (
                 <Section
                   label={t('settings.advanced.capture')}
                   icon={<Camera className="h-3.5 w-3.5" />}
