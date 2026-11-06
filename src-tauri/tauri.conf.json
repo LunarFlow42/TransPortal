@@ -26,7 +26,7 @@
         "alwaysOnTop": true,
         "shadow": false,
         "center": true,
-        "visible": true,
+        "visible": false,
         "skipTaskbar": true,
         "focus": true,
         "noRedirectionBitmap": true

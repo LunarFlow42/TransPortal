@@ -34,4 +34,9 @@ describe('System Invariants & Anti-Regression Guard', () => {
     const settings = windows.find((w) => w.label === 'settings');
     expect(settings?.visible).toBe(false);
   });
+
+  it('shell window must start hidden to prevent popups during autostart', () => {
+    const shell = windows.find((w) => w.label === 'shell');
+    expect(shell?.visible).toBe(false);
+  });
 });

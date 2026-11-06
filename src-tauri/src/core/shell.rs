@@ -45,6 +45,8 @@ pub fn present<R: Runtime>(
     };
     let _ = PlatformWindow::set_ignore_cursor_events(&window, false);
     let generation = GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
+    let webview: &tauri::Webview<R> = window.as_ref();
+    let _ = webview.show();
     show(&window);
     let _ = app.emit_to(
         SHELL_LABEL,

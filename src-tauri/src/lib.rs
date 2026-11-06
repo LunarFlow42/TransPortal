@@ -5,6 +5,7 @@ pub mod platform;
 use crate::core::{clipboard_monitor, dictionary, integrity, ocr, selection, shell, shortcut};
 use crate::platform::PlatformWindow;
 use crate::platform::window::WindowOps;
+use tauri_plugin_autostart::ManagerExt;
 
 use tauri::{
     AppHandle, Manager,
@@ -18,6 +19,14 @@ pub(crate) fn focus_shell<R: tauri::Runtime>(app: &AppHandle<R>) {
         PlatformWindow::configure_transparent_window(window);
         let _ = window.unminimize();
         let _ = window.show();
+        let webview: &tauri::Webview<R> = window.as_ref();
+        if let Ok(size) = window.inner_size()
+            && size.width > 0
+            && size.height > 0
+        {
+            let _ = webview.set_size(size);
+        }
+        let _ = webview.show();
         PlatformWindow::force_show_window(window);
         let _ = window.set_focus();
     });
@@ -234,7 +243,7 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-            None,
+            Some(vec!["--autostart"]),
         ))
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
@@ -316,7 +325,13 @@ pub fn run() {
             shortcut::register(app.handle());
             clipboard_monitor::start(app.handle());
             shell::observe_size_move(app.handle());
-            focus_shell(app.handle());
+            // Ensure any existing autostart registration is updated with the `--autostart` argument.
+            if let Ok(true) = app.autolaunch().is_enabled() {
+                let _ = app.autolaunch().enable();
+            }
+            if !is_autostart_or_silent() {
+                focus_shell(app.handle());
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -392,4 +407,60 @@ pub fn run() {
                 app.state::<ocr::OcrService>().shutdown(app);
             }
         });
+}
+
+/// Whether TransPortal was launched as an autostart or silent background service.
+pub(crate) fn should_suppress_initial_shell<I, S>(args: I) -> bool
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    args.into_iter().any(|arg| {
+        matches!(
+            arg.as_ref().to_ascii_lowercase().as_str(),
+            "--autostart"
+                | "/autostart"
+                | "--silent"
+                | "/silent"
+                | "--hidden"
+                | "/hidden"
+                | "--minimized"
+                | "/minimized"
+                | "-s"
+                | "/s"
+                | "-m"
+                | "/m"
+        )
+    })
+}
+
+pub(crate) fn is_autostart_or_silent() -> bool {
+    should_suppress_initial_shell(std::env::args())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_should_suppress_initial_shell() {
+        assert!(!should_suppress_initial_shell(Vec::<&str>::new()));
+        assert!(!should_suppress_initial_shell(["transportal"]));
+        assert!(!should_suppress_initial_shell(["transportal", "--verbose"]));
+
+        assert!(should_suppress_initial_shell([
+            "transportal",
+            "--autostart"
+        ]));
+        assert!(should_suppress_initial_shell(["transportal", "/AUTOSTART"]));
+        assert!(should_suppress_initial_shell(["transportal", "--silent"]));
+        assert!(should_suppress_initial_shell(["transportal", "/silent"]));
+        assert!(should_suppress_initial_shell(["transportal", "--hidden"]));
+        assert!(should_suppress_initial_shell([
+            "transportal",
+            "--minimized"
+        ]));
+        assert!(should_suppress_initial_shell(["transportal", "-s"]));
+        assert!(should_suppress_initial_shell(["transportal", "-m"]));
+    }
 }
