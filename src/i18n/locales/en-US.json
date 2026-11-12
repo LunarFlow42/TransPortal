@@ -19,11 +19,52 @@
     "history": "History",
     "search": "Search settings..."
   },
+  "learning": {
+    "title": "Saved Vocabulary",
+    "rememberUsage": "Remember this usage",
+    "chooseUsageHint": "Save one selected definition and an existing example. No extra context capture.",
+    "sense": "Definition",
+    "example": "Example",
+    "withoutExample": "Without an example",
+    "noExampleHint": "You can save a usage without an example.",
+    "translationWarning": "This is a translation, not a dictionary definition. Check it before saving.",
+    "confirmSave": "Save usage",
+    "saving": "Saving…",
+    "saved": "Usage saved",
+    "alreadySaved": "Already saved; original record preserved",
+    "saveFailed": "Could not save. Please retry.",
+    "privacyHint": "Saved locally only after explicit confirmation on a word card. Lookups are not collected automatically. No screen, window title, or extra context capture; saved usages are not uploaded. Review reminders are not part of this stage.",
+    "search": "Search words, definitions, or examples…",
+    "refresh": "Refresh collection",
+    "count": "{{count}} usages",
+    "exportAll": "Export all {{format}}",
+    "exportHint": "JSON preserves full records; TSV is for spreadsheets or Anki. Exports include the entire collection. Choose a new file; existing files are never overwritten.",
+    "exported": "Exported {{count}} usages as {{format}}.",
+    "operationFailed": "Operation failed. The existing learning file is never reset.",
+    "empty": "No saved usages yet. On a word card, select Remember this usage, choose a definition and existing example, then save.",
+    "noMatches": "No matching saved usages.",
+    "delete": "Delete",
+    "deleteUsage": "Delete this usage of {{word}}",
+    "deleteConfirm": "Delete this usage and its example?",
+    "deleted": "Usage deleted.",
+    "previous": "Previous page",
+    "next": "Next page",
+    "definition": {
+      "dictionary": "Dictionary definition",
+      "translation": "Translation result"
+    },
+    "context": {
+      "dictionary": "Dictionary example",
+      "generated": "AI-generated example",
+      "lookup": "Existing lookup sentence"
+    }
+  },
   "settings": {
     "title": "Settings",
     "tabs": {
       "general": "General",
       "translation": "Translation & Dict",
+      "learning": "Saved Vocabulary",
       "shortcuts": "Shortcuts & Gestures",
       "advanced": "Advanced & Diagnostics",
       "about": "About & Updates"
@@ -101,10 +142,13 @@
       "moveUp": "Move up",
       "moveDown": "Move down",
       "importCsv": "Import CSV",
-      "downloadFull": "Download Full ECCEDICT",
+      "downloadFull": "Download Enriched ECCEDICT",
       "importing": "Importing dictionary… this can take a while.",
       "importedCount": "Imported {{count}} entries.",
-      "downloadingDict": "Downloading full ECCEDICT (~63 MB)…"
+      "downloadingDict": "Downloading ECCEDICT base dictionary (~63 MB)…",
+      "enrichingDict": "Verifying and merging UK/US phonetics and exam tags…",
+      "localMergeHint": "The default download builds an enriched CSV. When enabled, local data also supplements online cards with phonetics, tags, word forms, and corpus ranks; online meanings and examples remain separate.",
+      "enrichedInstalled": "Enriched dictionary installed · {{phonetics}} phonetics and {{tags}} tag enhancements"
     },
     "shortcuts": {
       "resetKeybindings": "Reset Shortcuts",
@@ -425,6 +469,28 @@
     "backTranslating": "Translating back...",
     "playPhonetic": "Click to pronounce",
     "sourceDict": "Source",
+    "sourceYoudao": "Youdao",
+    "sourceGoogle": "Google",
+    "sourceLocal": "Local ECCEDICT",
+    "localSupplementBadge": "Local supplement ({{word}})",
+    "localDetails": "Local ECCEDICT meanings and examples · {{word}}",
+    "localEnglishDefinitions": "Local English definitions",
+    "localExample": "Local dictionary example",
+    "collinsStars": "Collins {{count}} stars",
+    "oxfordCore": "Oxford 3000",
+    "bncRank": "BNC #{{rank}}",
+    "frqRank": "Corpus rank #{{rank}}",
+    "frequencyHint": "Ranks from the source dictionary, not live or current-year statistics. Lower ranks indicate more frequent words.",
+    "accent": { "uk": "UK", "us": "US" },
+    "exchange": {
+      "p": "Past", "d": "Past participle", "i": "Present participle", "3": "3rd person",
+      "r": "Comparative", "t": "Superlative", "s": "Plural", "0": "Lemma"
+    },
+    "localFields": {
+      "phonetic": "phonetics", "audio_url": "pronunciation", "tags": "tags", "exchange": "word forms", "collins": "Collins stars",
+      "oxford": "Oxford core", "bnc": "BNC rank", "frq": "corpus rank",
+      "definitions": "Chinese definitions", "english_definitions": "English definitions", "examples": "examples"
+    },
     "clickLookupWord": "Click to look up and pronounce",
     "failed": "Lookup failed. Please check network or provider settings.",
     "notFound": "No entry found in dictionary.",

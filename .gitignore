@@ -25,3 +25,7 @@ dist-ssr
 .agents/
 skills-lock.json
 .planning/
+
+# Generated Python bytecode (dictionary data tooling/tests)
+__pycache__/
+*.py[cod]

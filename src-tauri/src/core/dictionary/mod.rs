@@ -9,8 +9,11 @@
 //! frontend falls back to the AI provider.
 
 pub mod eccedict;
+pub mod enrichment;
 pub mod examples;
 pub mod lookup;
+#[cfg(test)]
+mod test_support;
 
 pub use lookup::{DictStatus, LookupService, SourceInfo};
 
@@ -20,6 +23,7 @@ use flate2::read::DeflateDecoder;
 use flate2::write::DeflateEncoder;
 use redb::{Database, ReadableDatabase, ReadableTable, ReadableTableMetadata, TableDefinition};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::io::{Read, Write};
 use std::path::Path;
 
@@ -31,6 +35,7 @@ const BLOCKS_TABLE: TableDefinition<&str, &[u8]> = TableDefinition::new("dict_bl
 
 /// Metadata table for total word counts and versioning.
 const META_TABLE: TableDefinition<&str, u64> = TableDefinition::new("dict_meta");
+const INFO_TABLE: TableDefinition<&str, &str> = TableDefinition::new("dict_info");
 
 /// Number of words per compressed block. 16 words per block achieves ~60-70 MB database file size
 /// while keeping single-word decompression under 5 microseconds.
@@ -83,6 +88,34 @@ pub struct DictEntry {
     pub examples: Vec<ExampleSentence>,
     /// Which source produced this entry, e.g. `online` or `local_eccedict`.
     pub source: String,
+    #[serde(default)]
+    pub collins: Option<u8>,
+    #[serde(default)]
+    pub oxford: bool,
+    #[serde(default)]
+    pub bnc: Option<u32>,
+    #[serde(default)]
+    pub frq: Option<u32>,
+    /// Local additions never replace the identity/source of the primary entry.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local_supplement: Option<LocalSupplement>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct LocalSupplement {
+    pub word: String,
+    pub phonetic: Option<String>,
+    pub fields: Vec<String>,
+    pub definitions: Vec<PosDefinition>,
+    pub english_definitions: Vec<PosDefinition>,
+    pub examples: Vec<ExampleSentence>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DictEnrichmentInfo {
+    pub revision: String,
+    pub phonetics: usize,
+    pub tags: usize,
 }
 
 /// Compact on-disk representation of a dictionary entry.
@@ -111,6 +144,14 @@ pub struct StoredCompactEntry {
     pub e: Option<Vec<ExampleSentence>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub a: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub c: Option<u8>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub ox: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub b: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub f: Option<u32>,
 }
 
 impl StoredCompactEntry {
@@ -176,6 +217,11 @@ impl StoredCompactEntry {
             tags,
             examples: self.e.unwrap_or_default(),
             source: "local_eccedict".to_string(),
+            collins: self.c,
+            oxford: self.ox,
+            bnc: self.b,
+            frq: self.f,
+            local_supplement: None,
         }
     }
 
@@ -218,6 +264,10 @@ impl StoredCompactEntry {
             g,
             e,
             a,
+            c: entry.collins,
+            ox: entry.oxford,
+            b: entry.bnc,
+            f: entry.frq,
         }
     }
 }
@@ -287,9 +337,14 @@ impl DictStore {
 
         {
             let old_db = Database::open(path)?;
-            let new_db = Database::create(&temp_path)?;
-
             let old_read = old_db.begin_read()?;
+            if let Ok(blocks) = old_read.open_table(BLOCKS_TABLE)
+                && !blocks.is_empty()?
+            {
+                // This migration only understands legacy individual entries.
+                // Never replace a current full dictionary with its seed table.
+                return Ok(false);
+            }
             let Ok(old_table) = old_read.open_table(WORDS_TABLE) else {
                 return Ok(false);
             };
@@ -299,6 +354,7 @@ impl DictStore {
                 return Ok(false);
             }
 
+            let new_db = Database::create(&temp_path)?;
             let new_write = new_db.begin_write()?;
             let mut total_count = 0usize;
             {
@@ -450,26 +506,73 @@ impl DictStore {
 
     /// Bulk-import an ECDICT-format CSV file into compressed blocks. Returns the number of entries.
     pub fn import_csv_file(&self, path: impl AsRef<Path>) -> DictResult<usize> {
+        self.import_csv(path.as_ref(), None)
+    }
+
+    pub fn import_enriched_csv_file(
+        &self,
+        path: &Path,
+        info: DictEnrichmentInfo,
+    ) -> DictResult<usize> {
+        self.import_csv(path, Some(info))
+    }
+
+    pub fn enrichment_info(&self) -> DictResult<Option<DictEnrichmentInfo>> {
+        let read = self.db.begin_read()?;
+        let Ok(table) = read.open_table(INFO_TABLE) else {
+            return Ok(None);
+        };
+        table
+            .get("enrichment")?
+            .map(|value| serde_json::from_str(value.value()))
+            .transpose()
+            .map_err(Into::into)
+    }
+
+    fn import_csv(&self, path: &Path, info: Option<DictEnrichmentInfo>) -> DictResult<usize> {
         let mut reader = csv::ReaderBuilder::new()
             .has_headers(false)
             .flexible(true)
             .from_path(path)?;
 
+        // Block range lookup requires normalized lexical order. Read/validate
+        // before touching the current database, and sort even custom CSV files.
+        let mut sorted = BTreeMap::new();
+        for record in reader.records() {
+            let record = record?;
+            let word = record.get(0).unwrap_or_default().trim().to_lowercase();
+            if word.is_empty() || (word == "word" && record.get(1) == Some("phonetic")) {
+                continue;
+            }
+            if record.len() < 11 {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Dictionary row is missing required ECDICT columns",
+                )
+                .into());
+            }
+            sorted.insert(word, compact_entry_from_ecdict(&record));
+        }
+        if sorted.is_empty() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Dictionary CSV contains no entries",
+            )
+            .into());
+        }
+
         let write = self.db.begin_write()?;
         let mut total_count = 0usize;
         {
             let mut blocks_table = write.open_table(BLOCKS_TABLE)?;
+            // Replacement, not append: repeated imports must not retain stale
+            // blocks or words from a previous dictionary.
+            blocks_table.retain(|_, _| false)?;
             let mut meta_table = write.open_table(META_TABLE)?;
             let mut current_block: Vec<(String, StoredCompactEntry)> =
                 Vec::with_capacity(BLOCK_SIZE);
 
-            for record in reader.records() {
-                let record = record?;
-                let word = record.get(0).unwrap_or_default().trim().to_lowercase();
-                if word.is_empty() || word == "word" {
-                    continue;
-                }
-                let compact = compact_entry_from_ecdict(&record);
+            for (word, compact) in sorted {
                 current_block.push((word, compact));
                 total_count += 1;
 
@@ -490,6 +593,13 @@ impl DictStore {
             }
 
             meta_table.insert("total_words", total_count as u64)?;
+            let mut info_table = write.open_table(INFO_TABLE)?;
+            if let Some(info) = info {
+                let json = serde_json::to_string(&info)?;
+                info_table.insert("enrichment", json.as_str())?;
+            } else {
+                info_table.remove("enrichment")?;
+            }
         }
         write.commit()?;
         Ok(total_count)
@@ -591,6 +701,19 @@ fn compact_entry_from_ecdict(record: &StringRecord) -> StoredCompactEntry {
         g: tags,
         e: examples,
         a: audio,
+        c: record
+            .get(5)
+            .and_then(|value| value.parse::<u8>().ok())
+            .filter(|value| *value <= 5),
+        ox: record.get(6) == Some("1"),
+        b: record
+            .get(8)
+            .and_then(|value| value.parse::<u32>().ok())
+            .filter(|value| *value > 0),
+        f: record
+            .get(9)
+            .and_then(|value| value.parse::<u32>().ok())
+            .filter(|value| *value > 0),
     }
 }
 
@@ -735,6 +858,11 @@ fn entry(
         tags: tags.iter().map(|t| t.to_string()).collect(),
         examples,
         source: "local_eccedict".to_string(),
+        collins: None,
+        oxford: false,
+        bnc: None,
+        frq: None,
+        local_supplement: None,
     }
 }
 
@@ -868,6 +996,7 @@ fn builtin_entries() -> Vec<(&'static str, DictEntry)> {
 
 #[cfg(test)]
 mod tests {
+    use super::test_support::{TestDirectory, row};
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -948,6 +1077,150 @@ mod tests {
 
         assert!(examples_from_detail("not json").is_empty());
         assert!(examples_from_detail("").is_empty());
+    }
+
+    #[test]
+    fn imported_metadata_survives_compression_and_reopen() {
+        let dir = TestDirectory::new();
+        let path = dir.0.join("test.redb");
+        let csv = dir.csv("enriched.csv", &[row("hello", "n. 问候")]);
+        {
+            let store = DictStore::open(&path).unwrap();
+            store
+                .import_enriched_csv_file(
+                    &csv,
+                    DictEnrichmentInfo {
+                        revision: "fixture".into(),
+                        phonetics: 1,
+                        tags: 1,
+                    },
+                )
+                .unwrap();
+            let entry = store.lookup("hello").unwrap().unwrap();
+            assert_eq!(entry.collins, Some(3));
+            assert!(entry.oxford);
+            assert_eq!(entry.bnc, Some(100));
+            assert_eq!(entry.frq, Some(200));
+            assert!(entry.phonetic.unwrap().contains("美 /"));
+        }
+        let reopened = DictStore::open(&path).unwrap();
+        assert_eq!(
+            reopened.enrichment_info().unwrap().unwrap().revision,
+            "fixture"
+        );
+        assert_eq!(reopened.lookup("hello").unwrap().unwrap().collins, Some(3));
+    }
+
+    #[test]
+    fn repeated_imports_replace_blocks_without_retaining_stale_words_or_enrichment_flags() {
+        let dir = TestDirectory::new();
+        let store = DictStore::open(dir.0.join("test.redb")).unwrap();
+        let first_rows: Vec<_> = (0..40)
+            .map(|index| row(&format!("old{index:02}"), "n. 原词"))
+            .collect();
+        let first = dir.csv("first.csv", &first_rows);
+        store
+            .import_enriched_csv_file(
+                &first,
+                DictEnrichmentInfo {
+                    revision: "first".into(),
+                    phonetics: 40,
+                    tags: 40,
+                },
+            )
+            .unwrap();
+        let second = dir.csv("second.csv", &[row("new", "n. 新词")]);
+        assert_eq!(store.import_csv_file(second).unwrap(), 1);
+        assert!(store.lookup("old39").unwrap().is_none());
+        assert!(store.lookup("new").unwrap().is_some());
+        assert!(store.enrichment_info().unwrap().is_none());
+        assert_eq!(store.count().unwrap(), 1);
+    }
+
+    #[test]
+    fn unsorted_case_insensitive_input_is_sorted_and_the_word_word_is_not_a_header() {
+        let dir = TestDirectory::new();
+        let store = DictStore::open(dir.0.join("test.redb")).unwrap();
+        let mut rows: Vec<_> = (0..35)
+            .rev()
+            .map(|index| row(&format!("word{index:02}"), "n. 词"))
+            .collect();
+        rows.push(row("word", "n. 单词"));
+        rows.push(row("WORD00", "n. 更新"));
+        assert_eq!(
+            store
+                .import_csv_file(dir.csv("unsorted.csv", &rows))
+                .unwrap(),
+            36
+        );
+        assert_eq!(
+            store.lookup("word").unwrap().unwrap().definitions[0].meanings,
+            ["单词"]
+        );
+        assert_eq!(
+            store.lookup("word00").unwrap().unwrap().definitions[0].meanings,
+            ["更新"]
+        );
+        assert!(store.lookup("word34").unwrap().is_some());
+    }
+
+    #[test]
+    fn invalid_import_preserves_the_working_dictionary_and_metadata() {
+        let dir = TestDirectory::new();
+        let store = DictStore::open(dir.0.join("test.redb")).unwrap();
+        let valid = dir.csv("valid.csv", &[row("hello", "n. 问候")]);
+        store
+            .import_enriched_csv_file(
+                &valid,
+                DictEnrichmentInfo {
+                    revision: "valid".into(),
+                    phonetics: 1,
+                    tags: 1,
+                },
+            )
+            .unwrap();
+        let bad = dir.0.join("bad.csv");
+        std::fs::write(&bad, "word,phonetic\nhello,broken\n").unwrap();
+        assert!(store.import_csv_file(&bad).is_err());
+        std::fs::write(&bad, "word,phonetic\n").unwrap();
+        assert!(store.import_csv_file(&bad).is_err());
+        assert!(store.lookup("hello").unwrap().is_some());
+        assert_eq!(store.count().unwrap(), 1);
+        assert_eq!(store.enrichment_info().unwrap().unwrap().revision, "valid");
+    }
+
+    #[test]
+    fn legacy_compaction_does_not_replace_a_current_dictionary_with_seed_data() {
+        let dir = TestDirectory::new();
+        let path = dir.0.join("test.redb");
+        {
+            let store = DictStore::open(&path).unwrap();
+            let csv = dir.csv("current.csv", &[row("hello", "n. 问候")]);
+            store.import_csv_file(csv).unwrap();
+        }
+        assert!(!DictStore::compact_database_force(&path).unwrap());
+        let reopened = DictStore::open(&path).unwrap();
+        assert!(reopened.lookup("hello").unwrap().is_some());
+        assert_eq!(reopened.count().unwrap(), 1);
+    }
+
+    #[test]
+    fn old_compact_entries_default_new_metadata_and_invalid_ranks_are_not_displayed() {
+        let entry: StoredCompactEntry =
+            serde_json::from_str(r#"{"p":"/test/","t":"n. 例子"}"#).unwrap();
+        let entry = entry.into_dict_entry("test");
+        assert_eq!(entry.collins, None);
+        assert_eq!(entry.bnc, None);
+        assert!(!entry.oxford);
+        let mut invalid = row("hello", "n. 问候");
+        invalid[5] = "99".into();
+        invalid[8] = "0".into();
+        invalid[9] = "-10".into();
+        let entry =
+            compact_entry_from_ecdict(&StringRecord::from(invalid)).into_dict_entry("hello");
+        assert_eq!(entry.collins, None);
+        assert_eq!(entry.bnc, None);
+        assert_eq!(entry.frq, None);
     }
 
     #[test]

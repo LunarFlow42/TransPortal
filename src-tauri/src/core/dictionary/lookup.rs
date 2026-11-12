@@ -6,7 +6,10 @@
 //! sources are skipped automatically, so the app works out of the box without
 //! any local data.
 
-use crate::core::dictionary::{DictEntry, DictSource, DictStore, ExampleSentence, PosDefinition};
+use crate::core::dictionary::{
+    DictEnrichmentInfo, DictEntry, DictSource, DictStore, ExampleSentence, LocalSupplement,
+    PosDefinition,
+};
 use crate::core::translation::google::GoogleFreeProvider;
 use crate::core::translation::{TranslateQuery, Translator, resolve_target_lang};
 use lru::LruCache;
@@ -15,6 +18,7 @@ use serde::Serialize;
 use serde_json::Value;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
@@ -57,6 +61,7 @@ pub struct DictStatus {
     pub installed: bool,
     pub entry_count: usize,
     pub local_path: String,
+    pub enrichment: Option<DictEnrichmentInfo>,
 }
 
 /// One entry in the ordered source pipeline.
@@ -70,7 +75,7 @@ struct SourceEntry {
     stats: Arc<Mutex<SourceStats>>,
 }
 
-type PipelineItem = (Arc<dyn DictSource>, Arc<Mutex<SourceStats>>);
+type PipelineItem = (SourceKind, Arc<dyn DictSource>, Arc<Mutex<SourceStats>>);
 
 /// Online dictionary source backed by Youdao's JSON endpoint.
 pub struct YoudaoSource {
@@ -209,6 +214,11 @@ fn parse_youdao(word: &str, json: &Value) -> Option<DictEntry> {
         tags: Vec::new(),
         examples,
         source: "youdao".to_string(),
+        collins: None,
+        oxford: false,
+        bnc: None,
+        frq: None,
+        local_supplement: None,
     })
 }
 
@@ -352,6 +362,11 @@ impl DictSource for GoogleDictSource {
             tags: Vec::new(),
             examples: Vec::new(),
             source: "google".to_string(),
+            collins: None,
+            oxford: false,
+            bnc: None,
+            frq: None,
+            local_supplement: None,
         }))
     }
 }
@@ -362,7 +377,11 @@ pub struct LookupService {
     local: Arc<DictStore>,
     local_path: PathBuf,
     /// In-memory LRU of resolved entries, keyed by lowercased word.
-    cache: Mutex<LruCache<String, DictEntry>>,
+    cache: Arc<Mutex<LruCache<String, DictEntry>>>,
+    /// Prevent an in-flight lookup from repopulating a cache invalidated by an
+    /// import or source setting change.
+    revision: Arc<AtomicU64>,
+    import_operation: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl LookupService {
@@ -390,7 +409,7 @@ impl LookupService {
             SourceEntry {
                 id: "local_eccedict",
                 label: "Local ECCEDICT",
-                description: "Optional offline redb dictionary (import required).",
+                description: "Enriched offline dictionary; also supplements online results when enabled.",
                 kind: SourceKind::Local,
                 enabled: true,
                 source: local_source,
@@ -402,9 +421,11 @@ impl LookupService {
             entries: RwLock::new(entries),
             local,
             local_path,
-            cache: Mutex::new(LruCache::new(
+            cache: Arc::new(Mutex::new(LruCache::new(
                 NonZeroUsize::new(CACHE_CAPACITY).expect("non-zero cache capacity"),
-            )),
+            ))),
+            revision: Arc::new(AtomicU64::new(0)),
+            import_operation: Arc::new(tokio::sync::Mutex::new(())),
         }
     }
 
@@ -417,12 +438,29 @@ impl LookupService {
         Arc::clone(&self.local)
     }
 
+    pub fn begin_import(&self) -> Result<tokio::sync::OwnedMutexGuard<()>, String> {
+        Arc::clone(&self.import_operation)
+            .try_lock_owned()
+            .map_err(|_| "A dictionary import is already in progress".to_string())
+    }
+
     /// Drop all cached lookups (e.g. after importing/changing sources).
     pub fn invalidate_cache(&self) {
-        self.cache
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .clear();
+        self.cache_invalidator()();
+    }
+
+    /// A worker owns this callback so a committed import still invalidates the
+    /// reader cache even if its IPC caller went away before the reply.
+    pub(super) fn cache_invalidator(&self) -> impl FnOnce() + Send + 'static {
+        let cache = Arc::clone(&self.cache);
+        let revision = Arc::clone(&self.revision);
+        move || {
+            let mut cache = cache
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            revision.fetch_add(1, Ordering::AcqRel);
+            cache.clear();
+        }
     }
 
     /// Ordered source list with state, for the settings UI.
@@ -514,22 +552,25 @@ impl LookupService {
         Ok(())
     }
 
-    /// Resolve a word through the enabled sources, in order, with caching.
+    /// Source order selects the primary entry. Enabled local data can enrich an
+    /// online hit without triggering another online provider or replacing its
+    /// meanings, examples, headword or pronunciation audio.
     pub async fn lookup(&self, word: &str) -> Option<DictEntry> {
         let key = word.trim().to_lowercase();
         if key.is_empty() {
             return None;
         }
 
-        if let Some(cached) = self
-            .cache
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .get(&key)
-            .cloned()
-        {
-            return Some(cached);
-        }
+        let revision = {
+            let mut cache = self
+                .cache
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if let Some(cached) = cache.get(&key).cloned() {
+                return Some(cached);
+            }
+            self.revision.load(Ordering::Acquire)
+        };
 
         // Snapshot (source, stats) so no lock guard is held across `.await`.
         let pipeline: Vec<PipelineItem> = {
@@ -540,11 +581,21 @@ impl LookupService {
             entries
                 .iter()
                 .filter(|entry| entry.enabled && entry.source.is_available())
-                .map(|entry| (Arc::clone(&entry.source), Arc::clone(&entry.stats)))
+                .map(|entry| {
+                    (
+                        entry.kind,
+                        Arc::clone(&entry.source),
+                        Arc::clone(&entry.stats),
+                    )
+                })
                 .collect()
         };
 
-        for (source, stats) in pipeline {
+        let local_stats = pipeline
+            .iter()
+            .find(|(kind, _, _)| *kind == SourceKind::Local)
+            .map(|(_, _, stats)| Arc::clone(stats));
+        for (kind, source, stats) in pipeline {
             let started = Instant::now();
             let result = source.query(word).await.ok().flatten();
             let elapsed_ms = started.elapsed().as_millis() as u64;
@@ -556,11 +607,40 @@ impl LookupService {
                 stats.last_ok = Some(result.is_some());
             }
 
-            if let Some(entry) = result {
-                self.cache
+            if let Some(mut entry) = result {
+                if kind == SourceKind::Online
+                    && !has_han(word)
+                    && let Some(stats) = &local_stats
+                {
+                    let local = self.local_handle();
+                    let query = word.to_string();
+                    let started = Instant::now();
+                    let supplement =
+                        tauri::async_runtime::spawn_blocking(move || local.lookup(&query))
+                            .await
+                            .ok()
+                            .and_then(Result::ok)
+                            .flatten();
+                    {
+                        let mut stats = stats
+                            .lock()
+                            .unwrap_or_else(|poisoned| poisoned.into_inner());
+                        stats.last_ok = Some(supplement.is_some());
+                        stats.last_latency_ms = Some(started.elapsed().as_millis() as u64);
+                    }
+                    if let Some(supplement) = supplement
+                        && self.revision.load(Ordering::Acquire) == revision
+                    {
+                        entry = supplement_online(entry, supplement);
+                    }
+                }
+                let mut cache = self
+                    .cache
                     .lock()
-                    .unwrap_or_else(|poisoned| poisoned.into_inner())
-                    .put(key, entry.clone());
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                if self.revision.load(Ordering::Acquire) == revision {
+                    cache.put(key, entry.clone());
+                }
                 return Some(entry);
             }
         }
@@ -573,8 +653,182 @@ impl LookupService {
             installed: self.local.is_installed(),
             entry_count: self.local.count().unwrap_or(0),
             local_path: self.local_path.to_string_lossy().to_string(),
+            enrichment: self.local.enrichment_info().ok().flatten(),
         }
     }
+}
+
+fn canonical_forms(exchange: &str) -> Vec<(&str, &str)> {
+    exchange
+        .split('/')
+        .filter_map(|part| {
+            let (code, word) = part.split_once(':')?;
+            let code = code.trim();
+            let word = word.trim();
+            (!word.is_empty()
+                && matches!(code, "p" | "d" | "i" | "3" | "r" | "t" | "s" | "0" | "1"))
+            .then_some((code, word))
+        })
+        .collect()
+}
+
+fn distinct_definitions(local: &[PosDefinition], online: &[PosDefinition]) -> Vec<PosDefinition> {
+    let normalize = |value: &str| value.split_whitespace().collect::<Vec<_>>().join(" ");
+    local
+        .iter()
+        .filter_map(|definition| {
+            let meanings: Vec<String> = definition
+                .meanings
+                .iter()
+                .filter(|meaning| {
+                    !meaning.trim().is_empty()
+                        && !online.iter().any(|existing| {
+                            existing.pos.trim() == definition.pos.trim()
+                                && existing
+                                    .meanings
+                                    .iter()
+                                    .any(|value| normalize(value) == normalize(meaning))
+                        })
+                })
+                .cloned()
+                .collect();
+            (!meanings.is_empty()).then(|| PosDefinition {
+                pos: definition.pos.clone(),
+                meanings,
+            })
+        })
+        .collect()
+}
+
+/// Local meanings stay in a separately attributed section: dictionary senses
+/// cannot be concatenated blindly with a provider's context-specific answer.
+fn supplement_online(mut online: DictEntry, local: DictEntry) -> DictEntry {
+    let same_word = online.word.trim().eq_ignore_ascii_case(local.word.trim());
+    if !same_word
+        && !local.exchange.as_deref().is_some_and(|exchange| {
+            canonical_forms(exchange).iter().any(|(code, form)| {
+                matches!(*code, "p" | "d" | "i" | "3" | "r" | "t" | "s")
+                    && form.eq_ignore_ascii_case(online.word.trim())
+            })
+        })
+    {
+        // A suffix heuristic alone is not proof that two words have the same
+        // meaning (e.g. hardly -> hard). Never enrich unrelated fallback hits.
+        return online;
+    }
+
+    let mut supplement = LocalSupplement {
+        word: local.word.clone(),
+        phonetic: local.phonetic.clone(),
+        ..Default::default()
+    };
+    let mut mark = |field: &str| supplement.fields.push(field.to_string());
+    if same_word
+        && let Some(phonetic) = local
+            .phonetic
+            .as_ref()
+            .filter(|value| !value.trim().is_empty())
+    {
+        let current = online.phonetic.as_deref().unwrap_or_default();
+        let paired = |value: &str| value.contains('英') && value.contains('美');
+        if current.trim().is_empty() || (!paired(current) && paired(phonetic)) {
+            online.phonetic = Some(phonetic.clone());
+            mark("phonetic");
+        }
+    }
+    if same_word
+        && online
+            .audio_url
+            .as_ref()
+            .is_none_or(|value| value.trim().is_empty())
+        && let Some(audio) = local
+            .audio_url
+            .as_ref()
+            .filter(|value| !value.trim().is_empty())
+    {
+        online.audio_url = Some(audio.clone());
+        mark("audio_url");
+    }
+    let mut added_tags = false;
+    for tag in &local.tags {
+        let tag = tag.trim();
+        if !tag.is_empty()
+            && !online
+                .tags
+                .iter()
+                .any(|existing| existing.eq_ignore_ascii_case(tag))
+        {
+            online.tags.push(tag.to_string());
+            added_tags = true;
+        }
+    }
+    if added_tags {
+        mark("tags");
+    }
+    if let Some(local_exchange) = &local.exchange {
+        let mut forms = canonical_forms(online.exchange.as_deref().unwrap_or_default());
+        let mut added = false;
+        for (code, form) in canonical_forms(local_exchange) {
+            if !forms.iter().any(|(existing, _)| *existing == code) {
+                forms.push((code, form));
+                added = true;
+            }
+        }
+        if added {
+            online.exchange = Some(
+                forms
+                    .iter()
+                    .map(|(code, form)| format!("{code}:{form}"))
+                    .collect::<Vec<_>>()
+                    .join("/"),
+            );
+            mark("exchange");
+        }
+    }
+    if online.collins.is_none() && local.collins.is_some() {
+        online.collins = local.collins;
+        mark("collins");
+    }
+    if !online.oxford && local.oxford {
+        online.oxford = true;
+        mark("oxford");
+    }
+    if online.bnc.is_none() && local.bnc.is_some() {
+        online.bnc = local.bnc;
+        mark("bnc");
+    }
+    if online.frq.is_none() && local.frq.is_some() {
+        online.frq = local.frq;
+        mark("frq");
+    }
+    // End the mutable fields borrow before assigning the supplemental content.
+    supplement.definitions = distinct_definitions(&local.definitions, &online.definitions);
+    supplement.english_definitions =
+        distinct_definitions(&local.english_definitions, &online.english_definitions);
+    supplement.examples = local
+        .examples
+        .into_iter()
+        .filter(|example| {
+            !example.en.trim().is_empty()
+                && !online.examples.iter().any(|existing| {
+                    existing.en.trim() == example.en.trim()
+                        && existing.zh.trim() == example.zh.trim()
+                })
+        })
+        .collect();
+    if !supplement.definitions.is_empty() {
+        supplement.fields.push("definitions".into());
+    }
+    if !supplement.english_definitions.is_empty() {
+        supplement.fields.push("english_definitions".into());
+    }
+    if !supplement.examples.is_empty() {
+        supplement.fields.push("examples".into());
+    }
+    if !supplement.fields.is_empty() {
+        online.local_supplement = Some(supplement);
+    }
+    online
 }
 
 /// Read a non-empty phone field from a Youdao word object.
@@ -597,14 +851,14 @@ fn exchange_of(word: Option<&Value>) -> Option<String> {
             .filter_map(|item| {
                 let name = item.get("wf")?.get("name")?.as_str()?;
                 let value = item.get("wf")?.get("value")?.as_str()?;
-                Some(format!("{name} {value}"))
+                Some(youdao_form(name, value))
             })
             .collect(),
         Value::Object(_) => {
             let name = wfs.pointer("/wf/name").and_then(Value::as_str);
             let value = wfs.pointer("/wf/value").and_then(Value::as_str);
             match (name, value) {
-                (Some(name), Some(value)) => vec![format!("{name} {value}")],
+                (Some(name), Some(value)) => vec![youdao_form(name, value)],
                 _ => Vec::new(),
             }
         }
@@ -614,8 +868,25 @@ fn exchange_of(word: Option<&Value>) -> Option<String> {
     if forms.is_empty() {
         None
     } else {
-        Some(forms.join(" / "))
+        Some(forms.join("/"))
     }
+}
+
+/// Use the same exchange codes as ECCEDICT so both online and supplemented
+/// forms can be rendered by the existing word-form controls.
+fn youdao_form(name: &str, value: &str) -> String {
+    let code = match name.trim() {
+        "过去式" => "p",
+        "过去分词" => "d",
+        "现在分词" => "i",
+        "第三人称单数" | "第三人称单数形式" => "3",
+        "比较级" => "r",
+        "最高级" => "t",
+        "复数" => "s",
+        "原形" => "0",
+        _ => return format!("{name} {value}"),
+    };
+    format!("{code}:{}", value.trim())
 }
 
 /// Split a Youdao definition line into a POS tag and one or more meanings.
@@ -667,7 +938,303 @@ fn split_pos(text: &str) -> (String, &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::dictionary::test_support::{TestDirectory, row};
     use serde_json::json;
+
+    struct StaticSource {
+        entry: Option<DictEntry>,
+        calls: Arc<AtomicU64>,
+    }
+
+    struct DelayedSource {
+        entered: Arc<tokio::sync::Notify>,
+        resume: Arc<tokio::sync::Notify>,
+        calls: Arc<AtomicU64>,
+    }
+
+    #[async_trait::async_trait]
+    impl DictSource for DelayedSource {
+        fn id(&self) -> &'static str {
+            "delayed_fixture"
+        }
+        fn is_available(&self) -> bool {
+            true
+        }
+        async fn query(&self, _: &str) -> Result<Option<DictEntry>, String> {
+            if self.calls.fetch_add(1, Ordering::Relaxed) == 0 {
+                self.entered.notify_one();
+                self.resume.notified().await;
+            }
+            Ok(Some(online("hello")))
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl DictSource for StaticSource {
+        fn id(&self) -> &'static str {
+            "fixture_online"
+        }
+        fn is_available(&self) -> bool {
+            true
+        }
+        async fn query(&self, _: &str) -> Result<Option<DictEntry>, String> {
+            self.calls.fetch_add(1, Ordering::Relaxed);
+            Ok(self.entry.clone())
+        }
+    }
+
+    fn online(word: &str) -> DictEntry {
+        DictEntry {
+            word: word.into(),
+            phonetic: Some("/online/".into()),
+            audio_url: Some("https://example.invalid/online.mp3".into()),
+            definitions: vec![PosDefinition {
+                pos: "n.".into(),
+                meanings: vec!["在线释义".into()],
+            }],
+            english_definitions: vec![],
+            exchange: None,
+            tags: vec!["IELTS".into()],
+            examples: vec![ExampleSentence {
+                en: "An online example.".into(),
+                zh: "在线例句。".into(),
+            }],
+            source: "fixture_online".into(),
+            collins: None,
+            oxford: false,
+            bnc: None,
+            frq: None,
+            local_supplement: None,
+        }
+    }
+
+    fn service(dir: &TestDirectory, import: bool) -> (LookupService, Arc<AtomicU64>) {
+        let path = dir.0.join("test.redb");
+        let store = Arc::new(DictStore::open(&path).unwrap());
+        if import {
+            let rows: Vec<_> = [
+                "hello", "world", "word", "alpha", "beta", "gamma", "delta", "portal",
+            ]
+            .iter()
+            .map(|word| row(word, "n. 本地释义"))
+            .collect();
+            store.import_csv_file(dir.csv("local.csv", &rows)).unwrap();
+        }
+        let service = LookupService::new(store, path);
+        let calls = Arc::new(AtomicU64::new(0));
+        {
+            let mut sources = service.entries.write().unwrap();
+            sources[0].source = Arc::new(StaticSource {
+                entry: Some(online("hello")),
+                calls: Arc::clone(&calls),
+            });
+            sources[1].enabled = false;
+        }
+        (service, calls)
+    }
+
+    #[test]
+    fn online_primary_content_is_preserved_while_local_metadata_and_separate_meanings_are_added() {
+        let primary = online("hello");
+        let mut local = primary.clone();
+        local.source = "local_eccedict".into();
+        local.phonetic = Some("英 /həˈləʊ/ 美 /həˈloʊ/".into());
+        local.collins = Some(4);
+        local.oxford = true;
+        local.bnc = Some(100);
+        local.frq = Some(200);
+        local.tags = vec!["ielts".into(), "CET4".into()];
+        local.exchange = Some("s:hellos".into());
+        local.definitions[0].meanings = vec!["本地释义".into()];
+        local.examples.push(ExampleSentence {
+            en: "A local example.".into(),
+            zh: "本地例句。".into(),
+        });
+        let result = supplement_online(primary.clone(), local);
+        assert_eq!(result.word, primary.word);
+        assert_eq!(result.source, primary.source);
+        assert_eq!(result.audio_url, primary.audio_url);
+        assert_eq!(
+            result.definitions[0].meanings,
+            primary.definitions[0].meanings
+        );
+        assert_eq!(result.examples.len(), 1);
+        assert_eq!(result.examples[0].en, primary.examples[0].en);
+        assert!(result.phonetic.unwrap().contains("英 /"));
+        assert_eq!(result.tags, ["IELTS", "CET4"]);
+        assert_eq!(result.exchange.as_deref(), Some("s:hellos"));
+        assert_eq!(result.collins, Some(4));
+        assert_eq!(result.bnc, Some(100));
+        let supplement = result.local_supplement.unwrap();
+        assert_eq!(supplement.definitions[0].meanings, ["本地释义"]);
+        assert_eq!(supplement.examples.len(), 1);
+        assert!(supplement.fields.contains(&"phonetic".into()));
+    }
+
+    #[test]
+    fn sparse_local_data_does_not_clear_online_fields_or_duplicate_existing_content() {
+        let primary = online("hello");
+        let mut local = primary.clone();
+        local.phonetic = None;
+        local.tags.clear();
+        local.examples.clear();
+        let result = supplement_online(primary.clone(), local);
+        assert_eq!(result.phonetic, primary.phonetic);
+        assert_eq!(result.tags, primary.tags);
+        assert!(result.local_supplement.is_none());
+    }
+
+    #[test]
+    fn richer_online_phonetics_and_conflicting_online_word_forms_keep_priority() {
+        let mut primary = online("hello");
+        primary.phonetic = Some("英 /online-uk/ 美 /online-us/".into());
+        primary.exchange = Some("s:onlineplural".into());
+        let mut local = primary.clone();
+        local.phonetic = Some("英 /local-uk/ 美 /local-us/".into());
+        local.exchange = Some("s:localplural/p:localpast".into());
+        let result = supplement_online(primary.clone(), local);
+        assert_eq!(result.phonetic, primary.phonetic);
+        assert_eq!(
+            result.exchange.as_deref(),
+            Some("s:onlineplural/p:localpast")
+        );
+    }
+
+    #[test]
+    fn verified_inflection_can_use_lemma_metadata_but_not_the_lemmas_pronunciation() {
+        let primary = online("portals");
+        let mut local = online("portal");
+        local.exchange = Some("s:portals".into());
+        local.phonetic = Some("英 /portal/ 美 /portal/".into());
+        local.tags = vec!["CET6".into()];
+        let result = supplement_online(primary.clone(), local);
+        assert_eq!(result.phonetic, primary.phonetic);
+        assert_eq!(result.word, "portals");
+        assert_eq!(result.local_supplement.unwrap().word, "portal");
+    }
+
+    #[test]
+    fn heuristic_only_fallback_cannot_enrich_an_unrelated_word() {
+        let primary = online("hardly");
+        let mut local = online("hard");
+        local.tags = vec!["CET6".into()];
+        local.phonetic = Some("英 /hard/ 美 /hard/".into());
+        let result = supplement_online(primary.clone(), local);
+        assert_eq!(result.phonetic, primary.phonetic);
+        assert_eq!(result.tags, primary.tags);
+        assert!(result.local_supplement.is_none());
+    }
+
+    #[test]
+    fn youdao_word_forms_use_the_renderers_canonical_exchange_codes() {
+        let response = json!({ "wfs": [
+            { "wf": { "name": "过去式", "value": "went" } },
+            { "wf": { "name": "第三人称单数", "value": "goes" } },
+            { "wf": { "name": "复数", "value": "words" } }
+        ] });
+        assert_eq!(
+            exchange_of(Some(&response)).as_deref(),
+            Some("p:went/3:goes/s:words")
+        );
+    }
+
+    #[tokio::test]
+    async fn online_hits_are_supplemented_cached_and_disabling_local_removes_the_supplement() {
+        let dir = TestDirectory::new();
+        let (service, calls) = service(&dir, true);
+        assert!(
+            service
+                .lookup("hello")
+                .await
+                .unwrap()
+                .local_supplement
+                .is_some()
+        );
+        assert!(
+            service
+                .lookup("HELLO")
+                .await
+                .unwrap()
+                .local_supplement
+                .is_some()
+        );
+        assert_eq!(calls.load(Ordering::Relaxed), 1);
+        service.set_source_enabled("local_eccedict", false).unwrap();
+        assert!(
+            service
+                .lookup("hello")
+                .await
+                .unwrap()
+                .local_supplement
+                .is_none()
+        );
+        assert_eq!(calls.load(Ordering::Relaxed), 2);
+    }
+
+    #[tokio::test]
+    async fn local_first_keeps_the_existing_offline_short_circuit() {
+        let dir = TestDirectory::new();
+        let (service, calls) = service(&dir, true);
+        service
+            .set_source_order(&["local_eccedict".into(), "youdao".into(), "google".into()])
+            .unwrap();
+        let result = service.lookup("hello").await.unwrap();
+        assert_eq!(result.source, "local_eccedict");
+        assert!(result.local_supplement.is_none());
+        assert_eq!(calls.load(Ordering::Relaxed), 0);
+    }
+
+    #[tokio::test]
+    async fn no_installed_local_dictionary_does_not_block_online_lookup() {
+        let dir = TestDirectory::new();
+        let (service, calls) = service(&dir, false);
+        let result = service.lookup("hello").await.unwrap();
+        assert_eq!(result.source, "fixture_online");
+        assert!(result.local_supplement.is_none());
+        assert_eq!(calls.load(Ordering::Relaxed), 1);
+    }
+
+    #[tokio::test]
+    async fn in_flight_queries_cannot_repopulate_cache_after_source_settings_change() {
+        let dir = TestDirectory::new();
+        let (service, _) = service(&dir, true);
+        let service = Arc::new(service);
+        let entered = Arc::new(tokio::sync::Notify::new());
+        let resume = Arc::new(tokio::sync::Notify::new());
+        let calls = Arc::new(AtomicU64::new(0));
+        service.entries.write().unwrap()[0].source = Arc::new(DelayedSource {
+            entered: Arc::clone(&entered),
+            resume: Arc::clone(&resume),
+            calls: Arc::clone(&calls),
+        });
+        let handle = Arc::clone(&service);
+        let pending = tokio::spawn(async move { handle.lookup("hello").await });
+        entered.notified().await;
+        service.set_source_enabled("local_eccedict", false).unwrap();
+        resume.notify_one();
+        assert!(pending.await.unwrap().unwrap().local_supplement.is_none());
+        assert!(service.cache.lock().unwrap().get("hello").is_none());
+        assert!(
+            service
+                .lookup("hello")
+                .await
+                .unwrap()
+                .local_supplement
+                .is_none()
+        );
+        assert_eq!(calls.load(Ordering::Relaxed), 2);
+    }
+
+    #[test]
+    fn concurrent_import_attempts_are_rejected_without_changing_the_source_list() {
+        let dir = TestDirectory::new();
+        let (service, _) = service(&dir, true);
+        let operation = service.begin_import().unwrap();
+        assert!(service.begin_import().is_err());
+        drop(operation);
+        assert!(service.begin_import().is_ok());
+        assert_eq!(service.sources().len(), 3);
+    }
 
     fn ce_block(pos: Option<&str>, words: &[&str]) -> Value {
         let mut parts = vec![json!("")];

@@ -2,7 +2,9 @@ pub mod commands;
 pub mod core;
 pub mod platform;
 
-use crate::core::{clipboard_monitor, dictionary, integrity, ocr, selection, shell, shortcut};
+use crate::core::{
+    clipboard_monitor, dictionary, integrity, learning, ocr, selection, shell, shortcut,
+};
 use crate::platform::PlatformWindow;
 use crate::platform::window::WindowOps;
 use tauri_plugin_autostart::ManagerExt;
@@ -296,6 +298,14 @@ pub fn run() {
                 eprintln!("Failed to initialize dictionary: {e}");
             }
 
+            // Independent, non-resettable user data. Initialization failure is
+            // retained by the service rather than blocking the reading tools.
+            let learning_service = match app.path().app_data_dir() {
+                Ok(data_dir) => learning::LearningService::open(data_dir.join("learning.redb")),
+                Err(error) => learning::LearningService::unavailable(error.to_string()),
+            };
+            app.manage(learning_service);
+
             if ocr_assets.resolve().is_ok() {
                 ocr_assets.clean_cache();
             }
@@ -339,6 +349,10 @@ pub fn run() {
             commands::translate_text,
             commands::translate_stream,
             commands::lookup_dict,
+            commands::learning_enroll,
+            commands::learning_list,
+            commands::learning_delete,
+            commands::learning_export,
             commands::dict_status,
             commands::dict_sources,
             commands::set_dict_source_enabled,

@@ -11,6 +11,7 @@ Frontend (repo root):
 - Unit tests (all): `pnpm test`
 - Single test file: `pnpm exec vitest run <path/to/test.ts>`
 - Build frontend: `pnpm build`
+- Cross-compile Windows installer: `pnpm build:windows`
 - Dev (Vite + Tauri): `pnpm tauri dev`
 
 Backend (`src-tauri/`):

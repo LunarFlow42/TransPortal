@@ -19,6 +19,8 @@ import {
   X,
 } from 'lucide-react';
 import { InteractiveSentence } from './InteractiveSentence';
+import { SaveUsageButton } from './learning/SaveUsageButton';
+import { DictionaryMetadata, LocalDictionaryDetails } from './DictionaryMetadata';
 import { useAppStore } from '../store/useAppStore';
 import { saveSettings } from '../store/persistence';
 import { startWindowDrag } from '../utils/drag';
@@ -26,6 +28,7 @@ import { openSettingsWindow } from '../utils/windows';
 import { cn } from '../utils/cn';
 import { isAudioPlaying, playPronunciation, stopPronunciation } from '../utils/audio';
 import { recallScrollTop, rememberScrollTop } from '../utils/scrollMemory';
+import { exchangeItems, phoneticParts } from '../utils/dictionaryDisplay';
 import type { LookupNode, ProviderType } from '../types';
 
 const QUICK_LANG_OPTIONS = [
@@ -38,48 +41,6 @@ const QUICK_LANG_OPTIONS = [
   { value: 'ru', label: '俄语' },
   { value: 'es', label: '西语' },
 ];
-
-/** Split an enriched phonetic string like `英 /uk/ 美 /us/` into labelled parts. */
-function splitPhonetic(phonetic: string): { label: string; value: string }[] | null {
-  const uk = phonetic.indexOf('英');
-  const us = phonetic.indexOf('美');
-  if (uk === -1 && us === -1) return null;
-
-  const parts: { label: string; value: string }[] = [];
-  if (uk !== -1) {
-    const end = us > uk ? us : phonetic.length;
-    const value = phonetic.slice(uk + 1, end).trim();
-    if (value) parts.push({ label: '英', value });
-  }
-  if (us !== -1) {
-    const value = phonetic.slice(us + 1).trim();
-    if (value) parts.push({ label: '美', value });
-  }
-
-  return parts.length ? parts : null;
-}
-
-/** ECDICT exchange codes -> readable labels. */
-const EXCHANGE_LABELS: Record<string, string> = {
-  p: '过去式',
-  d: '过去分词',
-  i: '现在分词',
-  '3': '三单',
-  r: '比较级',
-  t: '最高级',
-  s: '复数',
-};
-
-function exchangeItems(exchange: string): { label: string; value: string }[] {
-  return exchange
-    .split('/')
-    .map((item) => {
-      const [code, value] = item.split(':');
-      return { code, value };
-    })
-    .filter((item) => Boolean(item.value) && Boolean(EXCHANGE_LABELS[item.code]))
-    .map((item) => ({ label: EXCHANGE_LABELS[item.code], value: item.value }));
-}
 
 /** Short label used in the breadcrumb trail. */
 function crumbLabel(node: LookupNode): string {
@@ -238,7 +199,7 @@ export const LookupCard: React.FC<LookupCardProps> = ({
   const total = stack.length;
   const depth = stackIndex + 1;
   const wordData = node.wordData;
-  const phones = wordData?.phonetic ? splitPhonetic(wordData.phonetic) : null;
+  const phones = wordData?.phonetic ? phoneticParts(wordData.phonetic) : null;
   const exchanges = wordData?.exchange ? exchangeItems(wordData.exchange) : [];
   const compact = node.density === 'compact';
   const displayWord = wordData?.word || node.text;
@@ -613,12 +574,12 @@ export const LookupCard: React.FC<LookupCardProps> = ({
             {phones
               ? phones.map((phone) => (
                   <span
-                    key={phone.label}
+                    key={phone.accent}
                     onClick={handlePronounce}
                     title={t('card.playPhonetic')}
                     className="cursor-pointer whitespace-nowrap font-mono text-xs text-[var(--accent-b)] transition-opacity hover:opacity-80"
                   >
-                    <span className="mr-0.5 text-[var(--faint)]">{phone.label}</span>
+                    <span className="mr-0.5 text-[var(--faint)]">{t(`card.accent.${phone.accent}`)}</span>
                     {phone.value}
                   </span>
                 ))
@@ -641,6 +602,8 @@ export const LookupCard: React.FC<LookupCardProps> = ({
             {wordData?.tags?.map((tag) => <Pill key={tag}>{tag}</Pill>)}
           </div>
 
+          {wordData && <DictionaryMetadata entry={wordData} />}
+
           {/* Origin context (source sentence) */}
           {node.originText && (
             <div className="flex items-start gap-2 rounded-[var(--r-inner)] bg-[var(--surface-2)] px-2.5 py-1.5 text-[11px]">
@@ -662,7 +625,7 @@ export const LookupCard: React.FC<LookupCardProps> = ({
                   title={`点击查词并朗读 "${item.value}"`}
                   className="cursor-pointer rounded-full border border-[var(--stroke)] bg-[var(--surface-2)] px-2 py-0.5 text-[11px] transition-colors hover:border-[var(--accent-b)] hover:text-[var(--text)]"
                 >
-                  <span className="mr-1 text-[var(--muted)]">{item.label}</span>
+                  <span className="mr-1 text-[var(--muted)]">{t(`card.exchange.${item.code}`)}</span>
                   {item.value}
                 </span>
               ))}
@@ -671,6 +634,8 @@ export const LookupCard: React.FC<LookupCardProps> = ({
 
           {/* Meaning / translation fallback */}
           {meaning}
+
+          <SaveUsageButton node={node} isTop={isTop} translationSource={provider} />
 
           {!compact && wordData?.english_definitions && wordData.english_definitions.length > 0 && (
             <div className="flex flex-col gap-1.5">
@@ -715,6 +680,8 @@ export const LookupCard: React.FC<LookupCardProps> = ({
               </div>
             </div>
           )}
+
+          {!compact && wordData && <LocalDictionaryDetails entry={wordData} />}
         </div>
       )}
       </div>

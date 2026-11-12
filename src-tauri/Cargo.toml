@@ -1,6 +1,6 @@
 [package]
 name = "transportal"
-version = "0.1.0"
+version = "0.1.3"
 description = "TransPortal - lightweight desktop translation & dictionary workbench"
 authors = ["LunarFlow42"]
 edition = "2024"

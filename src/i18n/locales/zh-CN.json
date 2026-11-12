@@ -19,11 +19,52 @@
     "history": "历史记录",
     "search": "搜索设置项..."
   },
+  "learning": {
+    "title": "生词收藏",
+    "rememberUsage": "记住这个用法",
+    "chooseUsageHint": "只保存你选择的一个释义和已有例句，不采集外部上下文。",
+    "sense": "释义",
+    "example": "例句",
+    "withoutExample": "不保存例句",
+    "noExampleHint": "没有例句也可以收录。",
+    "translationWarning": "这是一条翻译结果，并非词典释义。请确认准确后再保存。",
+    "confirmSave": "收录用法",
+    "saving": "保存中…",
+    "saved": "已收录",
+    "alreadySaved": "已在收藏中，保留原有记录",
+    "saveFailed": "收录失败，请重试。",
+    "privacyHint": "仅在词卡中明确收录后保存到本机。普通查词不自动入库；不采集屏幕、窗口标题或额外上下文，也不会上传收藏。当前阶段不安排复习提醒。",
+    "search": "搜索单词、释义或例句…",
+    "refresh": "刷新收藏",
+    "count": "{{count}} 个用法",
+    "exportAll": "导出全部 {{format}}",
+    "exportHint": "JSON 保存完整记录；TSV 可用于表格或 Anki。导出全部收藏，请选择新文件，不覆盖已有文件。",
+    "exported": "已导出 {{count}} 个用法为 {{format}}。",
+    "operationFailed": "操作失败，原有学习文件不会被重置。",
+    "empty": "尚未收藏用法。在单词词卡中点击“记住这个用法”，选择释义和已有例句后收录。",
+    "noMatches": "没有匹配的收藏用法。",
+    "delete": "删除",
+    "deleteUsage": "删除 {{word}} 的这个用法",
+    "deleteConfirm": "删除这个用法及其例句？",
+    "deleted": "已删除这个用法。",
+    "previous": "上一页",
+    "next": "下一页",
+    "definition": {
+      "dictionary": "词典释义",
+      "translation": "翻译结果"
+    },
+    "context": {
+      "dictionary": "词典例句",
+      "generated": "AI 生成例句",
+      "lookup": "已有点词原句"
+    }
+  },
   "settings": {
     "title": "偏好设置",
     "tabs": {
       "general": "常规",
       "translation": "翻译与词典",
+      "learning": "生词收藏",
       "shortcuts": "快捷键与手势",
       "advanced": "高级与诊断",
       "about": "关于与更新"
@@ -101,10 +142,13 @@
       "moveUp": "上移",
       "moveDown": "下移",
       "importCsv": "导入 CSV 词库",
-      "downloadFull": "下载完整 ECCEDICT",
+      "downloadFull": "下载并导入富化 ECCEDICT",
       "importing": "正在导入词典，这可能需要一些时间…",
       "importedCount": "已导入 {{count}} 词条。",
-      "downloadingDict": "正在下载完整 ECCEDICT 词库 · 约 63 MB…"
+      "downloadingDict": "正在下载 ECCEDICT 基础词库 · 约 63 MB…",
+      "enrichingDict": "正在校验并合并英美音标与考试标签…",
+      "localMergeHint": "默认下载生成富化 CSV。本地词典启用时，也会补充在线词卡的音标、标签、词形与词频；在线释义和例句保持独立。",
+      "enrichedInstalled": "已导入富化词库 · {{phonetics}} 条音标、{{tags}} 条标签增强"
     },
     "shortcuts": {
       "resetKeybindings": "恢复默认键位",
@@ -425,6 +469,28 @@
     "backTranslating": "正在反向翻译...",
     "playPhonetic": "点击发音",
     "sourceDict": "出处",
+    "sourceYoudao": "有道",
+    "sourceGoogle": "Google",
+    "sourceLocal": "本地 ECCEDICT",
+    "localSupplementBadge": "本地补充（{{word}}）",
+    "localDetails": "本地 ECCEDICT 的释义与例句 · {{word}}",
+    "localEnglishDefinitions": "本地英文释义",
+    "localExample": "本地词典例句",
+    "collinsStars": "柯林斯 {{count}} 星",
+    "oxfordCore": "牛津 3000",
+    "bncRank": "BNC #{{rank}}",
+    "frqRank": "当代词频 #{{rank}}",
+    "frequencyHint": "来源词库中的词频排名，数字越小越常见；不是实时或最新年度统计。",
+    "accent": { "uk": "英", "us": "美" },
+    "exchange": {
+      "p": "过去式", "d": "过去分词", "i": "现在分词", "3": "三单",
+      "r": "比较级", "t": "最高级", "s": "复数", "0": "原形"
+    },
+    "localFields": {
+      "phonetic": "音标", "audio_url": "发音", "tags": "标签", "exchange": "词形", "collins": "柯林斯星级",
+      "oxford": "牛津核心词", "bnc": "BNC 词频", "frq": "当代词频",
+      "definitions": "中文释义", "english_definitions": "英文释义", "examples": "例句"
+    },
     "clickLookupWord": "点击查词并朗读",
     "failed": "查询失败，请检查网络或 provider 设置。",
     "notFound": "未收录该词。",

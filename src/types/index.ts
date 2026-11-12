@@ -42,6 +42,8 @@ export interface PosDefinition {
 export interface ExampleSentence {
   en: string;
   zh: string;
+  /** Online/local examples default to dictionary; generated additions are tagged. */
+  source?: 'dictionary' | 'generated';
 }
 
 export interface DictEntry {
@@ -54,6 +56,20 @@ export interface DictEntry {
   tags: string[];
   examples: ExampleSentence[];
   source: string;
+  collins?: number | null;
+  oxford?: boolean;
+  bnc?: number | null;
+  frq?: number | null;
+  local_supplement?: LocalDictionarySupplement | null;
+}
+
+export interface LocalDictionarySupplement {
+  word: string;
+  phonetic?: string | null;
+  fields: string[];
+  definitions: PosDefinition[];
+  english_definitions: PosDefinition[];
+  examples: ExampleSentence[];
 }
 
 export type DictSourceKind = 'online' | 'local';
@@ -73,10 +89,11 @@ export interface DictStatus {
   installed: boolean;
   entry_count: number;
   local_path: string;
+  enrichment?: { revision: string; phonetics: number; tags: number } | null;
 }
 
 export interface DictProgress {
-  stage: 'downloading' | 'importing' | 'done';
+  stage: 'downloading' | 'enriching' | 'importing' | 'done';
   downloaded: number;
   total?: number | null;
   imported?: number | null;
@@ -108,6 +125,8 @@ export interface LookupNode {
   intent: TextIntent;
   wordData: DictEntry | null;
   translation: string;
+  /** Provider that produced this translation snapshot, even if settings change. */
+  translationProvider?: ProviderType;
   status: LookupStatus;
   /** Sentence/example this frame was opened from (source context). */
   originText?: string;

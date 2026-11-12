@@ -779,7 +779,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       && get().lookupStack.some((node) => node.id === nodeId);
 
     let accumulated = '';
-    get().patchNode(nodeId, { status: 'streaming', translation: '' });
+    get().patchNode(nodeId, { status: 'streaming', translation: '', translationProvider: provider });
 
     const channel = new Channel<StreamChunk>();
     channel.onmessage = (chunk) => {
@@ -840,7 +840,10 @@ export const useAppStore = create<AppState>((set, get) => ({
             ...node,
             wordData: {
               ...node.wordData,
-              examples: [...(node.wordData.examples ?? []), ...examples],
+              examples: [
+                ...(node.wordData.examples ?? []),
+                ...examples.map((example) => ({ ...example, source: 'generated' as const })),
+              ],
             },
           };
         }),

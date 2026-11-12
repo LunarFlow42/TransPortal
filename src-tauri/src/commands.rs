@@ -2,6 +2,9 @@ use crate::core::dictionary::eccedict::{self, DictProgress};
 use crate::core::dictionary::{DictEntry, ExampleSentence};
 use crate::core::dictionary::{DictStatus, LookupService, SourceInfo};
 use crate::core::intent::{IntentResult, classify_intent};
+use crate::core::learning::{
+    EnrollResult, ExportFormat, ExportResult, LearningDraft, LearningPage, LearningService,
+};
 use crate::core::translation::{
     StreamChunk, TranslateQuery, TranslateResult, Translator, openai::OpenAiConfig,
 };
@@ -57,6 +60,75 @@ pub async fn lookup_dict(
     service: State<'_, LookupService>,
 ) -> Result<Option<DictEntry>, String> {
     Ok(service.lookup(&word).await)
+}
+
+/// Explicit saves only; a normal dictionary lookup never writes learning data.
+#[tauri::command]
+pub async fn learning_enroll(
+    draft: LearningDraft,
+    app: AppHandle,
+    service: State<'_, LearningService>,
+) -> Result<EnrollResult, String> {
+    let service = service.inner().clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        service.enroll(draft).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    // Notification failure must not turn a committed save into an apparent failure.
+    let _ = app.emit("transportal://learning-changed", ());
+    Ok(result)
+}
+
+#[tauri::command]
+pub async fn learning_list(
+    query: String,
+    offset: u64,
+    limit: u32,
+    service: State<'_, LearningService>,
+) -> Result<LearningPage, String> {
+    let service = service.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        service
+            .list(&query, offset, limit)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn learning_delete(
+    id: String,
+    app: AppHandle,
+    service: State<'_, LearningService>,
+) -> Result<bool, String> {
+    let service = service.inner().clone();
+    let deleted = tauri::async_runtime::spawn_blocking(move || {
+        service.delete(&id).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    if deleted {
+        let _ = app.emit("transportal://learning-changed", ());
+    }
+    Ok(deleted)
+}
+
+#[tauri::command]
+pub async fn learning_export(
+    path: String,
+    format: ExportFormat,
+    service: State<'_, LearningService>,
+) -> Result<ExportResult, String> {
+    let service = service.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        service
+            .export(std::path::Path::new(&path), format)
+            .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /// Dictionary availability snapshot for the settings panel.
@@ -447,7 +519,8 @@ pub async fn import_eccedict(
     eccedict::import_file(&service, path).await
 }
 
-/// Download the full (~63 MB) ECCEDICT CSV with progress, then import it.
+/// Download the pinned ECCEDICT base, verify and enrich it with bundled data,
+/// then import the enriched CSV with progress. Runtime Python is not needed.
 #[tauri::command]
 pub async fn download_eccedict(
     on_progress: tauri::ipc::Channel<DictProgress>,

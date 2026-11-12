@@ -5,6 +5,7 @@ pub mod clipboard_monitor;
 pub mod dictionary;
 pub mod integrity;
 pub mod intent;
+pub mod learning;
 pub mod ocr;
 pub(crate) mod onnx_runtime;
 pub mod selection;

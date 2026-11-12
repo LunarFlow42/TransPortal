@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "revision": "7a83e99c45f0547be6391b79e8129f98f9c128d9",
+  "upstream": "https://github.com/H1DDENADM1N/ECCEDICT",
+  "base": {
+    "bytes": 65933428,
+    "sha256": "1a6947e04785db63613a92e14903cdae7954f7e84860b10e68e5c7cbb3f9c3cf",
+    "urls": [
+      "https://gh-proxy.com/https://raw.githubusercontent.com/H1DDENADM1N/ECCEDICT/7a83e99c45f0547be6391b79e8129f98f9c128d9/ecdict.csv",
+      "https://ghproxy.net/https://raw.githubusercontent.com/H1DDENADM1N/ECCEDICT/7a83e99c45f0547be6391b79e8129f98f9c128d9/ecdict.csv",
+      "https://raw.githubusercontent.com/H1DDENADM1N/ECCEDICT/7a83e99c45f0547be6391b79e8129f98f9c128d9/ecdict.csv",
+      "https://cdn.jsdelivr.net/gh/H1DDENADM1N/ECCEDICT@7a83e99c45f0547be6391b79e8129f98f9c128d9/ecdict.csv"
+    ]
+  },
+  "enrichment": {
+    "file": "enrichment.csv.gz",
+    "bytes": 1700306,
+    "sha256": "2b693c35cf0850ba014bd65a889c365a6f00b5c29d5e84eb6e6b5e24b0b53bef",
+    "rows": 235387
+  },
+  "entries": 770611,
+  "enriched_phonetics": 122834,
+  "enriched_tags": 12384
+}

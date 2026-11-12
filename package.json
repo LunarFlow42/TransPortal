@@ -1,7 +1,7 @@
 {
   "name": "transportal",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.3",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,6 +10,7 @@
     "ocr:prepare": "node scripts/ocr/prepare.mjs",
     "build:desktop": "pnpm ocr:prepare && pnpm build",
     "build:release": "node scripts/build-release.mjs",
+    "build:windows": "node scripts/build-windows.mjs",
     "test:integrity": "node --test scripts/integrity/checks.node.mjs",
     "preview": "vite preview",
     "test": "vitest run",

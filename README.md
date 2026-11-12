@@ -31,7 +31,7 @@ TransPortal is engineered for high-frequency reading, software engineering, and 
 - 🎯 **Global Text Selection & In-Place Replacement**: Uses Windows native UI Automation `TextPattern` to extract selected text across arbitrary applications (with silent clipboard fallback). Supports silent in-place overwrite of selected source text with target translations.
 - 🔍 **Local Offline & Dual-Engine Screen OCR**: Built-in native snipping tool with zero external dependencies. Integrates local **ONNX PP-OCRv5 FP32** inference (offline high-accuracy Chinese/English recognition without requiring Python or GPU drivers). Supports side-by-side comparative reading with word drilldown, in-place picture text overlay, snip & web search, and silent background OCR to clipboard.
 - 🔊 **Offline Neural TTS (Kokoro ONNX)**: Integrated INT8 quantized neural voice synthesis engine (~**90.6 MB** asset bundle), delivering offline English & Chinese speech with natural prosody and dynamic subword compound phonemization fallback.
-- 📚 **Hybrid Offline Dictionaries & Streaming LLM**: Powered by an embedded `redb` KV store hosting the million-word offline ECCEDICT database for instant lookup. Seamlessly integrates with Microsoft Bing, Google, Youdao, Tencent, and custom OpenAI-compatible endpoints with **auto-fetch model lists** and smooth height-tweening against streaming token layout jitter.
+- 📚 **Enriched Offline Dictionary & Online Supplements**: The default ECCEDICT download enriches the ~770k-entry base with UK/US phonetics and exam tags before importing into `redb`. Enabled local data supplements online word cards with tags, word forms and corpus ranks while keeping meanings attributed. Translation also supports Bing, Google, Youdao, Tencent and custom OpenAI-compatible streaming endpoints with **auto-fetch model lists**.
 - 🛡️ **Subtle Dashed Affordance & Full Internationalization (i18n)**: Replaces cluttered `?` icons with elegant subtle dashed underlines (Dashed Affordance). Hovering over any title instantly unveils a sleek frosted glass tooltip card with rich explanations. Ships with 100% clean, non-bracketed English and Simplified Chinese localization.
 - 📊 **Hardware-Accelerated Capture Diagnostics**: Multi-tier screen capture probe (DXGI / WGC Window / WGC Monitor / GDI) with latency measurement and instant Markdown report generation.
 - 🍃 **Ultra-Low Memory Footprint**: Native Rust core resident memory remains **~30-60 MB** (70%+ lower RAM usage than traditional Electron apps), complemented by an automated dual-stage memory trimmer upon window idle.
@@ -64,7 +64,7 @@ TransPortal is engineered for high-frequency reading, software engineering, and 
 TransPortal adheres to a strict separation between **`core` (cross-platform business logic)** and **`platform` (OS contracts & implementations)**:
 
 ```mermaid
-graph TD
+flowchart TD
     UI["Web Frontend UI<br/>(React 19 / Vite / Tailwind v4 / Framer Motion / react-i18next)"]
     IPC["Tauri IPC Commands Layer<br/>(src-tauri/src/commands.rs)"]
     CORE["Cross-Platform core/<br/>(Engine Registry / Dictionary Orchestration / redb / OCR Session / Hotkeys)"]
@@ -72,7 +72,7 @@ graph TD
     WIN["Windows Platform Backend<br/>(Win32 / UI Automation / DWM / DXGI / Windows OCR)"]
     LIN["Linux Platform Backend<br/>(X11 / Wayland Native Contracts)"]
 
-    UI <==>|IPC Serialization| IPC
+    UI <-->|"IPC Serialization"| IPC
     IPC --> CORE
     CORE --> PLATFORM
     PLATFORM --> WIN

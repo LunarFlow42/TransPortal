@@ -31,7 +31,7 @@ TransPortal 专为高频阅读、代码查阅与办公协作场景打造，彻�
 - 🎯 **全局智能划词与原地替换**：优先通过 Windows 原生 UI Automation `TextPattern` 穿透捕获选区（失败自动平滑降级剪贴板）；支持将译文极速静默覆写回原选区输入框。
 - 🔍 **本地离线与双模 OCR 识别**：内置低延迟原生框选器，集成 **ONNX PP-OCRv5 FP32** 纯本地推理引擎（中英混合离线高精度识别，无需配置 Python 环境或独立显卡）；支持图文双栏对照、原图覆盖译文、截图文字搜索与静默提取入剪贴板。
 - 🔊 **纯离线 Kokoro ONNX 语音合成 (TTS)**：内置 INT8 量化神经语音模型（仅约 **90.6 MB** 资源包），支持离线生成自然流畅的高品质英音与美音发音，内置动态复合词音素分解与智能 fallback，查词即听纯正音色。
-- 📚 **混合离线词库与流式大模型**：内置 `redb` 嵌入式 KV 引擎承载百万级 ECCEDICT 离线词库，毫秒级点词下钻；同时兼容 Bing、Google、有道、腾讯及自定义 OpenAI 兼容接口，支持**一键获取模型列表（Auto Fetch Models）**与流式 Token 高度缓动防抖动排版。
+- 📚 **富化离线词库与在线补充**：默认将约 77 万条 ECCEDICT 基础词库与英美音标、考试标签增强数据合并后导入 `redb`。本地数据可补充在线词卡的标签、词形与词频，释义来源保持独立；同时兼容 Bing、Google、有道、腾讯及自定义 OpenAI 兼容流式接口，支持**一键获取模型列表（Auto Fetch Models）**。
 - 🛡️ **微虚线交互与全量国际化 (i18n)**：界面杜绝冗余的 `?` 问号噪点与中英双拼括号，采用现代操作系统的微虚线暗线设计（Dashed Affordance），鼠标悬停（Hover）即优雅弹出磨砂玻璃说明；支持简体中文与英文无感即时切换。
 - 📊 **多管线捕获探针与截屏诊断**：内置多层捕获探针（DXGI / WGC Window / WGC Monitor / GDI），根据前台窗口属性自动调度最高效截屏通道，支持一键生成并复制全链路诊断报告。
 - 🍃 **精巧物理内存管理**：Rust 核心常驻物理内存仅需 **~30-60 MB**（相较传统 Electron 架构内存降低 70%+），内置后台双阶段物理内存深度修剪机制。
@@ -64,7 +64,7 @@ TransPortal 专为高频阅读、代码查阅与办公协作场景打造，彻�
 TransPortal 采用严格的 **`core`（跨平台业务应用层）+ `platform`（OS 契约与适配层）** 分离架构：
 
 ```mermaid
-graph TD
+flowchart TD
     UI["Web 前端 UI<br/>(React 19 / Vite / Tailwind v4 / Framer Motion / react-i18next)"]
     IPC["Tauri IPC Commands 层<br/>(src-tauri/src/commands.rs)"]
     CORE["跨平台核心层 core/<br/>(翻译引擎注册表 / 字典编排 / 离线 redb / OCR 会话 / 热键状态)"]
@@ -72,7 +72,7 @@ graph TD
     WIN["Windows 平台实现<br/>(Win32 / UI Automation / DWM / DXGI / Windows OCR)"]
     LIN["Linux 平台实现<br/>(X11 / Wayland 原生适配)"]
 
-    UI <==>|IPC 序列化通信| IPC
+    UI <-->|"IPC 序列化通信"| IPC
     IPC --> CORE
     CORE --> PLATFORM
     PLATFORM --> WIN

@@ -8,6 +8,7 @@ import {
 } from '@tauri-apps/plugin-autostart';
 import {
   BookOpen,
+  Bookmark,
   Keyboard,
   Languages,
   Minus,
@@ -36,6 +37,7 @@ import { useAppStore } from '../store/useAppStore';
 import { startWindowDrag } from '../utils/drag';
 import { closeSettingsWindow } from '../utils/windows';
 import { DictionaryPanel } from '../components/DictionaryPanel';
+import { LearningPanel } from '../components/learning/LearningPanel';
 import { OcrSettingsPanel } from '../components/OcrSettingsPanel';
 import { TtsSettingsPanel } from '../components/TtsSettingsPanel';
 import { IntegrityPanel } from '../components/IntegrityPanel';
@@ -122,11 +124,12 @@ const IN_WINDOW_SHORTCUTS = [
   { key: 'Esc', descKey: 'settings.shortcuts.inWindow.esc' },
 ];
 
-export type SettingsTab = 'general' | 'translation' | 'shortcuts' | 'advanced' | 'about';
+export type SettingsTab = 'general' | 'translation' | 'learning' | 'shortcuts' | 'advanced' | 'about';
 
 const TABS: { id: SettingsTab; labelKey: string; icon: React.ReactNode }[] = [
   { id: 'general', labelKey: 'settings.tabs.general', icon: <Palette className="h-4 w-4" /> },
   { id: 'translation', labelKey: 'settings.tabs.translation', icon: <Languages className="h-4 w-4" /> },
+  { id: 'learning', labelKey: 'settings.tabs.learning', icon: <Bookmark className="h-4 w-4" /> },
   { id: 'shortcuts', labelKey: 'settings.tabs.shortcuts', icon: <Keyboard className="h-4 w-4" /> },
   { id: 'advanced', labelKey: 'settings.tabs.advanced', icon: <Sliders className="h-4 w-4" /> },
   { id: 'about', labelKey: 'settings.tabs.about', icon: <Info className="h-4 w-4" /> },
@@ -430,6 +433,7 @@ export const SettingsView: React.FC = () => {
   const matchOcr = isSearching && isMatch(['ocr', '文字识别', 'windows ocr', 'onnx', 'paddle', '语言', '引擎', '原图', '译图', '图片展示', '覆写']);
   const matchShortcuts = isSearching && isMatch(['global', 'shortcuts', '全局', '快捷键', '热键', '划词', '替换', 'ocr', '截图', '截图搜索', '静默', '输入翻译', '手势', '监听', '落墨', '双击复制', 'ctrl+c+c', '剪贴板', '内置']);
   const matchDict = isSearching && isMatch(['dictionary', '词典', '发音', 'audio', 'pronounce', 'ecdict']);
+  const matchLearning = isSearching && isMatch(['learning', 'vocabulary', 'saved', '生词', '学习', '收藏', '用法', 'export', '导出']);
   const matchTts = isSearching && isMatch(['tts', '语音', '发音', '朗读', 'speech', 'kokoro', '声音', '音色']);
   const matchMemory = isSearching && isMatch(['memory', '系统', '性能', '内存', '释放', 'ram', 'clean', 'working set']);
   const matchIntegrity = isSearching && isMatch(['integrity', '完整性', '健康', '检测', 'checks', 'sha256', 'hash']);
@@ -444,6 +448,7 @@ export const SettingsView: React.FC = () => {
     matchSearchEngine ||
     matchOcr ||
     matchDict ||
+    matchLearning ||
     matchTts ||
     matchShortcuts ||
     matchMemory ||
@@ -901,6 +906,14 @@ export const SettingsView: React.FC = () => {
                 <Section label={t('settings.general.tts')} icon={<Volume2 className="h-3.5 w-3.5" />} className="shrink-0">
                   <Surface variant="inner" className="flex flex-col gap-3 p-3">
                     <TtsSettingsPanel disabled={!settingsReady} />
+                  </Surface>
+                </Section>
+              )}
+
+              {(isSearching ? matchLearning : activeTab === 'learning') && (
+                <Section label={t('learning.title')} icon={<Bookmark className="h-3.5 w-3.5" />} className="shrink-0">
+                  <Surface variant="inner" className="p-3">
+                    <LearningPanel />
                   </Surface>
                 </Section>
               )}

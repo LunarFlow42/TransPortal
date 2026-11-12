@@ -114,6 +114,9 @@ export const DictionaryPanel: React.FC = () => {
       } else if (progress.stage === 'importing') {
         setProgress(null);
         setMessage(t('settings.translation.importing'));
+      } else if (progress.stage === 'enriching') {
+        setProgress(null);
+        setMessage(t('settings.translation.enrichingDict'));
       } else {
         setProgress(null);
       }
@@ -146,6 +149,16 @@ export const DictionaryPanel: React.FC = () => {
             : t('settings.translation.onlineOnly')}
         </span>
       </div>
+
+      <p className="text-[11px] leading-relaxed text-[var(--muted)]">{t('settings.translation.localMergeHint')}</p>
+      {status?.enrichment && (
+        <p className="text-[11px] text-[var(--muted)]" title={status.enrichment.revision}>
+          {t('settings.translation.enrichedInstalled', {
+            phonetics: status.enrichment.phonetics.toLocaleString(),
+            tags: status.enrichment.tags.toLocaleString(),
+          })}
+        </p>
+      )}
 
       <div className="flex flex-col gap-1.5">
         {sources.map((source, index) => (
