@@ -1172,7 +1172,7 @@ export const SettingsView: React.FC = () => {
 
               {/* ====== TAB 5: 关于与更新 (About & Updates) ====== */}
               {(isSearching ? matchAbout : activeTab === 'about') && (
-                <AboutPanel />
+                <AboutPanel settingsReady={settingsReady} />
               )}
 
               {/* 搜索无结果提示 */}

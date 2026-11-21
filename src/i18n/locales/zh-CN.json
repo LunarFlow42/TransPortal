@@ -379,6 +379,7 @@
       "isLatest": "已是最新版",
       "newVersionBadge": "新版本 v{{version}}",
       "updateCheckTitle": "软件更新检查",
+      "autoCheckUpdates": "自动检查更新",
       "checking": "正在检查...",
       "checkButton": "检查更新",
       "updateFound": "发现新版本 v{{version}}！",

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { getVersion } from '@tauri-apps/api/app';
@@ -15,7 +15,8 @@ import {
   Layers,
 } from 'lucide-react';
 import appIcon from '../assets/app-icon.png';
-import { Surface, Button } from './ui';
+import { Surface, Button, Switch } from './ui';
+import { useAppStore } from '../store/useAppStore';
 import type { UpdateCheckResult } from '../types';
 
 const GithubIcon: React.FC<{ className?: string }> = ({ className }) => (
@@ -39,8 +40,12 @@ const REPO_URL = 'https://github.com/LunarFlow42/TransPortal';
 const ISSUES_URL = 'https://github.com/LunarFlow42/TransPortal/issues';
 const RELEASES_URL = 'https://github.com/LunarFlow42/TransPortal/releases';
 
-export const AboutPanel: React.FC = () => {
+export const AboutPanel: React.FC<{ settingsReady: boolean }> = ({ settingsReady }) => {
   const { t } = useTranslation();
+  const autoCheckUpdates = useAppStore((state) => state.autoCheckUpdates);
+  const setAutoCheckUpdates = useAppStore((state) => state.setAutoCheckUpdates);
+  const autoCheckLabel = t('settings.about.autoCheckUpdates', { defaultValue: '自动检查更新' });
+  const autoCheckStarted = useRef(false);
   const [version, setVersion] = useState('');
   const [status, setStatus] = useState<'idle' | 'checking' | 'latest' | 'available' | 'error'>('idle');
   const [updateInfo, setUpdateInfo] = useState<UpdateCheckResult | null>(null);
@@ -71,7 +76,7 @@ export const AboutPanel: React.FC = () => {
     }
   };
 
-  const handleCheckUpdate = async (silent = false) => {
+  const handleCheckUpdate = useCallback(async (silent = false) => {
     setStatus('checking');
     setErrorMessage(null);
     try {
@@ -90,12 +95,14 @@ export const AboutPanel: React.FC = () => {
         setStatus('idle');
       }
     }
-  };
-
-  // 挂载时自动后台静默检查一次
-  useEffect(() => {
-    void handleCheckUpdate(true);
   }, []);
+
+  // Wait for persisted settings before checking; manual checks ignore this preference.
+  useEffect(() => {
+    if (!settingsReady || !autoCheckUpdates || autoCheckStarted.current) return;
+    autoCheckStarted.current = true;
+    void handleCheckUpdate(true);
+  }, [settingsReady, autoCheckUpdates, handleCheckUpdate]);
 
   const handleOpenLink = (url: string) => {
     void openUrl(url);
@@ -181,6 +188,16 @@ export const AboutPanel: React.FC = () => {
               t('settings.about.checkButton', { defaultValue: '检查更新' })
             )}
           </Button>
+        </div>
+
+        <div className="flex items-center justify-between gap-3 border-t border-[var(--stroke)]/40 pt-3">
+          <span className="text-xs text-[var(--text)]">{autoCheckLabel}</span>
+          <Switch
+            checked={autoCheckUpdates}
+            onChange={setAutoCheckUpdates}
+            disabled={!settingsReady}
+            label={autoCheckLabel}
+          />
         </div>
 
         {/* 发现新版本提示面板 */}

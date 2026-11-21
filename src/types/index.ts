@@ -318,6 +318,7 @@ export interface PersistedSettings {
   doubleCopyEnabled: boolean;
   clipboardMonitorEnabled?: boolean;
   autoPronounce: boolean;
+  autoCheckUpdates?: boolean;
   ocrEngine: OcrEngineId;
   /** `auto` uses Windows profile languages, otherwise an installed BCP-47 tag. */
   ocrLanguage: string;

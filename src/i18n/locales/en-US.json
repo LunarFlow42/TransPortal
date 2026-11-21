@@ -379,6 +379,7 @@
       "isLatest": "Up to date",
       "newVersionBadge": "New version v{{version}}",
       "updateCheckTitle": "Software Updates",
+      "autoCheckUpdates": "Automatically check for updates",
       "checking": "Checking...",
       "checkButton": "Check for Updates",
       "updateFound": "New version v{{version}} available!",

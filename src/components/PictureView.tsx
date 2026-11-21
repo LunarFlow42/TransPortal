@@ -1,12 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
-import { save } from '@tauri-apps/plugin-dialog';
-import { Copy, Download, Languages, LoaderCircle, RotateCcw, ZoomIn } from 'lucide-react';
+import { Languages, LoaderCircle, RotateCcw, ZoomIn } from 'lucide-react';
 import { Button } from './ui';
 import { useAppStore } from '../store/useAppStore';
 import { useImageZoomPan } from '../hooks/useImageZoomPan';
 import { renderPicture } from '../utils/picture';
-import { suppressAutoHide } from '../utils/autoHide';
+import { PictureExportActions } from './PictureExportActions';
 import type { OcrPicture, PictureTranslation } from '../types';
 
 interface Props {
@@ -42,9 +40,7 @@ export const PictureView: React.FC<Props> = ({ picture, translation, busy, error
 
   const [editing, setEditing] = useState(true);
   const [texts, setTexts] = useState(picture.blocks.map((block) => block.text));
-  const [notice, setNotice] = useState<string | null>(null);
   const [renderError, setRenderError] = useState<string | null>(null);
-  const [exporting, setExporting] = useState(false);
   useEffect(() => { setTexts(picture.blocks.map((block) => block.text)); }, [picture]);
   useEffect(() => {
     let disposed = false;
@@ -59,20 +55,6 @@ export const PictureView: React.FC<Props> = ({ picture, translation, busy, error
     }).catch((error) => { if (!disposed) setRenderError(String(error)); });
     return () => { disposed = true; };
   }, [picture, translation, original]);
-
-  const exportImage = async (toFile: boolean) => {
-    setExporting(true); setNotice(null);
-    try {
-      suppressAutoHide(60_000);
-      const path = toFile ? await save({ defaultPath: 'TransPortal-translation.png', filters: [{ name: 'PNG 图片', extensions: ['png'] }] }) : null;
-      if (toFile && !path) return;
-      const result = document.createElement('canvas');
-      await renderPicture(result, picture, translation);
-      await invoke('export_ocr_picture', { dataUrl: result.toDataURL('image/png'), path });
-      setNotice(toFile ? '译图已保存' : '译图已复制');
-    } catch (error) { setNotice(String(error)); }
-    finally { setExporting(false); }
-  };
 
   const failures = translation?.blocks.filter((block) => block.error) ?? [];
   return <div className="mt-3 space-y-2">
@@ -148,13 +130,11 @@ export const PictureView: React.FC<Props> = ({ picture, translation, busy, error
           {busy ? <LoaderCircle className="h-3 w-3 animate-spin" /> : <Languages className="h-3 w-3" />}{busy ? '翻译中…' : translation ? '重新翻译' : '原位翻译'}
         </Button>
       </>}
-      <Button size="sm" disabled={!translation || busy || exporting} onClick={() => void exportImage(false)}><Copy className="h-3 w-3" />复制译图</Button>
-      <Button size="sm" disabled={!translation || busy || exporting} onClick={() => void exportImage(true)}><Download className="h-3 w-3" />保存译图</Button>
+      <PictureExportActions picture={picture} translation={translation} busy={busy} />
       <Button size="sm" variant="subtle" onClick={() => setEditing(!editing)}>{editing ? '收起文字' : onTranslate ? '校对文字' : '查看文字'}</Button>
     </div>
     {failures.length > 0 && <p role="alert" className="text-xs text-rose-400">{failures.length} 段翻译失败，已保留原文：{failures[0].error}</p>}
     {(error || renderError) && <p role="alert" className="text-xs text-rose-400">{error || renderError}</p>}
-    {notice && <p role="status" className="text-xs text-[var(--muted)]">{notice}</p>}
     {!picture.blocks.length && <p className="text-xs text-[var(--muted)]">区域内未识别到文字。</p>}
     {editing && <div className="max-h-36 space-y-2 overflow-auto select-text">
       {picture.blocks.map((block, index) => <div key={block.id} className="rounded-md border border-[var(--stroke)] p-2 text-xs">

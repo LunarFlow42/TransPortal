@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { Button, IconButton, Surface } from './ui';
 import { InteractiveSentence } from './InteractiveSentence';
+import { PictureExportActions } from './PictureExportActions';
 import { useAppStore } from '../store/useAppStore';
 import { useImageZoomPan } from '../hooks/useImageZoomPan';
 import { saveSettings } from '../store/persistence';
@@ -395,6 +396,10 @@ export const OcrCardView: React.FC<{ event: OcrEvent }> = ({ event }) => {
               暂无截图预览
             </div>
           )}
+
+          <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+            <PictureExportActions picture={event.picture} translation={pictureTranslation} busy={pictureBusy} />
+          </div>
 
           {/* 切换至原位覆写翻译 */}
           <Button
