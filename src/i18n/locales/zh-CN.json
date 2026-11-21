@@ -402,6 +402,7 @@
   "shell": {
     "translating": "正在翻译...",
     "ocrRecognizing": "正在分析识别屏幕文字...",
+    "ocrInitializing": "正在初始化截图功能…",
     "sourceText": "原文",
     "targetText": "译文",
     "clickToLookup": "点击单词即时查看释义",

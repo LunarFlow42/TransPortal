@@ -42,21 +42,48 @@ export function useOcrStatus() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const sequence = useRef(0);
+  const mounted = useRef(false);
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const failures = useRef(0);
   const shortcuts = useRef<ShortcutReport | null>(null);
   const refresh = useCallback(async () => {
+    if (!mounted.current) return;
+    if (retryTimer.current !== null) {
+      clearTimeout(retryTimer.current);
+      retryTimer.current = null;
+    }
     const request = ++sequence.current;
     setLoading(true);
     try {
       const next = await invoke<OcrStatus>('ocr_status');
-      if (request === sequence.current) {
+      if (mounted.current && request === sequence.current) {
+        failures.current = 0;
         setStatus(withShortcuts(next, shortcuts.current));
         setError(null);
       }
     } catch (error) {
-      if (request === sequence.current) setError(String(error));
+      if (mounted.current && request === sequence.current) {
+        setError(String(error));
+        // Bundled webviews can request status before Rust setup registers OCR.
+        // Keep recovering after transient failures without hammering the backend.
+        const delay = Math.min(500 * 2 ** Math.min(failures.current++, 5), 10_000);
+        retryTimer.current = setTimeout(() => {
+          retryTimer.current = null;
+          void refresh();
+        }, delay);
+      }
     } finally {
-      if (request === sequence.current) setLoading(false);
+      if (mounted.current && request === sequence.current) setLoading(false);
     }
+  }, []);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      sequence.current++;
+      if (retryTimer.current !== null) clearTimeout(retryTimer.current);
+      retryTimer.current = null;
+    };
   }, []);
   useEffect(() => { void refresh(); }, [refresh, engine, language]);
   useEffect(() => {

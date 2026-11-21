@@ -402,6 +402,7 @@
   "shell": {
     "translating": "Translating...",
     "ocrRecognizing": "Recognizing on-screen text...",
+    "ocrInitializing": "Initializing screenshot tools…",
     "sourceText": "Original",
     "targetText": "Translation",
     "clickToLookup": "Click word to view definition",
