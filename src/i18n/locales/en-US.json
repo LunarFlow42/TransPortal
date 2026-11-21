@@ -379,6 +379,7 @@
       "isLatest": "Up to date",
       "newVersionBadge": "New version v{{version}}",
       "updateCheckTitle": "Software Updates",
+      "autoCheckUpdates": "Automatically check for updates",
       "checking": "Checking...",
       "checkButton": "Check for Updates",
       "updateFound": "New version v{{version}} available!",
@@ -401,6 +402,7 @@
   "shell": {
     "translating": "Translating...",
     "ocrRecognizing": "Recognizing on-screen text...",
+    "ocrInitializing": "Initializing screenshot tools…",
     "sourceText": "Original",
     "targetText": "Translation",
     "clickToLookup": "Click word to view definition",

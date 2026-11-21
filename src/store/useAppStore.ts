@@ -86,6 +86,7 @@ interface AppState {
   doubleCopyEnabled: boolean;
   clipboardMonitorEnabled: boolean;
   autoPronounce: boolean;
+  autoCheckUpdates: boolean;
   ocrEngine: OcrEngineId;
   ocrLanguage: string;
   lastOcrBenchmarkMs: number | null;
@@ -121,6 +122,7 @@ interface AppState {
   runBackTranslation: () => Promise<void>;
   navigateHistory: (direction: 'prev' | 'next') => void;
   setAutoPronounce: (enabled: boolean) => void;
+  setAutoCheckUpdates: (enabled: boolean) => void;
   setTtsEngine: (engine: TtsEngine) => void;
   setTtsVoice: (voice: string) => void;
   setTtsSpeed: (speed: number) => void;
@@ -207,6 +209,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   doubleCopyEnabled: true,
   clipboardMonitorEnabled: false,
   autoPronounce: true,
+  autoCheckUpdates: true,
   ocrEngine: 'windows',
   ocrLanguage: 'auto',
   lastOcrBenchmarkMs: null,
@@ -350,6 +353,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
   setAutoPronounce: (autoPronounce) => set({ autoPronounce }),
+  setAutoCheckUpdates: (autoCheckUpdates) => set({ autoCheckUpdates }),
   setTtsEngine: (ttsEngine) => set({ ttsEngine }),
   setTtsVoice: (ttsVoice) => set({ ttsVoice }),
   setTtsSpeed: (ttsSpeed) => set({ ttsSpeed }),
@@ -407,6 +411,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       doubleCopyEnabled: settings.doubleCopyEnabled ?? state.doubleCopyEnabled,
       clipboardMonitorEnabled: settings.clipboardMonitorEnabled ?? state.clipboardMonitorEnabled,
       autoPronounce: settings.autoPronounce ?? state.autoPronounce,
+      autoCheckUpdates: settings.autoCheckUpdates ?? state.autoCheckUpdates,
       ocrEngine: settings.ocrEngine ?? state.ocrEngine,
       ocrLanguage: settings.ocrLanguage ?? state.ocrLanguage,
       theme: settings.theme ?? state.theme,
@@ -439,6 +444,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       doubleCopyEnabled: true,
       clipboardMonitorEnabled: false,
       autoPronounce: true,
+      autoCheckUpdates: true,
       ttsEngine: 'kokoro_onnx' as TtsEngine,
       ttsVoice: 'af_heart',
       ttsSpeed: 1.0,

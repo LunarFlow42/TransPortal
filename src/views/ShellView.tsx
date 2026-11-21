@@ -92,7 +92,7 @@ export const ShellView: React.FC = () => {
   const ocrTarget = useAppStore((state) => state.ocrTarget);
   const [autoInterval, setAutoInterval] = useState(2000);
   const startOcr = useAppStore((state) => state.startOcr);
-  const { status: ocrStatus } = useOcrStatus();
+  const { status: ocrStatus, error: ocrStatusError, loading: ocrStatusLoading, refresh: refreshOcrStatus } = useOcrStatus();
   const shortcuts = useShortcutStatus();
   const [dismissedShortcuts, setDismissedShortcuts] = useState('');
   const shortcutIssues = shortcuts.report?.ready
@@ -622,16 +622,25 @@ export const ShellView: React.FC = () => {
             </div>
           )}
 
-          {ocrStatus && (
-            <div className="mt-3.5 flex flex-col gap-2 border-t border-[var(--stroke)] pt-3">
-              {ocrStatus.supported && (
+          <div className="mt-3.5 flex flex-col gap-2 border-t border-[var(--stroke)] pt-3">
+              {ocrStatusError ? (
+                <div role="alert" className="flex items-center justify-center gap-2 text-[11px] text-rose-400">
+                  <span>{ocrStatusError}</span>
+                  <Button size="sm" disabled={ocrStatusLoading} onClick={() => void refreshOcrStatus()}>
+                    {t(ocrStatusLoading ? 'common.loading' : 'common.retry')}
+                  </Button>
+                </div>
+              ) : !ocrStatus && (
+                <p role="status" className="text-[11px] text-[var(--muted)]">{t('shell.ocrInitializing')}</p>
+              )}
+              {ocrStatus?.supported !== false && (
                 <div className="flex flex-wrap items-center justify-center gap-1.5">
                   <span className="mr-0.5 text-[10px] font-semibold text-[var(--faint)]">{t('shell.ocrGroup')}</span>
                   <Button
                     size="sm"
                     variant="primary"
                     title={withKey(t('shell.ocrCardTip'), 'ocr_card')}
-                    disabled={!ocrStatus.engine.available}
+                    disabled={!ocrStatus?.engine.available}
                     onClick={() => void startOcr('card')}
                   >
                     <Languages className="h-3.5 w-3.5" />{t('shell.ocrCard')}
@@ -639,7 +648,7 @@ export const ShellView: React.FC = () => {
                   <Button
                     size="sm"
                     title={withKey(t('shell.ocrPictureTip'), 'ocr_picture')}
-                    disabled={!ocrStatus.engine.available}
+                    disabled={!ocrStatus?.engine.available}
                     onClick={() => void startOcr('picture')}
                   >
                     <Sparkles className="h-3.5 w-3.5" />{t('shell.ocrPicture')}
@@ -647,7 +656,7 @@ export const ShellView: React.FC = () => {
                   <Button
                     size="sm"
                     title={withKey(t('shell.ocrSearchTip'), 'ocr_search')}
-                    disabled={!ocrStatus.engine.available}
+                    disabled={!ocrStatus?.engine.available}
                     onClick={() => void startOcr('search')}
                   >
                     <Search className="h-3.5 w-3.5" />{t('shell.ocrSearch')}
@@ -660,17 +669,17 @@ export const ShellView: React.FC = () => {
                 <Button
                   size="sm"
                   title={t('shell.openImageTip')}
-                  disabled={!ocrStatus.engine.available}
+                  disabled={!ocrStatus?.engine.available}
                   onClick={() => void pickImage()}
                 >
                   <ImagePlus className="h-3.5 w-3.5" />{t('shell.openImage')}
                 </Button>
-                {ocrStatus.supported && (
+                {ocrStatus?.supported !== false && (
                   <>
                     <Button
                       size="sm"
                       title={t('shell.autoMonitorTip')}
-                      disabled={!ocrStatus.engine.available}
+                      disabled={!ocrStatus?.engine.available}
                       onClick={() => void useAppStore.getState().startAutoOcr(autoInterval)}
                     >
                       <Monitor className="h-3.5 w-3.5" />{t('shell.autoMonitor')}
@@ -695,7 +704,6 @@ export const ShellView: React.FC = () => {
                 )}
               </div>
             </div>
-          )}
 
           {capture?.error && (
             <p className="mt-2 text-[11px] text-rose-400">{capture.error}</p>

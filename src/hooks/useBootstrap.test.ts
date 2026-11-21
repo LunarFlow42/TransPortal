@@ -40,7 +40,7 @@ const mount = () => {
 beforeEach(() => {
   vi.clearAllMocks();
   lifecycle.effects.length = 0;
-  useAppStore.setState({ hotkey: 'Alt+Q', doubleCopyEnabled: true, ocrEngine: 'windows', ocrLanguage: 'auto', settingsError: null });
+  useAppStore.setState(useAppStore.getInitialState());
   vi.mocked(loadSettings).mockReset().mockResolvedValue({});
   vi.mocked(saveSettings).mockReset().mockResolvedValue();
   vi.mocked(emit).mockReset().mockResolvedValue();
@@ -53,6 +53,110 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanups.splice(0).forEach((cleanup) => cleanup());
+});
+
+const shortcutCases = [
+  ['selection', 'hotkey'],
+  ['ocr_card', 'ocrCardHotkey'],
+  ['ocr_picture', 'ocrPictureHotkey'],
+  ['ocr_search', 'ocrSearchHotkey'],
+  ['replace_selection', 'replaceSelectionHotkey'],
+  ['silent_ocr', 'silentOcrHotkey'],
+  ['input_translate', 'inputTranslateHotkey'],
+] as const;
+
+describe('shortcut settings startup', () => {
+  it.each(shortcutCases)('keeps %s disabled after saving and restarting', async (action, key) => {
+    mount();
+    await vi.waitFor(() => expect(lifecycle.initialized).toHaveBeenCalledWith(true));
+    await useAppStore.getState().setShortcut(action, '');
+    const patch = key === 'ocrSearchHotkey'
+      ? { ocrSearchHotkey: '', ocrTextHotkey: '' }
+      : { [key]: '' };
+    expect(saveSettings).toHaveBeenCalledExactlyOnceWith(patch);
+
+    cleanups.splice(0).forEach((cleanup) => cleanup());
+    useAppStore.setState(useAppStore.getInitialState());
+    vi.mocked(loadSettings).mockResolvedValue(patch);
+    vi.mocked(invoke).mockClear();
+    vi.mocked(saveSettings).mockClear();
+    lifecycle.initialized.mockClear();
+    mount();
+    await vi.waitFor(() => expect(lifecycle.initialized).toHaveBeenCalledWith(true));
+    expect(invoke).toHaveBeenCalledWith('set_shortcut', { action, accelerator: '' });
+    expect(useAppStore.getState()[key]).toBe('');
+    expect(emit).toHaveBeenLastCalledWith('transportal://settings-changed', expect.objectContaining(patch));
+    expect(saveSettings).not.toHaveBeenCalled();
+    const commands = vi.mocked(invoke).mock.calls.map(([command]) => command);
+    expect(commands.indexOf('set_shortcut')).toBeLessThan(commands.indexOf('finish_startup_checks'));
+  });
+
+  it('retains defaults when no shortcuts have been saved', async () => {
+    mount();
+    await vi.waitFor(() => expect(lifecycle.initialized).toHaveBeenCalledWith(true));
+    expect(invoke).not.toHaveBeenCalledWith('set_shortcut', expect.anything());
+    for (const [, key] of shortcutCases) {
+      expect(useAppStore.getState()[key]).toBe(useAppStore.getInitialState()[key]);
+    }
+  });
+
+  it.each(['', 'Ctrl+Shift+Y'])('restores the legacy OCR shortcut %j', async (accelerator) => {
+    vi.mocked(loadSettings).mockResolvedValue({ ocrTextHotkey: accelerator });
+    mount();
+    await vi.waitFor(() => expect(lifecycle.initialized).toHaveBeenCalledWith(true));
+    expect(invoke).toHaveBeenCalledWith('set_shortcut', { action: 'ocr_search', accelerator });
+    expect(useAppStore.getState().ocrTextHotkey).toBe(accelerator);
+    expect(useAppStore.getState().ocrSearchHotkey).toBe(accelerator);
+  });
+
+  it('honors an explicitly disabled OCR search shortcut over the legacy binding', async () => {
+    vi.mocked(loadSettings).mockResolvedValue({ ocrSearchHotkey: '', ocrTextHotkey: 'Alt+Shift+C' });
+    mount();
+    await vi.waitFor(() => expect(lifecycle.initialized).toHaveBeenCalledWith(true));
+    expect(invoke).toHaveBeenCalledWith('set_shortcut', { action: 'ocr_search', accelerator: '' });
+    expect(useAppStore.getState().ocrSearchHotkey).toBe('');
+    expect(useAppStore.getState().ocrTextHotkey).toBe('');
+  });
+
+  it.each(shortcutCases)('restores a custom %s binding', async (action, key) => {
+    vi.mocked(loadSettings).mockResolvedValue({ [key]: 'Ctrl+Shift+Y' });
+    mount();
+    await vi.waitFor(() => expect(lifecycle.initialized).toHaveBeenCalledWith(true));
+    expect(invoke).toHaveBeenCalledWith('set_shortcut', { action, accelerator: 'Ctrl+Shift+Y' });
+    expect(useAppStore.getState()[key]).toBe('Ctrl+Shift+Y');
+  });
+});
+
+describe('automatic update preference startup', () => {
+  it('defaults to enabled for a settings file without the new key', async () => {
+    mount();
+    await vi.waitFor(() => expect(lifecycle.initialized).toHaveBeenCalledWith(true));
+    expect(useAppStore.getState().autoCheckUpdates).toBe(true);
+    expect(emit).toHaveBeenCalledWith('transportal://settings-changed', expect.objectContaining({ autoCheckUpdates: true }));
+    expect(saveSettings).not.toHaveBeenCalled();
+  });
+
+  it('persists disabling checks, restores it after restart and saves re-enabling', async () => {
+    mount();
+    await vi.waitFor(() => expect(lifecycle.initialized).toHaveBeenCalledWith(true));
+    useAppStore.getState().setAutoCheckUpdates(false);
+    expect(saveSettings).toHaveBeenCalledExactlyOnceWith({ autoCheckUpdates: false });
+    expect(emit).toHaveBeenLastCalledWith('transportal://settings-changed', { autoCheckUpdates: false });
+
+    cleanups.splice(0).forEach((cleanup) => cleanup());
+    useAppStore.setState(useAppStore.getInitialState());
+    vi.mocked(loadSettings).mockResolvedValue({ autoCheckUpdates: false });
+    vi.mocked(saveSettings).mockClear();
+    lifecycle.initialized.mockClear();
+    mount();
+    await vi.waitFor(() => expect(lifecycle.initialized).toHaveBeenCalledWith(true));
+    expect(useAppStore.getState().autoCheckUpdates).toBe(false);
+    expect(emit).toHaveBeenLastCalledWith('transportal://settings-changed', expect.objectContaining({ autoCheckUpdates: false }));
+    expect(saveSettings).not.toHaveBeenCalled();
+
+    useAppStore.getState().setAutoCheckUpdates(true);
+    expect(saveSettings).toHaveBeenCalledExactlyOnceWith({ autoCheckUpdates: true });
+  });
 });
 
 describe('OCR settings startup', () => {
@@ -93,6 +197,7 @@ describe('OCR settings startup', () => {
       ocrCardHotkey: 'Alt+Shift+X',
       ocrPictureHotkey: 'Alt+S',
       ocrTextHotkey: 'Alt+Shift+C',
+      ocrSearchHotkey: 'Alt+Shift+C',
       replaceSelectionHotkey: 'Alt+Z',
       silentOcrHotkey: 'Alt+Shift+S',
       inputTranslateHotkey: 'Alt+Space',
@@ -100,6 +205,7 @@ describe('OCR settings startup', () => {
       doubleCopyEnabled: true,
       clipboardMonitorEnabled: false,
       autoPronounce: true,
+      autoCheckUpdates: true,
       ocrEngine: 'onnx',
       ocrLanguage: 'auto',
       fontSize: 14,

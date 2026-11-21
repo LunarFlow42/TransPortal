@@ -53,6 +53,7 @@ export function useBootstrap(persist: boolean) {
         ocrCardHotkey: undefined,
         ocrPictureHotkey: undefined,
         ocrTextHotkey: undefined,
+        ocrSearchHotkey: undefined,
         replaceSelectionHotkey: undefined,
         silentOcrHotkey: undefined,
         inputTranslateHotkey: undefined,
@@ -68,37 +69,39 @@ export function useBootstrap(persist: boolean) {
       }
       if (disposed) return;
 
-      if (settings.hotkey) {
+      if (settings.hotkey !== undefined) {
         await useAppStore.getState().setShortcut('selection', settings.hotkey);
       }
       if (disposed) return;
 
-      if (settings.ocrCardHotkey) {
+      if (settings.ocrCardHotkey !== undefined) {
         await useAppStore.getState().setShortcut('ocr_card', settings.ocrCardHotkey);
       }
       if (disposed) return;
 
-      if (settings.ocrPictureHotkey) {
+      if (settings.ocrPictureHotkey !== undefined) {
         await useAppStore.getState().setShortcut('ocr_picture', settings.ocrPictureHotkey);
       }
       if (disposed) return;
 
-      if (settings.ocrTextHotkey) {
-        await useAppStore.getState().setShortcut('ocr_text', settings.ocrTextHotkey);
+      // An empty shortcut explicitly disables the binding; only missing keys use defaults.
+      const ocrSearchHotkey = settings.ocrSearchHotkey ?? settings.ocrTextHotkey;
+      if (ocrSearchHotkey !== undefined) {
+        await useAppStore.getState().setShortcut('ocr_search', ocrSearchHotkey);
       }
       if (disposed) return;
 
-      if (settings.replaceSelectionHotkey) {
+      if (settings.replaceSelectionHotkey !== undefined) {
         await useAppStore.getState().setShortcut('replace_selection', settings.replaceSelectionHotkey);
       }
       if (disposed) return;
 
-      if (settings.silentOcrHotkey) {
+      if (settings.silentOcrHotkey !== undefined) {
         await useAppStore.getState().setShortcut('silent_ocr', settings.silentOcrHotkey);
       }
       if (disposed) return;
 
-      if (settings.inputTranslateHotkey) {
+      if (settings.inputTranslateHotkey !== undefined) {
         await useAppStore.getState().setShortcut('input_translate', settings.inputTranslateHotkey);
       }
       if (disposed) return;
@@ -143,6 +146,7 @@ export function useBootstrap(persist: boolean) {
           ocrCardHotkey,
           ocrPictureHotkey,
           ocrTextHotkey,
+          ocrSearchHotkey,
           replaceSelectionHotkey,
           silentOcrHotkey,
           inputTranslateHotkey,
@@ -150,6 +154,7 @@ export function useBootstrap(persist: boolean) {
           doubleCopyEnabled,
           clipboardMonitorEnabled,
           autoPronounce,
+          autoCheckUpdates,
           ocrEngine,
           ocrLanguage,
           fontSize,
@@ -171,6 +176,7 @@ export function useBootstrap(persist: boolean) {
           ocrCardHotkey,
           ocrPictureHotkey,
           ocrTextHotkey,
+          ocrSearchHotkey,
           replaceSelectionHotkey,
           silentOcrHotkey,
           inputTranslateHotkey,
@@ -178,6 +184,7 @@ export function useBootstrap(persist: boolean) {
           doubleCopyEnabled,
           clipboardMonitorEnabled,
           autoPronounce,
+          autoCheckUpdates,
           ocrEngine,
           ocrLanguage,
           fontSize,
@@ -214,6 +221,7 @@ export function useBootstrap(persist: boolean) {
         if (state.ocrCardHotkey !== previous.ocrCardHotkey) patch.ocrCardHotkey = state.ocrCardHotkey;
         if (state.ocrPictureHotkey !== previous.ocrPictureHotkey) patch.ocrPictureHotkey = state.ocrPictureHotkey;
         if (state.ocrTextHotkey !== previous.ocrTextHotkey) patch.ocrTextHotkey = state.ocrTextHotkey;
+        if (state.ocrSearchHotkey !== previous.ocrSearchHotkey) patch.ocrSearchHotkey = state.ocrSearchHotkey;
         if (state.replaceSelectionHotkey !== previous.replaceSelectionHotkey) patch.replaceSelectionHotkey = state.replaceSelectionHotkey;
         if (state.silentOcrHotkey !== previous.silentOcrHotkey) patch.silentOcrHotkey = state.silentOcrHotkey;
         if (state.inputTranslateHotkey !== previous.inputTranslateHotkey) patch.inputTranslateHotkey = state.inputTranslateHotkey;
@@ -221,6 +229,7 @@ export function useBootstrap(persist: boolean) {
         if (state.doubleCopyEnabled !== previous.doubleCopyEnabled) patch.doubleCopyEnabled = state.doubleCopyEnabled;
         if (state.clipboardMonitorEnabled !== previous.clipboardMonitorEnabled) patch.clipboardMonitorEnabled = state.clipboardMonitorEnabled;
         if (state.autoPronounce !== previous.autoPronounce) patch.autoPronounce = state.autoPronounce;
+        if (state.autoCheckUpdates !== previous.autoCheckUpdates) patch.autoCheckUpdates = state.autoCheckUpdates;
         if (state.ocrEngine !== previous.ocrEngine) patch.ocrEngine = state.ocrEngine;
         if (state.ocrLanguage !== previous.ocrLanguage) patch.ocrLanguage = state.ocrLanguage;
         if (state.theme !== previous.theme) patch.theme = state.theme;
