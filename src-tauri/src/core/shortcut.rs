@@ -1,14 +1,18 @@
 //! Configurable global shortcuts and non-consuming copy/snip gestures.
 
 use crate::core::ocr::{OcrMode, OcrService};
+use crate::platform::PlatformSelection;
+use crate::platform::PlatformShortcuts;
 use crate::platform::PlatformWindow;
 use crate::platform::gestures::{GestureSource, InkKey};
+use crate::platform::selection::SelectionOps;
+use crate::platform::shortcuts::{ShortcutBinding, ShortcutEvent, ShortcutOps};
 use crate::platform::window::WindowOps;
-use crate::platform::{CAPABILITIES, Capabilities, PlatformGestures};
+use crate::platform::{Capabilities, PlatformGestures, capabilities};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
@@ -121,9 +125,11 @@ pub struct ShortcutStatus {
     pub active: Option<String>,
     pub error: Option<String>,
     pub system: bool,
+    pub pending: bool,
 }
 impl ShortcutStatus {
     fn finish(&mut self, result: &Result<(), String>) {
+        self.pending = false;
         self.error = result.as_ref().err().cloned();
         if result.is_ok() {
             self.active = (!self.requested.is_empty()).then(|| self.requested.clone());
@@ -136,6 +142,8 @@ pub struct ShortcutReport {
     pub revision: u64,
     pub ready: bool,
     pub shortcuts: Vec<ShortcutStatus>,
+    pub portal_managed: bool,
+    pub keyboard_gestures: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -175,6 +183,7 @@ impl Default for BindingState {
                                 active: None,
                                 error: None,
                                 system: false,
+                                pending: false,
                             },
                         },
                     )
@@ -186,6 +195,8 @@ impl Default for BindingState {
 #[derive(Default)]
 pub struct ShortcutBindings {
     state: Mutex<BindingState>,
+    portal: PlatformShortcuts,
+    portal_generation: AtomicU64,
 }
 
 fn parse_binding(action: ShortcutAction, accelerator: &str) -> Result<Option<BindingKey>, String> {
@@ -245,7 +256,7 @@ fn supported_with(capabilities: Capabilities, action: ShortcutAction) -> bool {
 }
 
 fn supported(action: ShortcutAction) -> bool {
-    supported_with(CAPABILITIES, action)
+    supported_with(capabilities(), action)
 }
 
 fn validate_conflict(
@@ -282,7 +293,17 @@ fn apply_locked(
     let result = (|| {
         let key = parse_binding(action, value)?;
         validate_conflict(state, action, key)?;
-        if key == Some(BindingKey::SystemSnip) && !CAPABILITIES.system_snip {
+        if PlatformGestures::discovers_availability() && action == ShortcutAction::DoubleCopy {
+            let enabled = key == Some(BindingKey::DoubleCopy);
+            PlatformGestures::set_double_copy(enabled);
+            app.state::<crate::core::selection::SelectionService>()
+                .set_double_copy(enabled);
+            let binding = state.bindings.get_mut(&action).unwrap();
+            binding.key = key;
+            binding.status.system = enabled;
+            return Ok(());
+        }
+        if key == Some(BindingKey::SystemSnip) && !capabilities().system_snip {
             return Err(UNSUPPORTED.into());
         }
         if matches!(key, Some(BindingKey::SystemSnip | BindingKey::DoubleCopy))
@@ -291,6 +312,16 @@ fn apply_locked(
             return Err("键盘监听未就绪，请重新检测。".into());
         }
         let previous = state.bindings[&action].key;
+        if PlatformShortcuts::uses_portal() {
+            if matches!(key, Some(BindingKey::SystemSnip | BindingKey::DoubleCopy)) {
+                return Err(UNSUPPORTED.into());
+            }
+            let binding = state.bindings.get_mut(&action).unwrap();
+            binding.key = key;
+            binding.status.system = true;
+            binding.status.active = None;
+            return Ok(());
+        }
         if key != previous {
             let manager = app.global_shortcut();
             if let Some(BindingKey::Chord(shortcut)) = key {
@@ -330,6 +361,12 @@ fn apply_locked(
         .unwrap()
         .status
         .finish(&result);
+    if PlatformShortcuts::uses_portal() && result.is_ok() && action != ShortcutAction::DoubleCopy {
+        let status = &mut state.bindings.get_mut(&action).unwrap().status;
+        status.active = None;
+        status.error = None;
+        status.pending = !status.requested.is_empty();
+    }
     state.revision += 1;
     result
 }
@@ -339,7 +376,9 @@ pub fn set_shortcut(
     action: ShortcutAction,
     accelerator: &str,
 ) -> Result<(), String> {
-    if !supported(action) {
+    if !(supported(action)
+        || action == ShortcutAction::DoubleCopy && PlatformGestures::discovers_availability())
+    {
         return Err(UNSUPPORTED.into());
     }
     let bindings = app.state::<ShortcutBindings>();
@@ -350,10 +389,114 @@ pub fn set_shortcut(
         accelerator,
     );
     publish_status(app);
+    if PlatformShortcuts::uses_portal()
+        && action != ShortcutAction::DoubleCopy
+        && bindings.state.lock().unwrap().ready
+    {
+        bind_portal(app);
+    }
     result
 }
 
+/// Debounce bootstrap/settings updates into one permission session. Portal v1
+/// permits BindShortcuts once per session, so replacement creates a new session.
+fn bind_portal(app: &AppHandle) {
+    let bindings = app.state::<ShortcutBindings>();
+    let generation = bindings.portal_generation.fetch_add(1, Ordering::AcqRel) + 1;
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+        let service = app.state::<ShortcutBindings>();
+        if service.portal_generation.load(Ordering::Acquire) != generation {
+            return;
+        }
+        let descriptors = {
+            let state = service.state.lock().unwrap();
+            state
+                .bindings
+                .iter()
+                .filter(|(action, binding)| {
+                    supported(**action) && matches!(binding.key, Some(BindingKey::Chord(_)))
+                })
+                .map(|(action, binding)| ShortcutBinding {
+                    id: action.id().into(),
+                    description: action.label().into(),
+                    preferred: binding.status.requested.clone(),
+                })
+                .collect()
+        };
+        let handle = app.clone();
+        let handler = std::sync::Arc::new(move |event: ShortcutEvent| {
+            let service = handle.state::<ShortcutBindings>();
+            if service.portal_generation.load(Ordering::Acquire) != generation {
+                return;
+            }
+            if let ShortcutEvent::Activated(id) = event {
+                if let Some(action) = ACTIONS.iter().copied().find(|action| action.id() == id) {
+                    trigger(&handle, action);
+                }
+                return;
+            }
+            {
+                let mut state = service.state.lock().unwrap();
+                for (action, binding) in &mut state.bindings {
+                    if !matches!(binding.key, Some(BindingKey::Chord(_))) {
+                        continue;
+                    }
+                    binding.status.pending = false;
+                    match &event {
+                        ShortcutEvent::Changed(registered) => {
+                            let entry = registered.iter().find(|entry| entry.id == action.id());
+                            binding.status.active = entry.map(|entry| entry.trigger.clone());
+                            binding.status.error =
+                                entry.is_none().then(|| "桌面未授权此快捷键。".into());
+                        }
+                        ShortcutEvent::Closed(error) => {
+                            binding.status.active = None;
+                            binding.status.error = Some(error.clone());
+                        }
+                        ShortcutEvent::Activated(_) => unreachable!(),
+                    }
+                }
+                state.revision += 1;
+            }
+            publish_status(&handle);
+        });
+        let result = service.portal.bind(descriptors, handler).await;
+        if service.portal_generation.load(Ordering::Acquire) != generation {
+            return;
+        }
+        {
+            let mut state = service.state.lock().unwrap();
+            for (action, binding) in &mut state.bindings {
+                if !supported(*action) || !matches!(binding.key, Some(BindingKey::Chord(_))) {
+                    continue;
+                }
+                binding.status.pending = false;
+                match &result {
+                    Ok(registered) => {
+                        let entry = registered.iter().find(|entry| entry.id == action.id());
+                        binding.status.active = entry.map(|entry| entry.trigger.clone());
+                        binding.status.error = entry
+                            .is_none()
+                            .then(|| "桌面未授权此快捷键；可在系统快捷键设置中配置。".into());
+                    }
+                    Err(error) => {
+                        binding.status.active = None;
+                        binding.status.error = Some(error.clone());
+                    }
+                }
+            }
+            state.revision += 1;
+        }
+        publish_status(&app);
+    });
+}
+
 fn unregister_chords(app: &AppHandle, state: &BindingState) {
+    if PlatformShortcuts::uses_portal() {
+        return;
+    }
     let manager = app.global_shortcut();
     for binding in state.bindings.values() {
         if let Some(BindingKey::Chord(shortcut)) = binding.key {
@@ -363,6 +506,9 @@ fn unregister_chords(app: &AppHandle, state: &BindingState) {
 }
 
 fn register_chords(app: &AppHandle, state: &BindingState) {
+    if PlatformShortcuts::uses_portal() {
+        return;
+    }
     let manager = app.global_shortcut();
     for (&action, binding) in &state.bindings {
         if let Some(BindingKey::Chord(shortcut)) = binding.key {
@@ -383,6 +529,8 @@ pub fn set_recording(app: &AppHandle, recording: bool) {
     }
     state.recording = recording;
     RECORDING.store(recording, Ordering::SeqCst);
+    PlatformGestures::suspend(recording);
+    bindings.portal.suspend(recording);
     if recording {
         unregister_chords(app, &state);
     } else {
@@ -411,7 +559,9 @@ pub fn restore(app: &AppHandle, config: ShortcutConfig) -> Result<ShortcutConfig
     for &action in &ACTIONS {
         let binding = state.bindings.get_mut(&action).unwrap();
         if binding.key != parsed[&action] {
-            if let Some(BindingKey::Chord(shortcut)) = binding.key {
+            if !PlatformShortcuts::uses_portal()
+                && let Some(BindingKey::Chord(shortcut)) = binding.key
+            {
                 app.global_shortcut()
                     .unregister(shortcut)
                     .map_err(|e| e.to_string())?;
@@ -422,12 +572,18 @@ pub fn restore(app: &AppHandle, config: ShortcutConfig) -> Result<ShortcutConfig
         binding.status.requested = config.get(action).trim().into();
     }
     for action in ACTIONS {
-        if supported(action) {
+        if supported(action)
+            || action == ShortcutAction::DoubleCopy && PlatformGestures::discovers_availability()
+        {
             let _ = apply_locked(app, &mut state, action, config.get(action));
         }
     }
+    let ready = state.ready;
     drop(state);
     publish_status(app);
+    if PlatformShortcuts::uses_portal() && ready {
+        bind_portal(app);
+    }
     Ok(config)
 }
 
@@ -446,10 +602,17 @@ pub fn set_ink_translate_key(key: &str) {
 pub fn register(app: &AppHandle) {
     let _ = restore(app, ShortcutConfig::default());
 }
+pub fn shutdown(app: &AppHandle) {
+    let bindings = app.state::<ShortcutBindings>();
+    bindings.portal_generation.fetch_add(1, Ordering::AcqRel);
+    bindings.portal.shutdown();
+}
 pub fn status(app: &AppHandle) -> ShortcutReport {
     let bindings = app.state::<ShortcutBindings>();
     let state = bindings.state.lock().unwrap();
     ShortcutReport {
+        portal_managed: PlatformShortcuts::uses_portal(),
+        keyboard_gestures: capabilities().keyboard_gestures,
         revision: state.revision,
         ready: state.ready,
         shortcuts: ACTIONS
@@ -462,6 +625,31 @@ pub fn status(app: &AppHandle) -> ShortcutReport {
 fn publish_status(app: &AppHandle) {
     let _ = app.emit(STATUS_EVENT, status(app));
 }
+pub fn gesture_availability_changed(app: &AppHandle) {
+    let bindings = app.state::<ShortcutBindings>();
+    let rebind = {
+        let mut state = bindings.state.lock().unwrap();
+        let action = ShortcutAction::ReplaceSelection;
+        let previous = state.bindings[&action].key;
+        let value = state.bindings[&action].status.requested.clone();
+        if supported(action) {
+            if previous.is_none() && !value.is_empty() {
+                let _ = apply_locked(app, &mut state, action, &value);
+            }
+        } else if previous.is_some() {
+            let binding = state.bindings.get_mut(&action).unwrap();
+            binding.key = None;
+            binding.status.active = None;
+            binding.status.pending = false;
+        }
+        state.revision += 1;
+        state.ready && state.bindings[&action].key != previous
+    };
+    publish_status(app);
+    if rebind {
+        bind_portal(app);
+    }
+}
 pub fn finish_startup_checks(app: &AppHandle) {
     let bindings = app.state::<ShortcutBindings>();
     let mut state = bindings.state.lock().unwrap();
@@ -472,6 +660,9 @@ pub fn finish_startup_checks(app: &AppHandle) {
     state.revision += 1;
     drop(state);
     let report = status(app);
+    if PlatformShortcuts::uses_portal() {
+        bind_portal(app);
+    }
     let failed = report
         .shortcuts
         .iter()
@@ -483,7 +674,7 @@ pub fn finish_startup_checks(app: &AppHandle) {
 }
 pub fn retry(app: &AppHandle) -> ShortcutReport {
     let ocr = app.state::<OcrService>();
-    if CAPABILITIES.keyboard_gestures && !ocr.observer_status().0 {
+    if capabilities().keyboard_gestures && !ocr.observer_status().0 {
         ocr.install_observer(app);
     }
     let bindings = app.state::<ShortcutBindings>();
@@ -496,6 +687,9 @@ pub fn retry(app: &AppHandle) -> ShortcutReport {
     }
     drop(state);
     publish_status(app);
+    if PlatformShortcuts::uses_portal() {
+        bind_portal(app);
+    }
     status(app)
 }
 
@@ -571,7 +765,7 @@ pub fn on_input_translate(app: &AppHandle) {
         crate::core::shell::present(app, false, |window| {
             let _ = window.unminimize();
             let _ = window.show();
-            let _ = window.set_focus();
+            PlatformWindow::force_show_window(window);
         });
         let _ = app.emit_to("shell", "transportal://focus-input", ());
     }
@@ -605,7 +799,7 @@ fn resolve_replace_translation_config(
 }
 
 pub async fn on_replace_selection(app: &AppHandle) {
-    if is_recording() {
+    if is_recording() || !supported(ShortcutAction::ReplaceSelection) {
         return;
     }
     app.state::<crate::core::ocr::monitor::MonitorService>()
@@ -615,7 +809,7 @@ pub async fn on_replace_selection(app: &AppHandle) {
     let outcome = tauri::async_runtime::spawn_blocking(move || {
         app_clone
             .state::<crate::core::selection::SelectionService>()
-            .capture(&app_clone)
+            .capture_for_replacement(&app_clone)
     })
     .await
     .unwrap_or_else(|_| crate::core::selection::CaptureOutcome {
@@ -630,7 +824,10 @@ pub async fn on_replace_selection(app: &AppHandle) {
         let _ = app.emit_to(
             "shell",
             "transportal://notice",
-            "未选中任何文字或目标窗口不支持原地替换。",
+            outcome
+                .error
+                .as_deref()
+                .unwrap_or("未选中任何文字或目标窗口不支持原地替换。"),
         );
         return;
     }
@@ -651,7 +848,7 @@ pub async fn on_replace_selection(app: &AppHandle) {
     let result = match provider.translate(&query).await {
         Ok(result) => Ok(result),
         Err(err) => {
-            if provider_name != "bing_free" {
+            if provider_name != "bing_free" && provider.allows_automatic_fallback() {
                 eprintln!(
                     "[replace_selection] provider {provider_name} failed: {err}; retrying with bing_free"
                 );
@@ -734,11 +931,49 @@ pub fn on_hotkey(app: &AppHandle) {
     app.state::<crate::core::ocr::monitor::MonitorService>()
         .stop(app, true);
     app.state::<OcrService>().cancel(app);
+    let requires_focus = PlatformSelection::default().requires_focus();
+    if requires_focus {
+        if let Some(outcome) = app
+            .state::<crate::core::selection::SelectionService>()
+            .capture_before_activation()
+        {
+            let _ = app.emit_to("shell", SELECTION_EVENT, &outcome);
+            show_shell_with_anchor(app, outcome.bounds.as_ref(), true);
+            return;
+        }
+        // Wayland selection offers require input focus. Show/activate on the UI
+        // thread using the compositor token before asking GTK for the offer.
+        // No native global-window handles or synthetic Ctrl+C are involved.
+        let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+        let handle = app.clone();
+        if app
+            .run_on_main_thread(move || {
+                if handle
+                    .get_webview_window("settings")
+                    .is_some_and(|window| PlatformWindow::is_window_visible(&window))
+                {
+                    let _ = sender.send(false);
+                    return;
+                }
+                crate::core::shell::present(&handle, false, |window| {
+                    PlatformWindow::force_show_window(window);
+                });
+                let _ = sender.send(true);
+            })
+            .is_err()
+            || !matches!(
+                receiver.recv_timeout(std::time::Duration::from_secs(2)),
+                Ok(true)
+            )
+        {
+            return;
+        }
+    }
     let outcome = app
         .state::<crate::core::selection::SelectionService>()
         .capture(app);
     let _ = app.emit_to("shell", SELECTION_EVENT, &outcome);
-    show_shell_with_anchor(app, outcome.bounds.as_ref(), true);
+    show_shell_with_anchor(app, outcome.bounds.as_ref(), !requires_focus);
 }
 pub fn on_double_copy(app: &AppHandle, revision: u32, window: usize) {
     if is_recording() {
@@ -762,6 +997,23 @@ pub fn on_double_copy(app: &AppHandle, revision: u32, window: usize) {
         app.state::<crate::core::ocr::monitor::MonitorService>()
             .stop(app, true);
         app.state::<OcrService>().cancel(app);
+        let _ = app.emit_to("shell", SELECTION_EVENT, &outcome);
+        show_shell_with_anchor(app, outcome.bounds.as_ref(), true);
+    }
+}
+
+pub fn on_compositor_gesture(app: &AppHandle, double_copy: bool, process: u32, epoch: u64) {
+    let service = app.state::<crate::core::selection::SelectionService>();
+    if is_recording()
+        || double_copy && !service.double_copy_enabled()
+        || !PlatformGestures::matches_focus(process, epoch)
+    {
+        return;
+    }
+    if let Some(outcome) = service.compositor_selection(process)
+        && !is_recording()
+        && PlatformGestures::matches_focus(process, epoch)
+    {
         let _ = app.emit_to("shell", SELECTION_EVENT, &outcome);
         show_shell_with_anchor(app, outcome.bounds.as_ref(), true);
     }
@@ -806,7 +1058,7 @@ pub fn show_shell_with_anchor(
                     let _ = window.unminimize();
                     let _ = window.show();
                     if !no_activate {
-                        let _ = window.set_focus();
+                        PlatformWindow::force_show_window(window);
                     }
                 }
             });

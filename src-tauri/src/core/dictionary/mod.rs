@@ -1224,6 +1224,23 @@ mod tests {
     }
 
     #[test]
+    fn redb5_opens_existing_v4_dictionary_when_fixture_is_provided() {
+        let Some(fixture) = std::env::var_os("TRANSPORTAL_REDB4_FIXTURE") else {
+            return;
+        };
+        let dir = TestDirectory::new();
+        let path = dir.0.join("legacy-v4-dict.redb");
+        std::fs::copy(&fixture, &path).unwrap();
+        let store = DictStore::open(&path).unwrap();
+        let entry = store
+            .lookup("legacy")
+            .unwrap()
+            .expect("legacy word retained");
+        assert_eq!(entry.definitions[0].meanings, ["保留旧词典数据"]);
+        assert!(!path.with_extension("redb.old").exists());
+    }
+
+    #[test]
     #[ignore]
     fn test_benchmark_compaction() {
         let real_db = std::path::Path::new(

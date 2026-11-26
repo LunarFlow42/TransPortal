@@ -4,10 +4,9 @@
 use crate::core::shell::SHELL_LABEL;
 use crate::platform::clipboard::ClipboardOps;
 use crate::platform::window::WindowOps;
-use crate::platform::{CAPABILITIES, PlatformClipboard, PlatformWindow};
+use crate::platform::{PlatformClipboard, PlatformWindow, capabilities};
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{AppHandle, Emitter, Manager};
-use tauri_plugin_clipboard_manager::ClipboardExt;
 
 pub const CLIPBOARD_TEXT_EVENT: &str = "transportal://clipboard-text";
 
@@ -40,11 +39,11 @@ pub fn start(app: &AppHandle) {
                 if !ENABLED.load(Ordering::Relaxed) || own_window_in_front(&app) {
                     return;
                 }
-                if let Ok(text) = app.clipboard().read_text() {
+                if let Ok(text) = PlatformClipboard::default().read_text(&app) {
                     let trimmed = text.trim();
                     if !trimmed.is_empty()
                         && trimmed.chars().count() <= MAX_CHARS
-                        && (CAPABILITIES.clipboard_events || trimmed != last_text)
+                        && (capabilities().clipboard_events || trimmed != last_text)
                     {
                         last_text = trimmed.to_string();
                         let _ = app.emit_to(SHELL_LABEL, CLIPBOARD_TEXT_EVENT, trimmed);

@@ -18,7 +18,6 @@ use std::sync::{
 };
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager};
-use tauri_plugin_clipboard_manager::ClipboardExt;
 
 /// Outcome of a capture attempt, serialized straight to the frontend.
 #[derive(Debug, Clone, Serialize)]
@@ -77,8 +76,9 @@ fn normalize(text: &str) -> String {
 fn read_clipboard_with_retry(app: &AppHandle) -> CaptureOutcome {
     let mut last_error = "clipboard is empty".to_string();
 
-    for _ in 0..8 {
-        match app.clipboard().read_text() {
+    let clipboard = PlatformClipboard::default();
+    for _ in 0..clipboard.read_retry_count() {
+        match clipboard.read_text(app) {
             Ok(text) if !text.trim().is_empty() => {
                 return CaptureOutcome {
                     text: normalize(&text),
@@ -113,7 +113,7 @@ fn capture_selected_text(platform: &impl SelectionOps, app: &AppHandle) -> Captu
     let preferred_error = match platform.read_selection() {
         Ok(content) if !content.text.trim().is_empty() => {
             eprintln!(
-                "[capture] UI Automation returned {} chars",
+                "[capture] native selection returned {} bytes",
                 content.text.trim().len()
             );
             return CaptureOutcome {
@@ -124,11 +124,11 @@ fn capture_selected_text(platform: &impl SelectionOps, app: &AppHandle) -> Captu
                 bounds: content.bounds,
             };
         }
-        Ok(_) => Some("UI Automation returned an empty selection".to_string()),
+        Ok(_) => Some("Native reader returned an empty selection".to_string()),
         Err(err) => Some(err),
     };
     eprintln!(
-        "[capture] UI Automation unavailable: {}",
+        "[capture] native selection unavailable: {}",
         preferred_error.as_deref().unwrap_or("empty selection")
     );
 
@@ -171,6 +171,15 @@ fn capture_selected_text(platform: &impl SelectionOps, app: &AppHandle) -> Captu
 }
 
 impl SelectionService {
+    pub fn authorize_input(&self) -> Result<(), String> {
+        self.platform.authorize_input()
+    }
+    pub fn revoke_input(&self) {
+        self.platform.revoke_input();
+    }
+    pub fn input_authorized(&self) -> bool {
+        self.platform.input_authorized()
+    }
     pub fn double_copy_enabled(&self) -> bool {
         self.double_copy.load(Ordering::Relaxed)
     }
@@ -209,6 +218,61 @@ impl SelectionService {
         self.record(outcome, target)
     }
 
+    pub fn capture_before_activation(&self) -> Option<CaptureOutcome> {
+        let _operation = self.operation.try_lock().ok()?;
+        let content = self.platform.read_before_activation()?;
+        Some(self.record(
+            CaptureOutcome {
+                text: normalize(&content.text),
+                method: CaptureMethod::AtSpi,
+                error: None,
+                replace_token: None,
+                bounds: content.bounds,
+            },
+            None,
+        ))
+    }
+
+    pub fn compositor_selection(&self, process: u32) -> Option<CaptureOutcome> {
+        let _operation = self.operation.try_lock().ok()?;
+        let content = self.platform.read_compositor_selection(process).ok()?;
+        let text = normalize(&content.text);
+        (!text.is_empty()).then_some(CaptureOutcome {
+            text,
+            method: CaptureMethod::AtSpi,
+            error: None,
+            replace_token: None,
+            bounds: content.bounds,
+        })
+    }
+
+    pub fn capture_for_replacement(&self, app: &AppHandle) -> CaptureOutcome {
+        let Ok(_operation) = self.operation.try_lock() else {
+            return failure("正在处理上一次取词或替换，请稍后重试。");
+        };
+        let Some(armed) = self.platform.arm_replacement() else {
+            let target = self.platform.foreground();
+            return self.record(capture_selected_text(&self.platform, app), target);
+        };
+        let mut state = self.state.lock().unwrap();
+        state.captured = None;
+        let (content, target) = match armed {
+            Ok(value) => value,
+            Err(error) => return failure(error),
+        };
+        let text = normalize(&content.text);
+        state.next += 1;
+        let token = state.next;
+        state.captured = Some((token, target, text.clone()));
+        CaptureOutcome {
+            text,
+            method: CaptureMethod::AtSpi,
+            error: None,
+            replace_token: Some(token),
+            bounds: content.bounds,
+        }
+    }
+
     pub fn double_copy(
         &self,
         app: &AppHandle,
@@ -240,7 +304,7 @@ impl SelectionService {
             let revision = self.clipboard.revision();
             if revision != 0
                 && revision != baseline
-                && let Ok(text) = app.clipboard().read_text()
+                && let Ok(text) = self.clipboard.read_text(app)
                 && self.clipboard.revision() == revision
                 && !text.trim().is_empty()
             {
@@ -261,7 +325,7 @@ impl SelectionService {
         // Fallback: If sequence number didn't change (e.g. host app debounced the 2nd
         // copy or baseline was sampled after the sequence incremented),
         // read whatever is currently on the clipboard.
-        if let Ok(text) = app.clipboard().read_text()
+        if let Ok(text) = self.clipboard.read_text(app)
             && !text.trim().is_empty()
         {
             return Some(self.record(

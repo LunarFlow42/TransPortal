@@ -73,6 +73,16 @@ impl IntegrityReport {
 
 pub struct IntegrityState(pub Mutex<IntegrityReport>);
 
+pub(crate) fn hex_lower(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for &byte in bytes {
+        out.push(HEX[(byte >> 4) as usize] as char);
+        out.push(HEX[(byte & 0x0f) as usize] as char);
+    }
+    out
+}
+
 fn sha256_file(path: &Path) -> Result<(String, u64), String> {
     let mut file = File::open(path).map_err(|error| error.to_string())?;
     let mut digest = Sha256::new();
@@ -86,7 +96,7 @@ fn sha256_file(path: &Path) -> Result<(String, u64), String> {
         digest.update(&buffer[..count]);
         bytes += count as u64;
     }
-    Ok((format!("{:x}", digest.finalize()), bytes))
+    Ok((hex_lower(&digest.finalize()), bytes))
 }
 
 /// Hash every executable byte, including Tauri's bundle tag and any signature.

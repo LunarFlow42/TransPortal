@@ -190,29 +190,56 @@ fn split_long_phonemes(phonemes: &str, tokenizer: &Tokenizer) -> Vec<(Vec<i64>, 
     result
 }
 
-/// Detects whether misaki-rs fell back to spelling out a word letter-by-letter.
-///
-/// When an unknown word is not in the internal dictionary, misaki-rs outputs individual
-/// letter phonemes separated by double spaces (`"  "`).
-fn is_spelled_out(word: &str, phonemes: &str) -> bool {
+/// Detects whether a token is unresolved by `misaki-rs` (either `None`/unknown marker
+/// in 0.11+ without espeak, or legacy letter-by-letter spelling separated by `"  "`).
+fn is_unresolved_word(word: &str, phonemes: Option<&str>, unk: &str) -> bool {
     let char_count = word.chars().filter(|c| c.is_alphabetic()).count();
     if char_count <= 1 {
         return false;
     }
-    let parts: Vec<&str> = phonemes
-        .split("  ")
-        .filter(|s| !s.trim().is_empty())
-        .collect();
-    parts.len() == char_count
+    match phonemes {
+        None => true,
+        Some(p) => {
+            let trimmed = p.trim();
+            if trimmed.is_empty() || (!unk.is_empty() && trimmed.contains(unk)) {
+                return true;
+            }
+            let parts: Vec<&str> = trimmed
+                .split("  ")
+                .filter(|s| !s.trim().is_empty())
+                .collect();
+            parts.len() == char_count
+        }
+    }
 }
 
-/// Attempts to resolve a spelled-out token (like "wargames" or "frontend") by:
+/// Checks whether a candidate G2P result for a word/fragment resolved cleanly.
+fn is_resolved_phoneme(
+    word: &str,
+    phonemes: &str,
+    tokens: &[misaki_rs::MToken],
+    unk: &str,
+) -> bool {
+    let trimmed = phonemes.trim();
+    if trimmed.is_empty() || (!unk.is_empty() && trimmed.contains(unk)) {
+        return false;
+    }
+    if tokens
+        .iter()
+        .any(|t| t.text.chars().any(|c| c.is_alphabetic()) && t.phonemes.is_none())
+    {
+        return false;
+    }
+    !is_unresolved_word(word, Some(trimmed), unk)
+}
+
+/// Attempts to resolve an unresolved OOV token (like "wargames" or "frontend") by:
 /// 1. CamelCase splitting ("WarGames" -> "War Games")
 /// 2. Closed compound word splitting ("wargames" -> "war" + "games")
-fn resolve_token_phonemes(g2p: &G2P, text: &str, current_phonemes: &str) -> String {
+fn resolve_token_phonemes(g2p: &G2P, text: &str, current_phonemes: Option<&str>) -> String {
     let trimmed = text.trim();
-    if !is_spelled_out(trimmed, current_phonemes) {
-        return current_phonemes.to_string();
+    if !is_unresolved_word(trimmed, current_phonemes, &g2p.unk) {
+        return current_phonemes.unwrap_or(text).to_string();
     }
 
     // 1. Try CamelCase split first (e.g. WarGames -> War Games, TypeScript -> Type Script)
@@ -225,58 +252,63 @@ fn resolve_token_phonemes(g2p: &G2P, text: &str, current_phonemes: &str) -> Stri
         camel_split.push(c);
     }
     if camel_split != trimmed
-        && let Ok((res, _)) = g2p.g2p(&camel_split)
+        && let Ok((res, tokens)) = g2p.g2p(&camel_split)
     {
         let res = res.trim();
-        if !is_spelled_out(&camel_split, res) {
+        if is_resolved_phoneme(&camel_split, res, &tokens, &g2p.unk) {
             return res.to_string();
         }
     }
 
     // 2. Try compound word split (e.g. wargames -> war + games, frontend -> front + end)
     let lower = trimmed.to_lowercase();
-    let len = lower.len();
-    if len >= 4 {
-        for split_idx in 2..=(len - 2) {
+    let byte_indices: Vec<usize> = lower.char_indices().map(|(idx, _)| idx).collect();
+    let char_len = byte_indices.len();
+    if char_len >= 4 {
+        for &split_idx in &byte_indices[2..=(char_len - 2)] {
             let left = &lower[..split_idx];
             let right = &lower[split_idx..];
-            if let (Ok((res_left, _)), Ok((res_right, _))) = (g2p.g2p(left), g2p.g2p(right)) {
+            if let (Ok((res_left, left_tokens)), Ok((res_right, right_tokens))) =
+                (g2p.g2p(left), g2p.g2p(right))
+            {
                 let res_left = res_left.trim();
                 let res_right = res_right.trim();
-                if !is_spelled_out(left, res_left) && !is_spelled_out(right, res_right) {
+                if is_resolved_phoneme(left, res_left, &left_tokens, &g2p.unk)
+                    && is_resolved_phoneme(right, res_right, &right_tokens, &g2p.unk)
+                {
                     return format!("{res_left} {res_right}");
                 }
             }
         }
     }
 
-    // If it's a real acronym (like FBI, NASA, CPU) or cannot be split, keep the original spelled-out phonemes
-    current_phonemes.to_string()
+    // Keep original phonemes if present, or fall back to G2P's unknown marker.
+    current_phonemes
+        .map(str::to_string)
+        .unwrap_or_else(|| g2p.unk.clone())
 }
 
-/// Reconstructs sentence phonemes, replacing any spelled-out compound words with natural pronunciations.
+/// Reconstructs sentence phonemes, replacing any unresolved compound words with natural pronunciations.
 fn resolve_sentence_phonemes(
     g2p: &G2P,
     full_phonemes: &str,
     tokens: &[misaki_rs::MToken],
 ) -> String {
-    let has_spelled_out = tokens.iter().any(|t| {
-        t.phonemes
-            .as_deref()
-            .map(|p| is_spelled_out(&t.text, p))
-            .unwrap_or(false)
-    });
+    let has_unresolved = tokens
+        .iter()
+        .any(|t| is_unresolved_word(&t.text, t.phonemes.as_deref(), &g2p.unk));
 
-    if !has_spelled_out {
+    if !has_unresolved {
         return full_phonemes.to_string();
     }
 
     tokens
         .iter()
         .map(|t| {
-            let p = match &t.phonemes {
-                Some(p) => resolve_token_phonemes(g2p, &t.text, p),
-                None => t.text.clone(),
+            let p = if is_unresolved_word(&t.text, t.phonemes.as_deref(), &g2p.unk) {
+                resolve_token_phonemes(g2p, &t.text, t.phonemes.as_deref())
+            } else {
+                t.phonemes.clone().unwrap_or_else(|| t.text.clone())
             };
             format!("{}{}", p, t.whitespace)
         })
@@ -330,9 +362,13 @@ mod tests {
         let (full_phonemes, tokens) = g2p.g2p(sentence).unwrap();
 
         let resolved = resolve_sentence_phonemes(&g2p, &full_phonemes, &tokens);
-        assert!(resolved.contains("wˈɔː"));
-        assert!(resolved.contains("ɡˈe"));
-        assert!(resolved.contains("fɹˈʌnt"));
-        assert!(resolved.contains("ˈɛnd"));
+        assert!(
+            !resolved.contains(&g2p.unk),
+            "unresolved OOV marker remained in: {resolved}"
+        );
+        assert!(resolved.contains("wˈɔɹ"), "got {resolved}");
+        assert!(resolved.contains("ɡˈAmz"), "got {resolved}");
+        assert!(resolved.contains("fɹˈʌnt"), "got {resolved}");
+        assert!(resolved.contains("ˈɛnd"), "got {resolved}");
     }
 }

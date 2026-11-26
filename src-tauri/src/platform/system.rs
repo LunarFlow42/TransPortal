@@ -6,6 +6,8 @@ use serde::Serialize;
 /// Current memory usage snapshot.
 #[derive(Debug, Clone, Serialize)]
 pub struct MemoryReport {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub measurement: Option<&'static str>,
     /// Total physical RAM across the process tree in bytes.
     pub total_working_set_bytes: u64,
     /// Total private committed bytes across the process tree.

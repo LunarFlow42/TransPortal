@@ -13,6 +13,8 @@ pub enum OcrError {
     SessionNotInitialized,
     #[error("模型元数据缺失：{0}")]
     MetadataNotFound(String),
+    #[error("模型或字典不兼容：{0}")]
+    InvalidModel(String),
     #[error("模型输出为空")]
     EmptyOutput,
     #[error("图像数据无效：{0}")]

@@ -66,6 +66,7 @@ export const ShellView: React.FC = () => {
       { value: 'google_free' as ProviderType, label: t('shell.providerGoogle') },
       { value: 'youdao_free' as ProviderType, label: t('shell.providerYoudao') },
       { value: 'tencent_free' as ProviderType, label: t('shell.providerTencent') },
+      { value: 'bilibili_index' as ProviderType, label: t('shell.providerBilibili') },
       { value: 'openai' as ProviderType, label: t('shell.providerOpenai') },
     ],
     [t],
@@ -624,6 +625,7 @@ export const ShellView: React.FC = () => {
 
           {ocrStatus && (
             <div className="mt-3.5 flex flex-col gap-2 border-t border-[var(--stroke)] pt-3">
+              {ocrStatus.compositor_selection && <p className="text-[11px] text-[var(--muted)]">{t('shell.portalCaptureHint')}</p>}
               {ocrStatus.supported && (
                 <div className="flex flex-wrap items-center justify-center gap-1.5">
                   <span className="mr-0.5 text-[10px] font-semibold text-[var(--faint)]">{t('shell.ocrGroup')}</span>
@@ -665,7 +667,7 @@ export const ShellView: React.FC = () => {
                 >
                   <ImagePlus className="h-3.5 w-3.5" />{t('shell.openImage')}
                 </Button>
-                {ocrStatus.supported && (
+                {ocrStatus.supported && ocrStatus.monitoring_supported !== false && (
                   <>
                     <Button
                       size="sm"

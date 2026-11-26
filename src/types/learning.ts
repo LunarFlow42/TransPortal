@@ -1,10 +1,11 @@
 export type DefinitionKind = 'dictionary' | 'translation';
-export type ContextSource = 'lookup' | 'dictionary' | 'generated';
+export type ContextSource = 'lookup' | 'dictionary' | 'generated' | 'video';
 
 export interface LearningContext {
   text: string;
   translation: string | null;
   source: ContextSource;
+  video?: { url: string; timestamp_ms: number };
 }
 
 /** An explicit snapshot of one selected usage, not a successful review. */

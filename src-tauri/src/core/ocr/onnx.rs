@@ -1,4 +1,4 @@
-//! RapidOCR's PaddleOCR FP32 models executed by ONNX Runtime's CPU provider.
+//! Official PP-OCRv6 small FP32 models on ONNX Runtime's CPU provider.
 
 use super::assets::{OnnxAssets, manifest};
 use super::picture::OcrBlock;
@@ -6,12 +6,14 @@ use super::ppocr::{PpOcrEngine as OcrLite, TextBlock};
 use super::{OcrEngine, OcrEngineInfo, OcrImage, OcrLanguage, RecognizedText};
 use ort::environment::Environment;
 use ort::ep::CPU;
-use ort::session::builder::{GraphOptimizationLevel, SessionBuilder};
+use ort::session::builder::{AutoDevicePolicy, GraphOptimizationLevel, SessionBuilder};
 use std::ffi::CStr;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 pub const ENGINE_ID: &str = "onnx";
+// This persisted tag identifies the fixed model, not a language restriction.
+// Preserve it across the bilingual v5 -> multilingual v6 upgrade.
 pub const MODEL_LANGUAGE: &str = "zh-Hans-en";
 
 pub struct OnnxOcrEngine {
@@ -42,8 +44,17 @@ impl OnnxOcrEngine {
             })
             .collect::<Result<_, _>>()?;
         let mut ocr = OcrLite::new();
-        ocr.init_models_custom(&environment, &paths[0], &paths[1], &paths[2], cpu_session)
-            .map_err(|e| format!("ONNX 模型初始化失败：{e}"))?;
+        let dictionary_path = directory.join(&manifest().character_dict.name);
+        let dictionary_path = dictionary_path
+            .to_str()
+            .ok_or("OCR 字典路径无法编码为 Unicode")?;
+        ocr.init_models_v6(
+            &environment,
+            [&paths[0], &paths[1], &paths[2]],
+            dictionary_path,
+            cpu_session,
+        )
+        .map_err(|e| format!("ONNX 模型初始化失败：{e}"))?;
         Ok(ocr)
     }
 }
@@ -57,10 +68,14 @@ impl OcrEngine for OnnxOcrEngine {
         let error = self.assets.resolve().err();
         Ok(OcrEngineInfo {
             id: ENGINE_ID.into(),
-            label: "ONNX · PP-OCRv5 FP32".into(),
+            label: format!(
+                "ONNX · {} {}",
+                manifest().model_family,
+                manifest().precision
+            ),
             languages: vec![OcrLanguage {
                 tag: MODEL_LANGUAGE.into(),
-                label: "简体中文 + English".into(),
+                label: "多语言 · 简体/繁體中文 · English · 日本語 · Latin（50 种）".into(),
             }],
             available: error.is_none(),
             error,
@@ -91,7 +106,7 @@ impl OcrEngine for OnnxOcrEngine {
     ) -> Result<RecognizedText, String> {
         image.validate()?;
         if language.is_some_and(|language| language != MODEL_LANGUAGE) {
-            return Err("当前 ONNX 模型支持简体中文和英文，请使用中英混合识别。".into());
+            return Err("当前 ONNX 模型自动识别多语言，请使用固定的多语言模型。".into());
         }
         self.prepare()?;
         let rgb = screen_rgb(image)?;
@@ -108,7 +123,7 @@ impl OcrEngine for OnnxOcrEngine {
         let max_dimension = image.width.max(image.height);
         let max_side_len = max_dimension.clamp(320, 1536);
         let result = ocr
-            .detect_angle_rollback(&rgb, 16, max_side_len, 0.5, 0.3, 1.6, false, false, 0.75)
+            .detect_angle_rollback(&rgb, 16, max_side_len, 0.45, 0.2, 1.4, true, false, 0.75)
             .map_err(|e| format!("ONNX 识别失败：{e}"))?;
         let (text, blocks) = ordered_result(result.text_blocks);
         Ok(RecognizedText {
@@ -161,6 +176,11 @@ fn cpu_session(builder: SessionBuilder) -> ort::Result<SessionBuilder> {
         .map(|n| (n.get() / 2).clamp(2, 8))
         .unwrap_or(4);
     Ok(builder
+        // ort rc.15 defaults SessionBuilder to MaxEfficiency via Auto EP
+        // (SessionOptionsSetEpSelectionPolicy). ONNX Runtime 1.22.0 has no
+        // OrtEpDevice registered in plain CPU builds and aborts/errors unless
+        // the policy is reset to Default.
+        .with_auto_device(AutoDevicePolicy::Default)?
         .with_execution_providers([CPU::default().with_arena_allocator(false).build()])?
         // rc.10's Level3 mapped to ORT_ENABLE_ALL; rc.15 names it All.
         .with_optimization_level(GraphOptimizationLevel::All)?

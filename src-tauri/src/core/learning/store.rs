@@ -1,8 +1,10 @@
 //! A separate, versioned redb database. Never resets or renames user data on error.
 
-use super::model::{EnrollResult, LearningContext, LearningDraft, LearningEntry, LearningPage};
+use super::model::{
+    EnrollResult, ImportResult, LearningContext, LearningDraft, LearningEntry, LearningPage,
+};
 use super::{LearningError, LearningResult};
-use redb::{Database, ReadableDatabase, ReadableTable, TableDefinition};
+use redb::{Database, ReadableDatabase, ReadableTable, TableDefinition, WriteTransaction};
 use std::path::Path;
 
 pub(super) const SCHEMA_VERSION: u64 = 1;
@@ -66,6 +68,10 @@ fn normalize(mut draft: LearningDraft) -> LearningResult<LearningDraft> {
                 text: text(&context.text, "example", 2_000, true)?,
                 translation: optional_text(context.translation, "example translation", 2_000)?,
                 source: context.source,
+                video: context
+                    .video
+                    .map(super::subloom::validate_video)
+                    .transpose()?,
             })
         })
         .transpose()?;
@@ -134,8 +140,39 @@ impl LearningStore {
 
     pub fn enroll(&self, draft: LearningDraft, now: u64) -> LearningResult<EnrollResult> {
         let draft = normalize(draft)?;
-        let key = dedup_key(&draft)?;
         let write = self.db.begin_write().map_err(storage_error)?;
+        let result = Self::write_draft(&write, draft, now)?;
+        write.commit().map_err(storage_error)?;
+        Ok(result)
+    }
+
+    pub fn import(&self, drafts: Vec<LearningDraft>, now: u64) -> LearningResult<ImportResult> {
+        let drafts = drafts
+            .into_iter()
+            .map(normalize)
+            .collect::<LearningResult<Vec<_>>>()?;
+        let write = self.db.begin_write().map_err(storage_error)?;
+        let mut result = ImportResult {
+            created: 0,
+            duplicates: 0,
+        };
+        for draft in drafts {
+            if Self::write_draft(&write, draft, now)?.created {
+                result.created += 1;
+            } else {
+                result.duplicates += 1;
+            }
+        }
+        write.commit().map_err(storage_error)?;
+        Ok(result)
+    }
+
+    fn write_draft(
+        write: &WriteTransaction,
+        draft: LearningDraft,
+        now: u64,
+    ) -> LearningResult<EnrollResult> {
+        let key = dedup_key(&draft)?;
         let result = {
             let mut entries = write.open_table(ENTRIES).map_err(storage_error)?;
             let mut dedup = write.open_table(DEDUP).map_err(storage_error)?;
@@ -198,7 +235,6 @@ impl LearningStore {
                 }
             }
         };
-        write.commit().map_err(storage_error)?;
         Ok(result)
     }
 
@@ -297,6 +333,7 @@ mod tests {
                 text: "Caching can mitigate the impact of network latency.".into(),
                 translation: Some("缓存可以减轻网络延迟的影响。".into()),
                 source: ContextSource::Dictionary,
+                video: None,
             }),
         }
     }
@@ -440,5 +477,21 @@ mod tests {
             decode(1, table.get(1).unwrap().unwrap().value()).unwrap(),
             saved
         );
+    }
+
+    #[test]
+    fn redb5_opens_existing_v4_database_when_fixture_is_provided() {
+        let Some(fixture) = std::env::var_os("TRANSPORTAL_REDB4_FIXTURE") else {
+            return;
+        };
+        let dir = TestDirectory::new();
+        let path = dir.path.join("legacy-v4.redb");
+        std::fs::copy(&fixture, &path).unwrap();
+        let store = LearningStore::open(&path).unwrap();
+        let entries = store.snapshot().unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].id, "7");
+        assert_eq!(entries[0].usage.lemma, "legacy");
+        assert_eq!(entries[0].usage.meaning, "保留学习记录");
     }
 }

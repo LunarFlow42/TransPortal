@@ -70,6 +70,30 @@ impl PpOcrEngine {
         Ok(())
     }
 
+    /// Official v6 exports use BGR input and ship their CTC dictionary separately.
+    /// Keep the older initializers intact for historical v4/v5 benchmarks.
+    pub fn init_models_v6(
+        &mut self,
+        environment: &Environment,
+        model_paths: [&str; 3],
+        character_dict_path: &str,
+        builder_fn: fn(SessionBuilder) -> ort::Result<SessionBuilder>,
+    ) -> Result<(), OcrError> {
+        let [det_path, cls_path, rec_path] = model_paths;
+        self.db_net
+            .init_model(environment, det_path, 0, Some(builder_fn))?;
+        self.db_net.use_ppocr_v6();
+        self.angle_net
+            .init_model(environment, cls_path, 0, Some(builder_fn))?;
+        self.crnn_net.init_model_with_dictionary(
+            environment,
+            rec_path,
+            character_dict_path,
+            builder_fn,
+        )?;
+        Ok(())
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn detect_angle_rollback(
         &mut self,
@@ -252,6 +276,18 @@ mod tests {
         assert_eq!(tensor[[0, 0, 0, 0]], 0.0);
         assert_eq!(tensor[[0, 1, 0, 0]], 0.0);
         assert_eq!(tensor[[0, 2, 0, 0]], 0.0);
+    }
+
+    #[test]
+    fn official_bgr_models_reverse_rgb_pixels_before_channel_normalization() {
+        let img = image::RgbImage::from_pixel(1, 1, image::Rgb([10, 20, 30]));
+        let tensor = utils::OcrUtils::subtract_mean_normalize_bgr(
+            &img,
+            &[30.0, 20.0, 10.0],
+            &[1.0, 1.0, 1.0],
+        );
+        assert_eq!(tensor.shape(), [1, 3, 1, 1]);
+        assert!(tensor.iter().all(|&value| value == 0.0));
     }
 
     #[test]

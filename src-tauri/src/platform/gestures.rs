@@ -17,6 +17,13 @@ pub enum GestureEvent {
     InkTranslate {
         window: usize,
     },
+    /// A compositor recognized the complete gesture; no clipboard fallback.
+    CompositorSelection {
+        double_copy: bool,
+        process: u32,
+        epoch: u64,
+    },
+    AvailabilityChanged,
     Cancel,
 }
 
@@ -55,6 +62,14 @@ impl InkKey {
 }
 
 pub trait GestureSource: Send + Sync {
+    fn discovers_availability() -> bool {
+        false
+    }
+    fn set_double_copy(_enabled: bool) {}
+    fn suspend(_suspended: bool) {}
+    fn matches_focus(_process: u32, _epoch: u64) -> bool {
+        false
+    }
     /// Select the ink translation key (`None` disables it). Applies to the
     /// running observer as well as later ones.
     fn set_ink_key(key: Option<InkKey>);

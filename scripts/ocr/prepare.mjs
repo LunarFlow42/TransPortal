@@ -47,7 +47,7 @@ for (const platform of platforms) {
   const sourcePack = join(source, manifest.id, platform);
   const destinationPack = join(bundle, manifest.id, platform);
   await mkdir(join(destinationPack, 'licenses'), { recursive: true });
-  const files = [...manifest.models, ...runtime.files].map(file => file.name);
+  const files = [...manifest.models, manifest.character_dict, ...runtime.files].map(file => file.name);
   for (const file of [...files, 'NOTICE.md', 'manifest.json']) {
     await copyFile(join(sourcePack, file), join(destinationPack, file));
   }

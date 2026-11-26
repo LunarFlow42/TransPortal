@@ -98,6 +98,12 @@ impl MonitorService {
     }
 
     pub async fn begin(&self, app: &AppHandle, options: MonitorOptions) -> Result<u64, String> {
+        if !self.desktop.supports_monitoring() {
+            return Err(
+                "当前桌面尚未实现 ScreenCast/PipeWire 持续捕获；请使用授权的一次性截图 OCR。"
+                    .into(),
+            );
+        }
         if !(500..=30_000).contains(&options.interval_ms)
             || options.target_lang.trim().is_empty()
             || options.target_lang.len() > 32

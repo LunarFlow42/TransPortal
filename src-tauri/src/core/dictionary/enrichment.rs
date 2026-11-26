@@ -99,7 +99,7 @@ pub fn verify_base(path: &Path, manifest: &Manifest) -> Result<(), String> {
         }
         digest.update(&buffer[..count]);
     }
-    if format!("{:x}", digest.finalize()) != manifest.base.sha256 {
+    if crate::core::integrity::hex_lower(&digest.finalize()) != manifest.base.sha256 {
         return Err("Dictionary download checksum does not match the pinned manifest".into());
     }
     Ok(())
@@ -107,7 +107,8 @@ pub fn verify_base(path: &Path, manifest: &Manifest) -> Result<(), String> {
 
 fn overrides(manifest: &Manifest) -> Result<HashMap<String, Override>, String> {
     if OVERRIDES.len() != manifest.enrichment.bytes
-        || format!("{:x}", Sha256::digest(OVERRIDES)) != manifest.enrichment.sha256
+        || crate::core::integrity::hex_lower(&Sha256::digest(OVERRIDES))
+            != manifest.enrichment.sha256
     {
         return Err("Bundled dictionary enrichment failed integrity verification".into());
     }
@@ -278,7 +279,7 @@ mod tests {
         let path = dir.0.join("base.csv");
         let mut manifest = manifest().unwrap();
         manifest.base.bytes = 5;
-        manifest.base.sha256 = format!("{:x}", Sha256::digest(b"hello"));
+        manifest.base.sha256 = crate::core::integrity::hex_lower(&Sha256::digest(b"hello"));
         std::fs::write(&path, b"hello").unwrap();
         assert!(verify_base(&path, &manifest).is_ok());
         std::fs::write(&path, b"world").unwrap();

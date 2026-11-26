@@ -20,6 +20,9 @@
     "search": "Search settings..."
   },
   "learning": {
+    "importSubLoom": "Import SubLoom",
+    "importedSubLoom": "Imported {{created}} new usages; {{duplicates}} matched existing usages.",
+    "openVideo": "Open source video ({{time}})",
     "title": "Saved Vocabulary",
     "rememberUsage": "Remember this usage",
     "chooseUsageHint": "Save one selected definition and an existing example. No extra context capture.",
@@ -56,6 +59,7 @@
     "context": {
       "dictionary": "Dictionary example",
       "generated": "AI-generated example",
+      "video": "Video subtitle",
       "lookup": "Existing lookup sentence"
     }
   },
@@ -97,7 +101,6 @@
       "searchEngineAuto": "Auto Smart Routing",
       "searchEngineBing": "Bing",
       "searchEngineGoogle": "Google Search",
-      "searchEngineBaidu": "Baidu Search",
       "searchEngineCustom": "Custom Search URL",
       "searchEngineHint": "Used for text search. Auto selects search engine based on system language.",
       "urlTemplate": "URL Template",
@@ -117,7 +120,8 @@
       "providerYoudao": "Youdao Translate",
       "providerTencent": "Tencent Translator",
       "providerOpenai": "OpenAI Compatible",
-      "freeProvidersHint": "Key-free online channels, ready to use; Bing, Google, Youdao, Tencent all support smart language detection.",
+      "freeProvidersHint": "Bing, Google, Youdao, Tencent, and Bilibili offer key-free online translation.",
+      "bilibiliHint": "Bilibili Index-Translate needs no API key. When selected, text submitted for translation is sent to Bilibili.",
       "targetLanguage": "Target Language",
       "targetLangHint": "Automatically flips source and target language when matching.",
       "openaiConfig": "Custom Model Endpoint",
@@ -151,6 +155,11 @@
       "enrichedInstalled": "Enriched dictionary installed · {{phonetics}} phonetics and {{tags}} tag enhancements"
     },
     "shortcuts": {
+      "awaitingPortal": "Waiting for desktop shortcut permission…",
+      "desktopAuthorized": "Desktop authorized",
+      "waylandHint": "Wayland shortcuts require desktop permission; the system may adjust the actual keys. Clipboard monitoring can only read offers provided by the compositor.",
+      "kwinGesturesReady": "The KWin gesture plugin is connected. Double copy and ink leave the original keys untouched; lookup requires an accessible selection.",
+      "kwinGesturesMissing": "Double copy and ink require the optional TransPortal native KWin gesture plugin.",
       "resetKeybindings": "Reset Shortcuts",
       "resetKeybindingsSuccess": "Default shortcuts restored",
       "recording": "Press shortcut...",
@@ -219,6 +228,10 @@
       "doubleCopyPrompt": "Select text, hold Ctrl, press C twice within 0.5s. Standard copy remains unaffected."
     },
     "advanced": {
+      "procfsMemoryDesc": "Actual process resident memory (RSS) from /proc, not a fixed estimate",
+      "procfsRssHint": "Sum of RSS for this process and WebKit children; shared pages can be counted more than once.",
+      "privateResident": "Private resident pages",
+      "procfsPrivateHint": "Private resident pages from smaps_rollup, approximated by RssAnon if access is restricted. Not Windows Commit.",
       "integrity": "Program Integrity",
       "integrityDesc": "Verify offline dictionary DB, local OCR models, and assets",
       "capture": "Capture Diagnostics",
@@ -256,8 +269,8 @@
       "engine": "OCR Engine",
       "engineHint": "Select local WinRT OCR or offline ONNX neural inference engine",
       "language": "Language",
-      "languageHint": "Specify OCR language model (ONNX supports mixed English & Chinese)",
-      "mixedLang": "Chinese & English Mixed",
+      "languageHint": "Specify OCR language model (ONNX supports 50 languages including Chinese, English & Japanese)",
+      "mixedLang": "Multilingual (50 Languages)",
       "systemLang": "Follow System Language",
       "notReady": "Not Ready",
       "pictureDefaultView": "Default View",
@@ -399,6 +412,7 @@
     "categoryTitle": "Categories"
   },
   "shell": {
+    "portalCaptureHint": "Wayland handles screenshot permission and selection. No background recording; continuous monitoring is not enabled.",
     "translating": "Translating...",
     "ocrRecognizing": "Recognizing on-screen text...",
     "sourceText": "Original",
@@ -436,6 +450,7 @@
     "providerGoogle": "Google",
     "providerYoudao": "Youdao",
     "providerTencent": "Tencent",
+    "providerBilibili": "Bilibili Index-Translate",
     "providerOpenai": "OpenAI",
     "intervalSeconds": "{{count}}s",
     "selectWordHintPrefix": "Select text and press ",

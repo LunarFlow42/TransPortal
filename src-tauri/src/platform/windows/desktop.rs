@@ -1,3 +1,4 @@
+use crate::platform::capture_frames::{FramePolicy, fullscreen_target};
 use crate::platform::desktop::{
     CaptureDiagnostics, DesktopCapture, ScreenRect, TierLog, WindowProbeInfo,
     format_diagnostics_markdown, record_last_diagnostics,
@@ -12,6 +13,7 @@ use windows::Win32::Graphics::Gdi::{
     HBITMAP, HDC, HGDIOBJ, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromPoint, ReleaseDC,
     SRCCOPY, SelectObject,
 };
+use windows::Win32::System::Performance::{QueryPerformanceCounter, QueryPerformanceFrequency};
 use windows::Win32::System::SystemInformation::GetLocalTime;
 use windows::Win32::System::Threading::{
     GetCurrentProcessId, OpenProcess, PROCESS_NAME_FORMAT, PROCESS_QUERY_LIMITED_INFORMATION,
@@ -24,24 +26,25 @@ use windows::Win32::UI::WindowsAndMessaging::{
     SetWindowDisplayAffinity, WDA_EXCLUDEFROMCAPTURE, WDA_NONE,
 };
 
+#[derive(Default)]
 pub struct WindowsDesktop {
     wgc: Mutex<Option<super::wgc::WgcDesktop>>,
     dxgi: Mutex<Option<super::dxgi::DxgiDesktop>>,
 }
 
-impl Default for WindowsDesktop {
-    fn default() -> Self {
-        Self {
-            wgc: Mutex::new(match super::wgc::WgcDesktop::new() {
-                Ok(wgc) => Some(wgc),
-                Err(err) => {
-                    eprintln!("[desktop] WGC initialization failed: {err}");
-                    None
-                }
-            }),
-            dxgi: Mutex::new(super::dxgi::DxgiDesktop::new().ok()),
-        }
+/// Both hardware tiers use the same request boundary: Desktop Duplication
+/// reports raw QPC ticks; WGC reports QPC converted to 100 ns units.
+fn request_time() -> Option<(i64, i64)> {
+    let (mut ticks, mut frequency) = (0, 0);
+    unsafe {
+        QueryPerformanceCounter(&mut ticks).ok()?;
+        QueryPerformanceFrequency(&mut frequency).ok()?;
     }
+    if ticks <= 0 || frequency <= 0 {
+        return None;
+    }
+    let span = i128::from(ticks) * 10_000_000 / i128::from(frequency);
+    Some((ticks, i64::try_from(span).ok()?))
 }
 
 /// Every GDI resource is released on all allocation/copy/error paths.
@@ -303,6 +306,7 @@ impl DesktopCapture for WindowsDesktop {
 
     fn capture(&self, region: ScreenRect) -> Result<image::RgbaImage, String> {
         let capture_start = std::time::Instant::now();
+        let requested = request_time();
         region.validate()?;
 
         let (hwnd_opt, fg_info) = match Self::probe_foreground_window(&region) {
@@ -335,6 +339,12 @@ impl DesktopCapture for WindowsDesktop {
             None
         };
 
+        let fullscreen = fg_info
+            .as_ref()
+            .zip(monitor_rect)
+            .is_some_and(|(fg, monitor)| fullscreen_target(fg, monitor, region));
+        let since = requested.map(|(_, span)| span);
+
         // --- Tier 1: Windows.Graphics.Capture ---
         {
             let mut guard = self.wgc.lock().unwrap();
@@ -351,7 +361,12 @@ impl DesktopCapture for WindowsDesktop {
                 {
                     attempted_win = true;
                     let t_start = std::time::Instant::now();
-                    match wgc.capture_window(hwnd, info.rect, region) {
+                    let policy = if fullscreen {
+                        FramePolicy::GameWindow { since }
+                    } else {
+                        FramePolicy::First
+                    };
+                    match wgc.capture_window(hwnd, info.rect, region, policy) {
                         Ok((img, metrics)) => {
                             let all_black = is_all_black(&img);
                             tiers.push(TierLog {
@@ -412,7 +427,12 @@ impl DesktopCapture for WindowsDesktop {
                     && let Some(m_rect) = monitor_rect
                 {
                     let t_start = std::time::Instant::now();
-                    match wgc.capture_monitor(monitor, m_rect, region) {
+                    let policy = if fullscreen {
+                        FramePolicy::GameMonitor { since }
+                    } else {
+                        FramePolicy::PreferUpdate
+                    };
+                    match wgc.capture_monitor(monitor, m_rect, region, policy) {
                         Ok((img, metrics)) => {
                             let all_black = is_all_black(&img);
                             tiers.push(TierLog {
@@ -477,7 +497,10 @@ impl DesktopCapture for WindowsDesktop {
                 *guard = super::dxgi::DxgiDesktop::new().ok();
             }
             if let Some(dxgi) = guard.as_ref() {
-                match dxgi.capture_output(region) {
+                // A mouse-only duplication notification has no new desktop
+                // pixels. Reject it (and pre-request presents) for games.
+                let fresh_after = fullscreen.then(|| requested.map_or(0, |(ticks, _)| ticks));
+                match dxgi.capture_output(region, fresh_after) {
                     Ok(img) => {
                         let all_black = is_all_black(&img);
                         tiers.push(TierLog {

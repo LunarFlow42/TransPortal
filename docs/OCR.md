@@ -1,8 +1,8 @@
 # 本地截图 OCR
 
-支持 Windows 10/11 自带的 `Windows.Media.Ocr` 和 ONNX · PP-OCRv5 FP32 两种本地引擎，在设置的 **Screenshot OCR → 识别引擎** 中切换。识别在 Rust 工作线程中完成，无 Python 或 GPU 依赖。Windows 默认使用系统 OCR；ONNX 使用固定的中英混合模型，不需要系统语言包。
+支持 Windows 10/11 自带的 `Windows.Media.Ocr` 和 ONNX · PP-OCRv6 small FP32 两种本地引擎，在设置的 **Screenshot OCR → 识别引擎** 中切换。识别在 Rust 工作线程中完成，无 Python 或 GPU 依赖。Windows 默认使用系统 OCR；ONNX 使用固定的 50 语言混合模型（简体/繁体中文、英文、日文及拉丁语系），不需要系统语言包。
 
-Windows 截图使用 TransPortal 自带的框选器：按下快捷键时立即冻结整个桌面并覆盖一层可拖动的选区窗口，松开鼠标后直接裁切冻结图像识别，不再调用系统截图工具，也不依赖剪贴板。macOS/Linux 当前可通过浮层的 **打开图片** 使用 ONNX，尚未实现桌面捕获适配器。
+Windows 截图使用 TransPortal 自带的框选器：按快捷键后先捕获光标所在显示器的画面，再在这张静止图上拖选。松开鼠标后直接裁切同一张图做 OCR。Linux Wayland 的选区由[系统截图门户](LINUX_WAYLAND.md)提供；也可通过浮层的 **打开图片** 识别本地图片。
 
 | 入口 | 行为 |
 | --- | --- |
@@ -48,8 +48,8 @@ Win+Shift+S（仅在用户显式绑定时） → ScreenCapture 观察系统截�
 - `src-tauri/src/core/ocr/onnx.rs`：CPU 推理、透明像素合成、深色背景预处理、方向识别，以及按行和横向位置排序文字块。
 - `src-tauri/src/core/ocr/picture.rs`：原图坐标、PNG 内存编码、可取消的逐块翻译与会话缓存；单轮最多 3 个 provider 请求，单请求最多等待 30 秒。
 - `src-tauri/src/core/ocr/monitor.rs`：持续区域监控；同一轮完成后才启动下一轮，相同像素跳过 OCR，已译文字块可复用，空白帧清除旧译文。停止或暂停会取消网络请求并丢弃迟到的识别结果。
-- `src-tauri/src/core/ocr/region.rs`：截图与自动翻译共用的原生框选器。冻结整个虚拟桌面为一张图片，`#/ocr-region` 窗口按整个预览的相对坐标换算物理像素，支持负坐标屏幕；确认后按用途分发：截图会话直接裁切冻结图像识别，自动翻译则启动持续监控。图片解码完成后才显示窗口，避免黑屏闪烁。
-- `src-tauri/src/platform/desktop.rs`：屏幕捕获接口 `DesktopCapture`；Windows 实现在 `platform/windows/desktop.rs`（GDI）与 `dxgi.rs`（DXGI 回退），裁切与纯黑检测在可移植的 `platform/imaging.rs`。
+- `src-tauri/src/core/ocr/region.rs`：Windows 框选器冻结光标所在显示器；`#/ocr-region` 以冻结图的物理像素换算选区，支持副屏负坐标。预览和确认按同一个截图 ID 配对，等本次像素画好才能拖选，确认时直接裁切这张图。
+- `src-tauri/src/platform/desktop.rs`：屏幕捕获接口 `DesktopCapture`；Windows 依次尝试覆盖选区的 WGC 前台窗口、WGC 显示器、DXGI 和 GDI。WGC 和 DXGI 把选区复制到暂存纹理后才释放源帧，CPU 只读取选区。
 - `src/utils/picture.ts`：按文字块周围颜色覆盖原字、选择对比色、缩放换行，在原图大小的 Canvas 上绘制。复杂纹理或小字区域的效果受检测框与背景采样影响，不做纹理重建；完整译文仍可在文字列表中读取。
 - `src-tauri/src/core/ocr/assets.rs`：固定版本资源清单、SHA-256 校验、Rust 下载、白名单解压和安装进度。
 - `src-tauri/src/core/ocr/workflow.rs`：一次只接受一个显式截图请求，空闲时不轮询图片或保存剪贴板历史。默认经内置框选器取图；仅当用户把 `Win+Shift+S` 绑定给 OCR 时才检查截图前后的剪贴板版本，并仅接收 Windows 截图工具进程发布的图片。
@@ -61,18 +61,24 @@ Win+Shift+S（仅在用户显式绑定时） → ScreenCapture 观察系统截�
 
 ## ONNX 模型与分发
 
-当前固定使用 RapidOCR 发布的 PP-OCRv5 mobile 检测/识别模型与 `ch_PP-LCNet_x0_25_textline_ori_cls_mobile` 方向分类模型，通过 `paddle-ocr-rs` 0.6.1 + `ort` 2.0.0-rc.10 调用 ONNX Runtime 1.22.0 CPU。识别字典来自模型元数据。三份模型均为未量化 FP32；`onnx_inspect` 示例可以检查张量类型与量化算子。
+当前固定使用 PaddlePaddle 官方发布的 PP-OCRv6 small 检测/识别 ONNX 模型（含独立 18,708 字符集字典 `ppocrv6_dict.txt`）与 RapidOCR 转换的 `ch_PP-LCNet_x0_25_textline_ori_cls_mobile` 方向分类模型，通过本地 PP-OCR 推理层 + `ort` 2.0.0-rc.15 调用 ONNX Runtime 1.31.1 CPU（来自微软官方 NuGet `Microsoft.ML.OnnxRuntime` 1.31.1）。三份模型均为未量化 FP32；`onnx_inspect` 示例可以检查张量类型与量化算子。
 
-- 支持准备 Windows / Linux / macOS 的 x86_64、aarch64 CPU 资源。当前实际运行验证在 Windows x86_64；其他平台的运行库已固定版本与哈希，仍需对应机器验证。
-- `pnpm tauri build` 自动执行 `pnpm ocr:prepare`，把目标平台资源放入 `resources/ocr-bundle/`，再随应用分发。不包含下载缓存、其他平台运行库或调试符号。macOS universal 构建会包括两种架构。
-- 开发时运行 `pnpm ocr:prepare`，或在设置中点击 **安装并启用 ONNX**。所有下载发生在 Rust，前端仅接收进度。下载地址、大小和 SHA-256 固定在 [manifest.json](../src-tauri/resources/ocr/manifest.json)。
-- Windows x86_64 三份模型约 15.4 MiB，模型与运行库核心资源共约 27.6 MiB。首次按需下载约 84.5 MiB，因为微软 ZIP 还包含不参与打包的调试符号等文件；已校验缓存可复用。
+- 支持准备 Windows / Linux (x86_64、aarch64) 与 macOS (aarch64) CPU 资源；下载地址、大小和 SHA-256 固定在 [manifest.json](../src-tauri/resources/ocr/manifest.json)。
+- `pnpm tauri build` 自动执行 `pnpm ocr:prepare`，把目标平台资源放入 `resources/ocr-bundle/`，再随应用分发。不包含下载缓存、其他平台运行库或调试符号。
+- 开发时运行 `pnpm ocr:prepare`，或在设置中点击 **安装并启用 ONNX**。所有下载发生在 Rust，前端仅接收进度。
+- 三份模型与字典合计约 30.6 MiB；Windows x86_64 展开后模型与运行库核心资源共约 47.4 MiB（Linux x86_64 约 59.0 MiB）。按需安装下载来自微软 NuGet 的多平台运行库包（~152.2 MiB）并仅白名单解压当前平台文件；已校验缓存可复用。
 - 打包资源优先使用；资源缺失或损坏时，设置中的安装入口写入应用数据目录的 `ocr/`，不修改安装目录。未通过校验的文件不能加载，部分下载可安全重试。
 - 第三方模型和库的许可文本、来源与声明随资源分发，见 [NOTICE.md](../src-tauri/resources/ocr/NOTICE.md)。后续引擎实现 `OcrEngine` 并注册后即可复用同一截图、图片、事件和翻译流程。
 
 FP32 不自动保证逐字符等同原框架，预处理、字典、导出算子和后处理都会影响结果。此前设想的 35 ms、45 MB 或「100% 无损」不是保证值。基准须区分安装包与展开体积、进程总内存与 OCR 增量内存、冷启动与热运行、以及包括框选和渲染的端到端时间。当前未提供 FP16/INT8 选项。
 
 ## 验证与诊断
+
+### Windows 无边框全屏：第一次截图是否仍是上一句台词？
+
+前台窗口覆盖目标显示器时，WGC 窗口首帧只用于预热。管线最多再等 **120 ms**，选择呈现时间晚于首帧、且不早于本次捕获请求的帧；一旦收到便继续，不固定休眠。时间来自 WGC 的 [SystemRelativeTime](https://learn.microsoft.com/uwp/api/windows.graphics.capture.direct3d11captureframe.systemrelativetime)，不靠比较像素猜测变化。如果游戏暂停、窗口没有提供更新，则在**同一次截图**里改抓显示器；显示器提供的静态帧也须有本次请求之后或同一时刻的时间戳。DXGI 回退会排除旧呈现和仅移动鼠标的通知，最后仍可用 GDI 取当前桌面。120 ms 是单个 WGC 通道等待更新的上限，不是截图总耗时。
+
+在目标 Windows 机器上，把无边框游戏从台词 **A** 推进到 **B**，看到 B 后用 **TransPortal 自己的截图快捷键**截一次。核对框选预览和结果原图都显示 B，再在静止菜单、运动场景、`Esc` 后立刻重截时分别试一次。若还复现，在设置的「截图管线诊断」复制该次报告；`WGC_WINDOW` 成功时的 `Frame 1 Latency` 和 `Drained Frames` 可用于区分是否走了更新帧路径。无需开启调试图片落盘。显式绑定给系统截图工具的 `Win+Shift+S` 不走此管线。
 
 常规检查：
 

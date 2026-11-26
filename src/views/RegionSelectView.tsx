@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { loadSettings } from '../store/persistence';
 import type { RegionPurpose, RegionSelection, ScreenRect } from '../types';
+import { paintFrozenPreview } from '../utils/frozenPreview';
 
 const HINTS: Record<RegionPurpose, string> = {
   text: '拖动框选要提取的文字 · 松开鼠标开始识别 · 右键或 Esc 取消',
@@ -27,11 +28,12 @@ const BUSY: Record<RegionPurpose, string> = {
 /**
  * `#/ocr-region` — one selector for snips and auto-translation.
  *
- * An instant, transparent overlay reveals the live desktop directly.
- * The user drags a rectangle over the real screen with outer darkening.
+ * The selection and OCR must use the very same frozen frame, even if the
+ * game has continued rendering or the previous IPC reply is still in flight.
  */
 export function RegionSelectView() {
   const [selection, setSelection] = useState<RegionSelection | null>(null);
+  const [paintedId, setPaintedId] = useState<number | null>(null);
   const [rect, setRect] = useState<ScreenRect | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -41,62 +43,44 @@ export function RegionSelectView() {
   const surface = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const current = useRef<RegionSelection | null>(null);
-  current.current = selection;
 
-  const reset = useCallback(() => {
+  const select = useCallback((next: RegionSelection | null) => {
+    if (current.current?.id === next?.id) return;
+    current.current = next;
     start.current = null;
+    setCursor(null);
     setRect(null);
     setBusy(false);
     setError(null);
-    setSelection(null);
-    const canvas = canvasRef.current;
-    if (canvas) {
-      const ctx = canvas.getContext('2d');
-      ctx?.clearRect(0, 0, canvas.width, canvas.height);
-    }
+    setPaintedId(null);
+    setSelection(next);
   }, []);
+
+  const cancel = useCallback(() => {
+    const id = current.current?.id;
+    select(null);
+    if (id !== undefined) void invoke('cancel_region', { id });
+  }, [select]);
 
   useEffect(() => {
     if (!selection) return;
     let active = true;
-    const canvas = canvasRef.current;
-    if (!canvas) {
-      void invoke('show_region_window');
-      return;
-    }
-
-    canvas.width = selection.bounds.width;
-    canvas.height = selection.bounds.height;
-    const ctx = canvas.getContext('2d', { willReadFrequently: false });
-    if (!ctx) {
-      void invoke('show_region_window');
-      return;
-    }
-
-    void invoke<ArrayBuffer>('get_frozen_pixels', { id: selection.id })
-      .then((buffer) => {
-        if (!active || !buffer) {
-          if (active) void invoke('show_region_window');
-          return;
-        }
-        const pixels = new Uint8ClampedArray(buffer);
-        if (pixels.length === selection.bounds.width * selection.bounds.height * 4) {
-          const imgData = new ImageData(pixels, selection.bounds.width, selection.bounds.height);
-          ctx.putImageData(imgData, 0, 0);
-        } else {
-          console.warn('Frozen pixels size mismatch:', pixels.length, selection.bounds);
-        }
-        requestAnimationFrame(() => {
-          if (!active) return;
-          void invoke('show_region_window');
-        });
-      })
-      .catch((e) => {
-        console.warn('Failed to load raw frozen pixels:', e);
-        if (active) {
-          void invoke('show_region_window');
-        }
-      });
+    const isCurrent = () => active && current.current?.id === selection.id;
+    void paintFrozenPreview(selection, (id) => invoke('get_frozen_pixels', { id }), isCurrent, (pixels) => {
+      const canvas = canvasRef.current;
+      const ctx = canvas?.getContext('2d');
+      if (!ctx || !canvas) throw new Error('无法显示冻结画面。');
+      canvas.width = selection.bounds.width;
+      canvas.height = selection.bounds.height;
+      ctx.putImageData(new ImageData(pixels, canvas.width, canvas.height), 0, 0);
+    }).then((painted) => {
+      if (!painted || !isCurrent()) return;
+      setPaintedId(selection.id);
+      // Animation frames can be suspended while this webview is still hidden.
+      return invoke('show_region_window', { id: selection.id });
+    }).catch((e) => {
+      if (isCurrent()) setError(`${String(e)} · 右键或 Esc 取消后重试`);
+    });
 
     return () => {
       active = false;
@@ -109,29 +93,24 @@ export function RegionSelectView() {
 
     const refresh = async () => {
       const request = ++sequence;
+      const previous = current.current;
       const value = await invoke<RegionSelection | null>('region_selection');
-      if (disposed || request !== sequence) return;
-      start.current = null;
-      setRect(null);
-      setBusy(false);
-      setError(null);
-      setSelection(value);
+      if (disposed || request !== sequence || current.current !== previous) return;
+      select(value);
     };
 
     const unlistenSelection = listen<RegionSelection>('transportal://region-selection', (event) => {
-      start.current = null;
-      setRect(null);
-      setBusy(false);
-      setError(null);
+      if (disposed) return;
+      ++sequence; // invalidate any older region_selection reply
       if (event.payload && typeof event.payload === 'object') {
-        setSelection(event.payload);
+        select(event.payload);
       } else {
         void refresh();
       }
     });
 
     const unlistenReset = listen('transportal://region-reset', () => {
-      reset();
+      if (!disposed) void refresh();
     });
 
     void loadSettings().then((s) => {
@@ -140,13 +119,14 @@ export function RegionSelectView() {
       }
     });
 
-    void refresh();
+    void Promise.all([unlistenSelection, unlistenReset]).then(() => {
+      if (!disposed) void refresh();
+    });
 
     const escape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       event.preventDefault();
-      reset();
-      void invoke('cancel_region', { id: current.current?.id ?? null });
+      cancel();
     };
     const onContextMenu = (event: MouseEvent) => {
       event.preventDefault();
@@ -160,7 +140,7 @@ export function RegionSelectView() {
       void unlistenSelection.then((dispose) => dispose()).catch(() => {});
       void unlistenReset.then((dispose) => dispose()).catch(() => {});
     };
-  }, []);
+  }, [select, cancel]);
 
   const point = (event: React.PointerEvent) => {
     const box = surface.current!.getBoundingClientRect();
@@ -171,21 +151,20 @@ export function RegionSelectView() {
     return { x: Math.min(from.x, end.x), y: Math.min(from.y, end.y), width: Math.abs(from.x - end.x), height: Math.abs(from.y - end.y) };
   };
   const purpose = selection?.purpose ?? 'text';
+  const ready = selection !== null && paintedId === selection.id;
   return <div ref={surface} className="fixed inset-0 cursor-crosshair overflow-hidden select-none bg-transparent"
     onContextMenu={(event) => {
       event.preventDefault();
       event.stopPropagation();
-      reset();
-      void invoke('cancel_region', { id: current.current?.id ?? null });
+      cancel();
     }}
     onPointerDown={(event) => {
       if (event.button === 2) {
         event.preventDefault();
-        reset();
-        void invoke('cancel_region', { id: current.current?.id ?? null });
+        cancel();
         return;
       }
-      if (!selection || busy || event.button !== 0) return;
+      if (!ready || current.current?.id !== selection.id || busy || event.button !== 0) return;
       event.currentTarget.setPointerCapture(event.pointerId);
       start.current = point(event); setRect(null); setError(null);
     }}
@@ -200,7 +179,7 @@ export function RegionSelectView() {
     }}
     onPointerCancel={() => { start.current = null; setRect(null); }}
     onPointerUp={(event) => {
-      if (!start.current || !selection || busy) return;
+      if (!start.current || !ready || current.current?.id !== selection.id || busy) return;
       const currentRect = selectionRect(point(event)); start.current = null; setRect(currentRect);
       const left = Math.round(currentRect.x * selection.bounds.width);
       const top = Math.round(currentRect.y * selection.bounds.height);
@@ -211,8 +190,7 @@ export function RegionSelectView() {
 
       // 如果用户仅仅是轻微点击（位移小于 4 像素），判定为误触或希望切回桌面程序，立即自动取消退出
       if (spanW < 4 && spanH < 4) {
-        reset();
-        void invoke('cancel_region', { id: current.current?.id ?? null });
+        cancel();
         return;
       }
 
@@ -226,17 +204,20 @@ export function RegionSelectView() {
         x: selection.bounds.x + left, y: selection.bounds.y + top, width: spanW, height: spanH,
       } })
       .then(() => {
-        reset();
+        if (current.current?.id === selection.id) select(null);
       })
       .catch((error) => {
+        if (current.current?.id !== selection.id) return;
         setBusy(false);
         setError(String(error));
       });
     }}>
     <canvas
+      key={selection?.id ?? 'empty'}
       ref={canvasRef}
       className="pointer-events-none absolute inset-0 h-full w-full select-none"
     />
+    {selection && !ready && <div className="pointer-events-none absolute inset-0 bg-neutral-900" />}
     {showCrosshairs && cursor && (
       <>
         <div
@@ -256,7 +237,7 @@ export function RegionSelectView() {
     }} />}
     {selection && (
       <div className="pointer-events-none absolute left-1/2 top-6 -translate-x-1/2 rounded-xl bg-black/85 px-5 py-3 text-sm text-white shadow-lg">
-        {error || (busy ? BUSY[purpose] : HINTS[purpose])}
+        {error ? <span role="alert">{error}</span> : !ready ? '正在加载本次截图…' : busy ? BUSY[purpose] : HINTS[purpose]}
       </div>
     )}
   </div>;

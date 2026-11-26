@@ -2,7 +2,7 @@
   "id": "kokoro-82m-v1.0-onnx-q8",
   "model_family": "Kokoro-82M v1.0",
   "precision": "INT8 (quantized)",
-  "runtime_version": "1.22.0",
+  "runtime_version": "1.31.1",
   "source": "https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX",
   "model": {
     "name": "model_quantized.onnx",

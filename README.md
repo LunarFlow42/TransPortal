@@ -16,7 +16,7 @@
   <img src="https://img.shields.io/badge/Tauri-v2.12-blue?logo=tauri" alt="Tauri v2" />
   <img src="https://img.shields.io/badge/Rust-2024_Edition-orange?logo=rust" alt="Rust 2024" />
   <img src="https://img.shields.io/badge/React-19-61dafb?logo=react" alt="React 19" />
-  <img src="https://img.shields.io/badge/OCR-ONNX_PP--OCRv5-emerald" alt="ONNX OCR" />
+  <img src="https://img.shields.io/badge/OCR-ONNX_PP--OCRv6-emerald" alt="ONNX OCR" />
   <img src="https://img.shields.io/badge/TTS-Kokoro_ONNX-indigo" alt="Kokoro TTS" />
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License" />
 </p>
@@ -29,9 +29,9 @@ TransPortal is engineered for high-frequency reading, software engineering, and 
 
 - ⚡ **Transient HUD Popups (Instant Dismissal)**: Borderless, clean floating HUD positioned naturally near the cursor with smart screen edge boundary clamping. Automatically dismisses upon losing focus (blur) or pressing `Esc` within milliseconds, ensuring zero desktop disruption.
 - 🎯 **Global Text Selection & In-Place Replacement**: Uses Windows native UI Automation `TextPattern` to extract selected text across arbitrary applications (with silent clipboard fallback). Supports silent in-place overwrite of selected source text with target translations.
-- 🔍 **Local Offline & Dual-Engine Screen OCR**: Built-in native snipping tool with zero external dependencies. Integrates local **ONNX PP-OCRv5 FP32** inference (offline high-accuracy Chinese/English recognition without requiring Python or GPU drivers). Supports side-by-side comparative reading with word drilldown, in-place picture text overlay, snip & web search, and silent background OCR to clipboard.
+- 🔍 **Local Offline & Dual-Engine Screen OCR**: Built-in native snipping tool with zero external dependencies. Integrates local **ONNX PP-OCRv6 small FP32** inference (offline high-accuracy 50-language recognition including Chinese/English/Japanese without requiring Python or GPU drivers). Supports side-by-side comparative reading with word drilldown, in-place picture text overlay, snip & web search, and silent background OCR to clipboard.
 - 🔊 **Offline Neural TTS (Kokoro ONNX)**: Integrated INT8 quantized neural voice synthesis engine (~**90.6 MB** asset bundle), delivering offline English & Chinese speech with natural prosody and dynamic subword compound phonemization fallback.
-- 📚 **Enriched Offline Dictionary & Online Supplements**: The default ECCEDICT download enriches the ~770k-entry base with UK/US phonetics and exam tags before importing into `redb`. Enabled local data supplements online word cards with tags, word forms and corpus ranks while keeping meanings attributed. Translation also supports Bing, Google, Youdao, Tencent and custom OpenAI-compatible streaming endpoints with **auto-fetch model lists**.
+- 📚 **Enriched Offline Dictionary & Online Supplements**: The default ECCEDICT download enriches the ~770k-entry base with UK/US phonetics and exam tags before importing into `redb`. Enabled local data supplements online word cards with tags, word forms and corpus ranks while keeping meanings attributed. Translation also supports Bing, Google, Youdao, Tencent, Bilibili Index-Translate, and custom OpenAI-compatible streaming endpoints with **auto-fetch model lists**.
 - 🛡️ **Subtle Dashed Affordance & Full Internationalization (i18n)**: Replaces cluttered `?` icons with elegant subtle dashed underlines (Dashed Affordance). Hovering over any title instantly unveils a sleek frosted glass tooltip card with rich explanations. Ships with 100% clean, non-bracketed English and Simplified Chinese localization.
 - 📊 **Hardware-Accelerated Capture Diagnostics**: Multi-tier screen capture probe (DXGI / WGC Window / WGC Monitor / GDI) with latency measurement and instant Markdown report generation.
 - 🍃 **Ultra-Low Memory Footprint**: Native Rust core resident memory remains **~30-60 MB** (70%+ lower RAM usage than traditional Electron apps), complemented by an automated dual-stage memory trimmer upon window idle.
@@ -70,7 +70,7 @@ flowchart TD
     CORE["Cross-Platform core/<br/>(Engine Registry / Dictionary Orchestration / redb / OCR Session / Hotkeys)"]
     PLATFORM["OS Contracts platform/<br/>(WindowOps / SelectionOps / ClipboardOps / DesktopCapture)"]
     WIN["Windows Platform Backend<br/>(Win32 / UI Automation / DWM / DXGI / Windows OCR)"]
-    LIN["Linux Platform Backend<br/>(X11 / Wayland Native Contracts)"]
+    LIN["Linux Wayland Backend<br/>(XDG Portals / GTK / procfs)"]
 
     UI <-->|"IPC Serialization"| IPC
     IPC --> CORE
@@ -82,12 +82,20 @@ flowchart TD
 - **Architectural Invariants**: The `core/` module contains zero `cfg(target_os)` checks and depends solely on generic `platform/` traits. Validated continuously in CI via `scripts/check-architecture.sh`.
 - **Window Singleton Reuse**: Transient overlay and OCR snipping windows are pre-warmed singletons (`show` / `hide` / `set_position`), preventing Chromium context recreation and eliminating blank frame flashes.
 
+Linux integration targets **Wayland only**: portal-authorized shortcuts and screenshots,
+GTK clipboard/primary selection, compositor-managed windows, and real `/proc` memory
+accounting. Continuous ScreenCast/PipeWire capture and input injection are not yet
+implemented; X11 is not maintained. See [Wayland support and limitations](docs/LINUX_WAYLAND.md).
+The [optional KDE Plasma 6 integration](integrations/kwin/README.md) adds cursor-relative
+nonactivating overlays, passive double-copy and ink gestures, and clipboard-free
+in-place replacement for compatible text fields. It does not use libei keyboard injection.
+
 ---
 
 ## 💻 Quick Start
 
 ### Prerequisites
-- **Node.js** >= 18 and **pnpm**
+- **Node.js** >= 22.12 and **pnpm**
 - **Rust** (stable toolchain)
 - **Operating System**:
   - Windows 10 (version 2004+) or Windows 11 (WebView2 pre-installed)
@@ -102,7 +110,7 @@ cd TransPortal
 # 2. Install frontend dependencies
 pnpm install
 
-# 3. Prepare offline OCR models (Downloads and verifies PP-OCRv5 ONNX model)
+# 3. Prepare offline OCR models (Downloads and verifies PP-OCRv6 small ONNX models)
 pnpm ocr:prepare
 
 # 4. Start local development with Vite + Tauri hot reload
@@ -155,6 +163,7 @@ Packaged installers are generated in `src-tauri/target/release/bundle/nsis/` (Wi
 - 📖 [User Guide](docs/USER_GUIDE.md)
 - 🧠 [Local OCR Engine & Benchmarks](docs/OCR.md)
 - 🛡️ [Binary Integrity & SHA-256 Self-Checks](docs/STARTUP_CHECKS.md)
+- [Linux Wayland native integration](docs/LINUX_WAYLAND.md)
 
 ---
 

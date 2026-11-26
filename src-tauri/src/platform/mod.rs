@@ -15,6 +15,8 @@ use std::sync::Arc;
 use system::SystemOps;
 use window::WindowOps;
 
+#[cfg(any(test, target_os = "windows"))]
+mod capture_frames;
 pub mod clipboard;
 pub mod desktop;
 pub mod gestures;
@@ -22,10 +24,11 @@ pub mod imaging;
 pub mod key_sequence;
 pub mod placement;
 pub mod selection;
+pub mod shortcuts;
 pub mod system;
 pub mod window;
 
-#[cfg(any(test, target_os = "linux"))]
+#[cfg(target_os = "linux")]
 mod linux;
 #[cfg(any(test, not(target_os = "windows")))]
 pub mod unsupported;
@@ -81,6 +84,7 @@ pub trait Backend {
     type Clipboard: ClipboardOps + Default;
     type Gestures: GestureSource + Default;
     type Desktop: DesktopCapture + Default;
+    type Shortcuts: shortcuts::ShortcutOps;
     const CAPABILITIES: Capabilities;
 
     /// The OS text recognizer, if any. ONNX OCR is available everywhere.
@@ -93,6 +97,18 @@ pub type PlatformSelection = <ActiveBackend as Backend>::Selection;
 pub type PlatformClipboard = <ActiveBackend as Backend>::Clipboard;
 pub type PlatformGestures = <ActiveBackend as Backend>::Gestures;
 pub type PlatformDesktop = <ActiveBackend as Backend>::Desktop;
+pub type PlatformShortcuts = <ActiveBackend as Backend>::Shortcuts;
+
+/// Avoid initializing the X11-only global-hotkey plugin on Wayland/Linux.
+/// The core registers permissioned portal shortcuts instead.
+pub fn with_shortcut_plugin<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
+    use shortcuts::ShortcutOps;
+    if PlatformShortcuts::uses_portal() {
+        builder
+    } else {
+        builder.plugin(tauri_plugin_global_shortcut::Builder::new().build())
+    }
+}
 
 /// The system OCR engine of the active backend, if any.
 pub fn native_ocr() -> Option<Arc<dyn OcrEngine>> {
@@ -107,6 +123,18 @@ pub fn desktop() -> Arc<dyn DesktopCapture> {
 /// Capabilities of the backend compiled for this target.
 pub const CAPABILITIES: Capabilities = <ActiveBackend as Backend>::CAPABILITIES;
 
+/// Linux capabilities depend on the actual desktop session, not the build OS.
+pub fn capabilities() -> Capabilities {
+    #[cfg(target_os = "linux")]
+    {
+        linux::capabilities()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        CAPABILITIES
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -119,6 +147,7 @@ mod tests {
         let _: fn() -> B::Clipboard = B::Clipboard::default;
         let _: fn() -> B::Gestures = B::Gestures::default;
         let _: fn() -> B::Desktop = B::Desktop::default;
+        let _: fn() -> B::Shortcuts = B::Shortcuts::default;
         let _: fn() -> Option<Arc<dyn OcrEngine>> = B::native_ocr;
         B::CAPABILITIES
     }
@@ -136,6 +165,7 @@ mod tests {
         );
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn linux_backend_provides_every_contract() {
         assert_eq!(exercise::<linux::LinuxBackend>(), Capabilities::NONE);

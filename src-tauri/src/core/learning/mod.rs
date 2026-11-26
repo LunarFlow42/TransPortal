@@ -2,9 +2,12 @@
 
 pub mod model;
 mod store;
+mod subloom;
 
 use model::{ContextSource, DefinitionKind, LearningBackup, LearningEntry};
-pub use model::{EnrollResult, ExportFormat, ExportResult, LearningDraft, LearningPage};
+pub use model::{
+    EnrollResult, ExportFormat, ExportResult, ImportResult, LearningDraft, LearningPage,
+};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -39,6 +42,10 @@ fn now() -> LearningResult<u64> {
 }
 
 impl LearningService {
+    pub fn import_subloom(&self, path: &Path) -> LearningResult<ImportResult> {
+        self.store()?.import(subloom::read(path)?, now()?)
+    }
+
     pub fn open(path: PathBuf) -> Self {
         let store = (|| {
             if let Some(parent) = path.parent() {
@@ -149,6 +156,8 @@ fn export_bytes(
                     "ContextSource",
                     "CreatedAt",
                     "UpdatedAt",
+                    "VideoUrl",
+                    "VideoTimestampMs",
                 ])
                 .map_err(|error| LearningError::Invalid(error.to_string()))?;
             for entry in entries {
@@ -161,6 +170,7 @@ fn export_bytes(
                             ContextSource::Lookup => "lookup",
                             ContextSource::Dictionary => "dictionary",
                             ContextSource::Generated => "generated",
+                            ContextSource::Video => "video",
                         });
                 let definition_kind = match usage.definition_kind {
                     DefinitionKind::Dictionary => "dictionary",
@@ -168,6 +178,12 @@ fn export_bytes(
                 };
                 let created_at = entry.created_at.to_string();
                 let updated_at = entry.updated_at.to_string();
+                let video = usage
+                    .context
+                    .as_ref()
+                    .and_then(|context| context.video.as_ref());
+                let video_time =
+                    video.map_or_else(String::new, |source| source.timestamp_ms.to_string());
                 let fields = [
                     usage.lemma.as_str(),
                     usage.phonetic.as_deref().unwrap_or_default(),
@@ -188,6 +204,8 @@ fn export_bytes(
                     context_source,
                     &created_at,
                     &updated_at,
+                    video.map_or("", |source| source.url.as_str()),
+                    &video_time,
                 ];
                 writer
                     .write_record(fields.map(spreadsheet_cell))
@@ -246,6 +264,7 @@ pub(super) mod tests {
                 text: "=HYPERLINK(\"https://example.invalid\")".into(),
                 translation: None,
                 source: ContextSource::Generated,
+                video: None,
             }),
         }
     }

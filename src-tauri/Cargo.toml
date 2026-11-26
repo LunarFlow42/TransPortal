@@ -30,27 +30,29 @@ tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
-reqwest = { version = "0.12", features = ["json", "stream"] }
+# 0.13 gates query/form and defaults to a different TLS backend. Keep native
+# system certificates/proxies while explicitly retaining every provider API.
+reqwest = { version = "0.13", default-features = false, features = ["native-tls", "charset", "http2", "system-proxy", "json", "stream", "query", "form"] }
 eventsource-stream = "0.2"
 async-trait = "0.1"
 futures-util = "0.3"
 thiserror = "2"
-redb = "4.3"
+redb = "5"
 csv = "1"
-lru = "0.18"
-misaki-rs = { version = "0.6", default-features = false }
-# Pin the pre-release Rust API and match the bundled ONNX Runtime 1.22.0 ABI.
-ort = { version = "=2.0.0-rc.15", default-features = false, features = ["std", "ndarray", "load-dynamic", "api-22"] }
+lru = "0.19"
+misaki-rs = { version = "0.11", default-features = false }
+# Pin the pre-release Rust API and match the bundled ONNX Runtime 1.31.1 ABI.
+ort = { version = "=2.0.0-rc.15", default-features = false, features = ["std", "ndarray", "load-dynamic", "api-31"] }
 ndarray = "0.17"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "bmp", "webp", "tiff"] }
-imageproc = "0.25"
+imageproc = { version = "0.27", default-features = false }
 geo-clipper = "0.9"
 geo-types = "0.7"
 clipper-sys = "0.8"
-base64 = "0.22"
-libloading = "0.8"
-sha2 = "0.10"
-zip = { version = "2", default-features = false, features = ["deflate"] }
+base64 = "0.23"
+libloading = "0.9"
+sha2 = "0.11"
+zip = { version = "9.8", default-features = false, features = ["deflate-flate2"] }
 flate2 = "1"
 tar = "0.4"
 
@@ -76,6 +78,7 @@ windows = { version = "0.62", features = [
     "Win32_System_LibraryLoader",
     "Win32_System_Memory",
     "Win32_System_Ole",
+    "Win32_System_Performance",
     "Win32_System_Variant",
     "Win32_System_Threading",
     "Win32_System_WinRT",
@@ -90,15 +93,13 @@ windows = { version = "0.62", features = [
 windows-collections = "0.3"
 windows-future = "0.3"
 
-# Linux backend (src/platform/linux). Phase 1 delegates to the unsupported
-# backend and needs no extra crates. Phase 2 adds them here, one capability at
-# a time, so they never reach Windows builds:
-#   ashpd              XDG portals: Screenshot, ScreenCast, GlobalShortcuts, RemoteDesktop
-#   pipewire           frames from the ScreenCast portal (auto region translation)
-#   atspi              AT-SPI accessibility bus: reading the selection
-#   reis               libei: synthesized copy/paste and key observation
-#   wayland-client / wayland-protocols(-wlr)   data-control clipboard events
+# Wayland-only Linux integration: XDG portals, GTK clipboard/window handling,
+# and /proc memory accounting. No Linux native crates enter Windows builds.
 [target.'cfg(target_os = "linux")'.dependencies]
+zbus = { version = "5", default-features = false, features = ["tokio", "blocking-api"] }
+libc = "0.2"
+url = "2"
+gtk = "0.18"
 
 [profile.dev]
 incremental = true

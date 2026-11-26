@@ -86,7 +86,17 @@ pub struct ModelManifest {
     pub precision: String,
     pub runtime_version: String,
     pub models: Vec<Artifact>,
+    pub character_dict: Artifact,
     pub runtimes: Vec<RuntimeArtifact>,
+}
+
+impl ModelManifest {
+    /// The recognizer's external dictionary is just as essential as its weights.
+    pub fn model_artifacts(&self) -> impl Iterator<Item = &Artifact> {
+        self.models
+            .iter()
+            .chain(std::iter::once(&self.character_dict))
+    }
 }
 
 pub fn manifest() -> &'static ModelManifest {
@@ -164,15 +174,37 @@ impl OnnxAssets {
         self.install_root.join(&manifest().id).join(&self.platform)
     }
 
+    fn pack_directories(&self, id: &str) -> impl Iterator<Item = PathBuf> {
+        self.bundled_root
+            .as_ref()
+            .map(|root| root.join(id).join(&self.platform))
+            .into_iter()
+            .chain(std::iter::once(
+                self.install_root.join(id).join(&self.platform),
+            ))
+    }
+
+    /// TTS may use the shared runtime before the new OCR models are installed.
+    /// Legacy packs are accepted only when every runtime file matches the current
+    /// manifest's hashes; their old OCR models are never used for recognition.
+    pub fn shared_runtime_dir(&self) -> Result<PathBuf, String> {
+        let runtime = self.runtime()?;
+        for directory in self.pack_directories(&manifest().id) {
+            if runtime
+                .files
+                .iter()
+                .all(|file| verify_file(&directory.join(&file.name), file).is_ok())
+            {
+                return Ok(directory);
+            }
+        }
+        Err("未找到已校验的共享 ONNX Runtime 运行库，请安装/修复 OCR 资源。".into())
+    }
+
     pub fn resolve(&self) -> Result<PathBuf, String> {
         let runtime = self.runtime()?;
-        let installed = self.install_dir();
-        let bundled = self
-            .bundled_root
-            .as_ref()
-            .map(|root| root.join(&manifest().id).join(&self.platform));
         let mut last_error = None;
-        for directory in bundled.into_iter().chain(std::iter::once(installed)) {
+        for directory in self.pack_directories(&manifest().id) {
             match verify_pack(&directory, runtime) {
                 Ok(()) => return Ok(directory),
                 Err(error) => last_error = Some(error),
@@ -192,8 +224,7 @@ impl OnnxAssets {
             .runtime()
             .map(|runtime| {
                 let models = manifest()
-                    .models
-                    .iter()
+                    .model_artifacts()
                     .map(|model| model.bytes)
                     .sum::<u64>();
                 (
@@ -239,8 +270,7 @@ impl OnnxAssets {
         let runtime = self.runtime()?;
         let total = runtime.bytes
             + manifest()
-                .models
-                .iter()
+                .model_artifacts()
                 .map(|model| model.bytes)
                 .sum::<u64>();
         if let Ok(directory) = self.resolve() {
@@ -264,7 +294,7 @@ impl OnnxAssets {
             .build()
             .map_err(|e| e.to_string())?;
         let mut completed = 0;
-        for model in &manifest().models {
+        for model in manifest().model_artifacts() {
             let destination = directory.join(&model.name);
             if verify_file(&destination, model).is_err() {
                 let downloaded =
@@ -363,14 +393,14 @@ pub fn verify_file(path: &Path, artifact: &Artifact) -> Result<(), String> {
         }
         hasher.update(&buffer[..read]);
     }
-    if format!("{:x}", hasher.finalize()) != artifact.sha256 {
+    if crate::core::integrity::hex_lower(&hasher.finalize()) != artifact.sha256 {
         return Err(format!("{} SHA-256 校验失败", artifact.name));
     }
     Ok(())
 }
 
 fn verify_pack(directory: &Path, runtime: &RuntimeArtifact) -> Result<(), String> {
-    for artifact in manifest().models.iter().chain(&runtime.files) {
+    for artifact in manifest().model_artifacts().chain(&runtime.files) {
         if !safe_name(&artifact.name) {
             return Err("OCR 清单包含无效文件名".into());
         }
@@ -482,7 +512,7 @@ async fn download(
                 file.flush().await.map_err(|e| e.to_string())?;
                 drop(file);
                 if received != artifact.bytes
-                    || format!("{:x}", hasher.finalize()) != artifact.sha256
+                    || crate::core::integrity::hex_lower(&hasher.finalize()) != artifact.sha256
                 {
                     return Err("下载文件大小或 SHA-256 校验失败".into());
                 }
@@ -573,8 +603,10 @@ mod tests {
     fn pinned_pack_has_models_checksums_and_only_safe_file_targets() {
         let manifest = manifest();
         assert_eq!(manifest.precision, "FP32");
+        assert_eq!(manifest.model_family, "PP-OCRv6 small");
+        assert_eq!(manifest.character_dict.name, "ppocrv6_dict.txt");
         assert_eq!(manifest.models.len(), 3);
-        assert_eq!(manifest.runtimes.len(), 6);
+        assert_eq!(manifest.runtimes.len(), 5);
         for runtime in &manifest.runtimes {
             assert!(
                 runtime
@@ -594,7 +626,7 @@ mod tests {
                     .iter()
                     .any(|file| file.name == "ThirdPartyNotices.txt")
             );
-            for file in manifest.models.iter().chain(&runtime.files) {
+            for file in manifest.model_artifacts().chain(&runtime.files) {
                 assert!(safe_name(&file.name));
                 assert!(file.bytes > 0);
                 assert_eq!(file.sha256.len(), 64);
@@ -615,12 +647,40 @@ mod tests {
     }
 
     #[test]
+    fn current_pack_paths_and_download_sizes_include_the_v6_dictionary() {
+        let assets = OnnxAssets::for_platform(
+            Some(PathBuf::from("bundle")),
+            PathBuf::from("data"),
+            PathBuf::from("cache"),
+            "linux-x86_64".into(),
+        );
+        assert_eq!(
+            assets.pack_directories(&manifest().id).collect::<Vec<_>>(),
+            [
+                PathBuf::from("bundle")
+                    .join(&manifest().id)
+                    .join("linux-x86_64"),
+                assets.install_dir(),
+            ]
+        );
+        let runtime = assets.runtime().unwrap();
+        let model_bytes: u64 = manifest().model_artifacts().map(|file| file.bytes).sum();
+        assert_eq!(manifest().model_artifacts().count(), 4);
+        let status = assets.status();
+        assert_eq!(status.download_bytes, model_bytes + runtime.bytes);
+        assert_eq!(
+            status.installed_bytes,
+            model_bytes + runtime.files.iter().map(|f| f.bytes).sum::<u64>()
+        );
+    }
+
+    #[test]
     fn asset_verification_rejects_same_length_corruption_and_partial_downloads() {
         let path = std::env::temp_dir().join(format!("transportal-ocr-sha-{}", std::process::id()));
         let artifact = Artifact {
             name: "fixture".into(),
             bytes: 3,
-            sha256: format!("{:x}", Sha256::digest(b"abc")),
+            sha256: crate::core::integrity::hex_lower(&Sha256::digest(b"abc")),
             urls: vec![],
             member: None,
         };

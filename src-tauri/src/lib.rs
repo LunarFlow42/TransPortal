@@ -229,7 +229,7 @@ pub fn run() {
         integrity::show_failure(&report);
         std::process::exit(2);
     }
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .manage(integrity::IntegrityState(std::sync::Mutex::new(report)))
         .manage(shortcut::ShortcutBindings::default())
         .manage(selection::SelectionService::default())
@@ -246,8 +246,8 @@ pub fn run() {
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec!["--autostart"]),
-        ))
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        ));
+    platform::with_shortcut_plugin(builder)
         .setup(|app| {
             // Manage core services immediately before any slow I/O or window calls
             let ocr_data = app.path().app_data_dir()?.join("ocr");
@@ -267,26 +267,11 @@ pub fn run() {
             ));
 
             let tts_data = app.path().app_data_dir()?.join("tts");
-            let tts_ocr_runtime_dir = ocr_resources
-                .as_ref()
-                .map(|p| {
-                    p.join("ppocr-v5-fp32-ort-1.22.0")
-                        .join(core::ocr::assets::current_platform())
-                })
-                .filter(|p| p.exists())
-                .or_else(|| {
-                    let p = ocr_data
-                        .join("ppocr-v5-fp32-ort-1.22.0")
-                        .join(core::ocr::assets::current_platform());
-                    if p.exists() { Some(p) } else { None }
-                })
-                .or_else(|| {
-                    Some(
-                        ocr_data
-                            .join("ppocr-v5-fp32-ort-1.22.0")
-                            .join(core::ocr::assets::current_platform()),
-                    )
-                });
+            let tts_ocr_runtime_dir = Some(
+                ocr_assets
+                    .shared_runtime_dir()
+                    .unwrap_or_else(|_| ocr_assets.install_dir()),
+            );
             let tts_assets = std::sync::Arc::new(core::tts::assets::TtsAssets::new(
                 tts_data.clone(),
                 tts_data.join("downloads"),
@@ -353,6 +338,7 @@ pub fn run() {
             commands::learning_list,
             commands::learning_delete,
             commands::learning_export,
+            commands::learning_import_subloom,
             commands::dict_status,
             commands::dict_sources,
             commands::set_dict_source_enabled,
@@ -396,6 +382,8 @@ pub fn run() {
             commands::set_clipboard_monitor_enabled,
             commands::set_ink_translate_key,
             commands::replace_captured_selection,
+            commands::authorize_wayland_input,
+            commands::revoke_wayland_input,
             commands::generate_examples,
             commands::fetch_openai_models,
             commands::open_settings_window,
@@ -417,6 +405,8 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|app, event| {
             if matches!(event, tauri::RunEvent::Exit) {
+                shortcut::shutdown(app);
+                app.state::<selection::SelectionService>().revoke_input();
                 app.state::<ocr::monitor::MonitorService>().stop(app, true);
                 app.state::<ocr::OcrService>().shutdown(app);
             }

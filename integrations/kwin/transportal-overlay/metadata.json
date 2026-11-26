@@ -1,0 +1,14 @@
+{
+  "KPlugin": {
+    "Id": "transportal-overlay",
+    "Name": "TransPortal cursor overlay",
+    "Description": "Place explicitly marked TransPortal overlays near the cursor without activating them",
+    "Version": "0.1.0",
+    "License": "MIT",
+    "Authors": [{ "Name": "TransPortal contributors" }]
+  },
+  "X-Plasma-API": "javascript",
+  "X-Plasma-MainScript": "code/main.js",
+  "KPackageStructure": "KWin/Script",
+  "X-KDE-PluginInfo-EnabledByDefault": false
+}

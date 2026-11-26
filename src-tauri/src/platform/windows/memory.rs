@@ -187,6 +187,7 @@ pub fn get_memory_usage() -> Result<MemoryReport, String> {
     }
 
     Ok(MemoryReport {
+        measurement: None,
         total_working_set_bytes: total_working_set,
         total_private_bytes: total_private,
         main_working_set_bytes: main_working_set,

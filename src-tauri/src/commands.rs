@@ -3,7 +3,8 @@ use crate::core::dictionary::{DictEntry, ExampleSentence};
 use crate::core::dictionary::{DictStatus, LookupService, SourceInfo};
 use crate::core::intent::{IntentResult, classify_intent};
 use crate::core::learning::{
-    EnrollResult, ExportFormat, ExportResult, LearningDraft, LearningPage, LearningService,
+    EnrollResult, ExportFormat, ExportResult, ImportResult, LearningDraft, LearningPage,
+    LearningService,
 };
 use crate::core::translation::{
     StreamChunk, TranslateQuery, TranslateResult, Translator, openai::OpenAiConfig,
@@ -116,6 +117,24 @@ pub async fn learning_delete(
 }
 
 #[tauri::command]
+pub async fn learning_import_subloom(
+    path: String,
+    app: AppHandle,
+    service: State<'_, LearningService>,
+) -> Result<ImportResult, String> {
+    let service = service.inner().clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        service
+            .import_subloom(std::path::Path::new(&path))
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())??;
+    let _ = app.emit("transportal://learning-changed", ());
+    Ok(result)
+}
+
+#[tauri::command]
 pub async fn learning_export(
     path: String,
     format: ExportFormat,
@@ -170,6 +189,34 @@ pub fn set_dict_source_order(
     service: State<'_, LookupService>,
 ) -> Result<(), String> {
     service.set_source_order(&ids)
+}
+
+/// Experimental permission plumbing, not an input injection endpoint. It is
+/// deliberately restricted to settings and is never called during bootstrap.
+#[tauri::command]
+pub async fn authorize_wayland_input(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+) -> Result<(), String> {
+    if window.label() != "settings" {
+        return Err("Input authorization is only available from settings".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<crate::core::selection::SelectionService>()
+            .authorize_input()
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub fn revoke_wayland_input(app: AppHandle, window: tauri::WebviewWindow) -> Result<(), String> {
+    if window.label() != "settings" {
+        return Err("Input authorization is only available from settings".into());
+    }
+    app.state::<crate::core::selection::SelectionService>()
+        .revoke_input();
+    Ok(())
 }
 
 /// Configure any global shortcut action individually.
@@ -413,7 +460,7 @@ pub async fn export_ocr_picture(
     path: Option<String>,
     app: AppHandle,
 ) -> Result<(), String> {
-    use tauri_plugin_clipboard_manager::ClipboardExt;
+    use crate::platform::clipboard::ClipboardOps;
     tauri::async_runtime::spawn_blocking(move || {
         let image = crate::core::ocr::picture::decode_png(&data_url)?;
         if let Some(path) = path {
@@ -422,12 +469,8 @@ pub async fn export_ocr_picture(
                 .map_err(|error| format!("保存图片失败：{error}"))
         } else {
             let (width, height) = image.dimensions();
-            app.clipboard()
-                .write_image(&tauri::image::Image::new_owned(
-                    image.into_raw(),
-                    width,
-                    height,
-                ))
+            crate::platform::PlatformClipboard::default()
+                .write_image(&app, width, height, image.into_raw())
                 .map_err(|error| format!("复制图片失败：{error}"))
         }
     })
@@ -460,7 +503,7 @@ pub fn region_selection(
     service.selection()
 }
 
-/// Stream raw RGBA physical pixels for zero-latency, 100% lossless canvas freeze.
+/// Return the selected snapshot's raw physical pixels for a lossless preview.
 #[tauri::command]
 pub fn get_frozen_pixels(
     id: u64,
@@ -485,12 +528,8 @@ pub fn cancel_region(id: Option<u64>, app: AppHandle) {
 }
 
 #[tauri::command]
-pub fn show_region_window(app: AppHandle) -> Result<(), String> {
-    let service = app.state::<crate::core::ocr::region::RegionService>();
-    if service.selection().is_some() {
-        crate::core::ocr::region::RegionService::show_window(&app)?;
-    }
-    Ok(())
+pub fn show_region_window(app: AppHandle, id: u64) -> Result<(), String> {
+    crate::core::ocr::region::RegionService::show_window(&app, id)
 }
 
 #[tauri::command]

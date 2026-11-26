@@ -42,6 +42,10 @@ pub struct SelectionContent {
 pub enum CaptureMethod {
     /// Native UI Automation / `TextPattern` (Windows only).
     UiAutomation,
+    /// Compositor-mediated primary selection, when offered by the source app.
+    PrimarySelection,
+    /// Selected range from the accessibility bus (Wayland).
+    AtSpi,
     /// Clipboard fallback.
     Clipboard,
 }
@@ -74,11 +78,39 @@ pub fn normalize_selection(text: &str) -> String {
 }
 
 pub trait SelectionOps: Send + Sync {
+    /// Explicit opt-in only. Authorization does not imply replacement support.
+    fn authorize_input(&self) -> Result<(), String> {
+        Err("This backend does not use portal input authorization".into())
+    }
+    fn revoke_input(&self) {}
+    fn input_authorized(&self) -> bool {
+        false
+    }
+    /// Some compositors deliver selection offers only to a focused client.
+    fn requires_focus(&self) -> bool {
+        false
+    }
     /// How [`SelectionOps::read_selection`] obtains its text.
     fn method(&self) -> CaptureMethod;
 
     /// Read the foreground selection natively.
     fn read_selection(&self) -> Result<SelectionContent, String>;
+
+    /// Optional selection-only path before assigning focus to our window.
+    fn read_before_activation(&self) -> Option<SelectionContent> {
+        None
+    }
+
+    /// Selection-only read for compositor gestures, pinned to its source PID.
+    fn read_compositor_selection(&self, _process: u32) -> Result<SelectionContent, String> {
+        Err("No compositor selection reader".into())
+    }
+
+    /// Arm only on the explicit replacement shortcut. None preserves the
+    /// legacy native capture flow on other platforms.
+    fn arm_replacement(&self) -> Option<Result<(SelectionContent, SelectionTarget), String>> {
+        None
+    }
 
     /// Ask the foreground window to copy its selection and wait until the
     /// clipboard changes. A no-op where copies cannot be synthesized; the

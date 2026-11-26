@@ -156,6 +156,7 @@ export const SettingsView: React.FC = () => {
       { value: 'google_free', label: t('settings.translation.providerGoogle') },
       { value: 'youdao_free', label: t('settings.translation.providerYoudao') },
       { value: 'tencent_free', label: t('settings.translation.providerTencent') },
+      { value: 'bilibili_index', label: t('shell.providerBilibili') },
       { value: 'openai', label: t('settings.translation.providerOpenai') },
     ],
     [t],
@@ -177,7 +178,6 @@ export const SettingsView: React.FC = () => {
       { value: 'auto', label: t('settings.general.searchEngineAuto') },
       { value: 'bing', label: t('settings.general.searchEngineBing') },
       { value: 'google', label: t('settings.general.searchEngineGoogle') },
-      { value: 'baidu', label: t('settings.general.searchEngineBaidu') },
       { value: 'custom', label: t('settings.general.searchEngineCustom') },
     ],
     [t],
@@ -428,8 +428,9 @@ export const SettingsView: React.FC = () => {
 
   const matchAppearance = isSearching && isMatch(['appearance', '外观', '界面', 'theme', '主题', 'opacity', '透明度', '动效', '动画', '过渡', '平滑', 'transition', 'animation', 'font', '字号', 'crosshairs', '对齐', 'language', '语言']);
   const matchStartup = isSearching && isMatch(['startup', '开机启动', '自启', 'launch']);
-  const matchProvider = isSearching && isMatch(['provider', '翻译', 'engine', 'openai', 'youdao', 'google', 'tencent', 'target', '语言', '有道', '腾讯', 'bing', '微软']);
-  const matchSearchEngine = isSearching && isMatch(['search', '搜索', '搜索引擎', 'google', 'bing', 'baidu', '百度', '必应', '谷歌', '网页搜索']);
+  const matchProvider = isSearching && isMatch(['provider', '翻译', 'engine', 'openai', 'youdao', 'google', 'tencent', 'bilibili', 'index-translate', '哔哩哔哩', 'b站', 'target', '语言', '有道', '腾讯', 'bing', '微软']);
+  const matchSearchEngine = isSearching && isMatch(['search', '搜索', '搜索引擎', 'google', 'bing', '必应', '谷歌', '网页搜索']);
+  const searchPreset = ['auto', 'bing', 'google'].includes(searchEngine) ? searchEngine : 'custom';
   const matchOcr = isSearching && isMatch(['ocr', '文字识别', 'windows ocr', 'onnx', 'paddle', '语言', '引擎', '原图', '译图', '图片展示', '覆写']);
   const matchShortcuts = isSearching && isMatch(['global', 'shortcuts', '全局', '快捷键', '热键', '划词', '替换', 'ocr', '截图', '截图搜索', '静默', '输入翻译', '手势', '监听', '落墨', '双击复制', 'ctrl+c+c', '剪贴板', '内置']);
   const matchDict = isSearching && isMatch(['dictionary', '词典', '发音', 'audio', 'pronounce', 'ecdict']);
@@ -459,6 +460,7 @@ export const SettingsView: React.FC = () => {
 
   const renderShortcutRow = (item: ShortcutGroupItem) => {
     const status = report?.shortcuts.find((s) => s.id === item.id);
+    if (report?.ready && !status) return null;
     const isRecording = recordingAction === item.id;
     const currentVal = getShortcutValue(item.id);
 
@@ -476,12 +478,18 @@ export const SettingsView: React.FC = () => {
           {status?.active && (
             <span className="text-[10px] text-emerald-400 font-mono shrink-0">
               {status.system
-                ? t('settings.shortcuts.systemHook')
+                ? t(report?.portal_managed ? 'settings.shortcuts.desktopAuthorized' : 'settings.shortcuts.systemHook')
                 : t('settings.shortcuts.ready')}
             </span>
           )}
+          {status?.pending && (
+            <span role="status" className="text-[11px] text-[var(--muted)]">{t('settings.shortcuts.awaitingPortal')}</span>
+          )}
+          {report?.portal_managed && status?.active && (
+            <span className="text-[11px] text-[var(--muted)]">{status.active}</span>
+          )}
           {status?.error && (
-            <div className="flex items-center gap-1 text-[11px] text-amber-400 shrink-0">
+            <div role="status" className="flex items-center gap-1 text-[11px] text-amber-400 shrink-0">
               <AlertCircle className="h-3 w-3 shrink-0" />
               <span>{status.error}</span>
             </div>
@@ -774,6 +782,7 @@ export const SettingsView: React.FC = () => {
                         options={providerOptions}
                       />
                     </div>
+                    <p className="text-[11px] text-[var(--muted)]">{t('settings.translation.bilibiliHint')}</p>
 
                     <div className="flex items-center gap-3">
                       <div className="w-28 shrink-0">
@@ -840,7 +849,7 @@ export const SettingsView: React.FC = () => {
                       </div>
                       <Select
                         ariaLabel="Web search engine"
-                        value={['auto', 'bing', 'google', 'baidu'].includes(searchEngine) ? searchEngine : 'custom'}
+                        value={searchPreset}
                         onChange={(value) => {
                           if (value === 'custom') {
                             const fallbackCustom = 'https://duckduckgo.com/?q=%s';
@@ -854,7 +863,7 @@ export const SettingsView: React.FC = () => {
                         options={searchEngineOptions}
                       />
                     </div>
-                    {!['auto', 'bing', 'google', 'baidu'].includes(searchEngine) && (
+                    {searchPreset === 'custom' && (
                       <div className="flex items-center gap-3 pt-1">
                         <label className="w-28 shrink-0 text-[13px] text-[var(--muted)]">{t('settings.general.urlTemplate')}</label>
                         <Input
@@ -921,6 +930,8 @@ export const SettingsView: React.FC = () => {
               {/* ====== TAB 3: 快捷键与手势 (Shortcuts & Gestures) ====== */}
               {(isSearching ? matchShortcuts : activeTab === 'shortcuts') && (
                 <>
+                  {report?.portal_managed && <p className="text-xs text-[var(--muted)] leading-relaxed">{t('settings.shortcuts.waylandHint')}</p>}
+                  {report?.portal_managed && <p role="status" className="text-xs text-[var(--muted)]">{t(report.keyboard_gestures ? 'settings.shortcuts.kwinGesturesReady' : 'settings.shortcuts.kwinGesturesMissing')}</p>}
                   {/* 快捷键顶部操作条 */}
                   <div className="flex items-center justify-between gap-3 rounded-[var(--r-inner)] border border-[var(--stroke)] bg-[var(--surface-2)]/40 px-3.5 py-2">
                     <span className="text-[11px] text-[var(--muted)] flex items-center gap-1.5">
@@ -995,6 +1006,7 @@ export const SettingsView: React.FC = () => {
                           <div className="w-36 shrink-0">
                             <Select
                               ariaLabel="Ink key"
+                              disabled={Boolean(report?.portal_managed && !report.keyboard_gestures)}
                               value={inkTranslateKey}
                               onChange={(value) => void setInkTranslateKey(value)}
                               options={inkKeyOptions}
@@ -1011,6 +1023,7 @@ export const SettingsView: React.FC = () => {
                           />
                           <Switch
                             checked={doubleCopyEnabled}
+                            disabled={Boolean(report?.portal_managed && !report.keyboard_gestures)}
                             onChange={(checked) => void setDoubleCopyEnabled(checked)}
                             label={t('settings.shortcuts.doubleCopy')}
                           />

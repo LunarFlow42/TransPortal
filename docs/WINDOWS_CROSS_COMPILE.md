@@ -58,4 +58,4 @@ cargo install --locked cargo-xwin
 - **正解**：必须通过 `pnpm tauri build` 进行全流程打包，并覆写 `{"build":{"devUrl":null,"beforeBuildCommand":null}}`，确保前端页面被以生产静态内嵌方式装入二进制。
 
 ### 2. 为什么安装包体积是 32MB 左右？
-- 安装包使用 LZMA 高压缩比打包了完整的单文件 Tauri 内核、前端完整资源以及预置的 ONNX PP-OCRv5 离线多模型组件，用户无需预装 Python、CUDA 或配置额外网络即可离线正常使用。
+- 安装包使用 LZMA 高压缩比打包了完整的单文件 Tauri 内核、前端完整资源以及预置的 ONNX PP-OCRv6 small 离线多模型组件，用户无需预装 Python、CUDA 或配置额外网络即可离线正常使用。

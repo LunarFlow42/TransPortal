@@ -8,7 +8,7 @@ import type { LearningEntry } from '../../types/learning';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn() }));
-vi.mock('@tauri-apps/plugin-dialog', () => ({ save: vi.fn() }));
+vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn(), save: vi.fn() }));
 // Server rendering reads Zustand's startup snapshot by default. Use the real
 // store's live reader cache here; IPC and cache races are tested separately.
 vi.mock('../../store/useLearningStore', async (original) => {
@@ -44,6 +44,7 @@ describe('saved-vocabulary manager', () => {
     const html = renderToStaticMarkup(React.createElement(LearningPanel));
     expect(html).toContain('learning.empty');
     expect(html.match(/learning.exportAll/g)).toHaveLength(2);
+    expect(html).toContain('learning.importSubLoom');
     expect(invoke).not.toHaveBeenCalled();
   });
 
@@ -69,6 +70,17 @@ describe('saved-vocabulary manager', () => {
     const html = renderToStaticMarkup(React.createElement(LearningPanel));
     expect(html).toContain('&lt;script&gt;');
     expect(html).not.toContain('<script>');
+  });
+
+  it('shows video context and a deliberate open-video action', () => {
+    const video: LearningEntry = { ...entry, usage: { ...entry.usage, context: {
+      text: 'A portal opened.', translation: null, source: 'video', video: { url: 'https://www.youtube.com/watch?v=video001&t=37s', timestamp_ms: 37_000 },
+    } } };
+    useLearningStore.setState({ entries: [video], total: 1 });
+    const html = renderToStaticMarkup(React.createElement(LearningPanel));
+    expect(html).toContain('learning.context.video');
+    expect(html).toContain('learning.openVideo');
+    expect(invoke).not.toHaveBeenCalled();
   });
 
   it('retains the previous collection alongside a non-destructive failure message', () => {

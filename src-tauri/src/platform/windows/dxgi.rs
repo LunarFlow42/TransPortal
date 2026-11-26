@@ -1,17 +1,16 @@
 use crate::platform::desktop::ScreenRect;
-use crate::platform::imaging::{crop_monitor_frame, is_all_black};
-use windows::Win32::Foundation::POINT;
 use windows::Win32::Graphics::Direct3D::D3D_FEATURE_LEVEL_11_0;
 use windows::Win32::Graphics::Direct3D11::{
-    D3D11_CPU_ACCESS_READ, D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_MAP_READ,
-    D3D11_MAPPED_SUBRESOURCE, D3D11_SDK_VERSION, D3D11_TEXTURE2D_DESC, D3D11_USAGE_STAGING,
-    D3D11CreateDevice, ID3D11Device, ID3D11DeviceContext, ID3D11Texture2D,
+    D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_MAP_READ, D3D11_MAPPED_SUBRESOURCE, D3D11_SDK_VERSION,
+    D3D11_TEXTURE2D_DESC, D3D11CreateDevice, ID3D11Device, ID3D11DeviceContext, ID3D11Texture2D,
+};
+use windows::Win32::Graphics::Dxgi::Common::{
+    DXGI_MODE_ROTATION_IDENTITY, DXGI_MODE_ROTATION_UNSPECIFIED,
 };
 use windows::Win32::Graphics::Dxgi::{
     CreateDXGIFactory1, DXGI_ERROR_WAIT_TIMEOUT, DXGI_OUTDUPL_FRAME_INFO, IDXGIAdapter1,
     IDXGIFactory1, IDXGIOutput1, IDXGIOutputDuplication, IDXGIResource,
 };
-use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
 use windows::core::Interface;
 
 struct DuplFrameGuard<'a> {
@@ -59,14 +58,15 @@ impl DxgiDesktop {
         }
     }
 
-    /// Capture an output monitor that intersects `region`.
-    pub fn capture_output(&self, region: ScreenRect) -> Result<image::RgbaImage, String> {
+    /// Capture the output containing `region`; a different screen's fresh
+    /// presentation cannot satisfy the request.
+    pub fn capture_output(
+        &self,
+        region: ScreenRect,
+        fresh_after: Option<i64>,
+    ) -> Result<image::RgbaImage, String> {
         unsafe {
-            let mut cursor_pt = POINT::default();
-            let has_cursor = GetCursorPos(&mut cursor_pt).is_ok();
-
             let mut target_output: Option<(IDXGIAdapter1, IDXGIOutput1, ScreenRect)> = None;
-            let mut fallback_output: Option<(IDXGIAdapter1, IDXGIOutput1, ScreenRect)> = None;
 
             let mut adapter_idx = 0;
             while let Ok(adapter) = self.factory.EnumAdapters1(adapter_idx) {
@@ -82,24 +82,19 @@ impl DxgiDesktop {
                                 .max(0) as u32,
                         };
 
-                        let contains_cursor = has_cursor
-                            && cursor_pt.x >= rect.x
-                            && cursor_pt.x < rect.x + rect.width as i32
-                            && cursor_pt.y >= rect.y
-                            && cursor_pt.y < rect.y + rect.height as i32;
-
-                        let overlaps = !(region.x + region.width as i32 <= rect.x
-                            || region.x >= rect.x + rect.width as i32
-                            || region.y + region.height as i32 <= rect.y
-                            || region.y >= rect.y + rect.height as i32);
-
-                        if let Ok(output1) = output.cast::<IDXGIOutput1>() {
-                            if overlaps {
-                                target_output = Some((adapter.clone(), output1, rect));
-                                break;
-                            } else if contains_cursor && fallback_output.is_none() {
-                                fallback_output = Some((adapter.clone(), output1, rect));
+                        if rect.contains(&region)
+                            && let Ok(output1) = output.cast::<IDXGIOutput1>()
+                        {
+                            // Duplication surfaces are unrotated. Use the next
+                            // tier rather than sampling the wrong coordinates.
+                            if !matches!(
+                                desc.Rotation,
+                                DXGI_MODE_ROTATION_IDENTITY | DXGI_MODE_ROTATION_UNSPECIFIED
+                            ) {
+                                return Err("DXGI 输出已旋转，改用桌面坐标捕获。".into());
                             }
+                            target_output = Some((adapter.clone(), output1, rect));
+                            break;
                         }
                     }
                     output_idx += 1;
@@ -110,9 +105,8 @@ impl DxgiDesktop {
                 adapter_idx += 1;
             }
 
-            let (target_adapter, output1, monitor_rect) = target_output
-                .or(fallback_output)
-                .ok_or("未找到匹配当前选区的显示器输出")?;
+            let (target_adapter, output1, monitor_rect) =
+                target_output.ok_or("未找到完整覆盖选区的显示器输出")?;
 
             let mut device: Option<ID3D11Device> = None;
             let mut context: Option<ID3D11DeviceContext> = None;
@@ -147,10 +141,16 @@ impl DxgiDesktop {
             for _ in 0..5 {
                 let status = dupl.AcquireNextFrame(50, &mut frame_info, &mut resource);
                 if status.is_ok() {
-                    if resource.is_some() {
+                    if resource.is_some()
+                        && crate::platform::capture_frames::usable_present(
+                            frame_info.LastPresentTime,
+                            fresh_after,
+                        )
+                    {
                         frame_guard = Some(DuplFrameGuard::new(&dupl));
                         break;
                     }
+                    resource = None;
                     let _ = dupl.ReleaseFrame();
                 } else if status == Err(DXGI_ERROR_WAIT_TIMEOUT.into()) {
                     continue;
@@ -166,33 +166,20 @@ impl DxgiDesktop {
             let mut tex_desc = D3D11_TEXTURE2D_DESC::default();
             texture.GetDesc(&mut tex_desc);
 
-            // Create staging texture for CPU read
-            let staging_desc = D3D11_TEXTURE2D_DESC {
-                Width: tex_desc.Width,
-                Height: tex_desc.Height,
-                MipLevels: 1,
-                ArraySize: 1,
-                Format: tex_desc.Format,
-                SampleDesc: tex_desc.SampleDesc,
-                Usage: D3D11_USAGE_STAGING,
-                BindFlags: 0,
-                CPUAccessFlags: D3D11_CPU_ACCESS_READ.0 as u32,
-                MiscFlags: 0,
-            };
-
-            let mut staging: Option<ID3D11Texture2D> = None;
-            device
-                .CreateTexture2D(&staging_desc, None, Some(&mut staging))
-                .map_err(|e| format!("创建暂存纹理失败：{e}"))?;
-            let staging = staging.ok_or_else(|| "DXGI 暂存纹理创建成功但指针为空".to_string())?;
-
-            context.CopyResource(&staging, &texture);
+            let staging = super::readback::stage_region(
+                &device,
+                &context,
+                &texture,
+                monitor_rect,
+                (tex_desc.Width, tex_desc.Height),
+                region,
+            )?;
 
             // Release the frame from duplication pipeline as soon as GPU copy is dispatched
             frame_guard.release();
 
-            let width = tex_desc.Width as usize;
-            let height = tex_desc.Height as usize;
+            let width = region.width as usize;
+            let height = region.height as usize;
             let mut rgba_bytes = vec![0u8; width * height * 4];
 
             // Map CPU staging buffer
@@ -252,14 +239,8 @@ impl DxgiDesktop {
 
             drop(_map_guard);
 
-            let monitor_image = image::RgbaImage::from_raw(width as u32, height as u32, rgba_bytes)
-                .ok_or_else(|| "DXGI 帧尺寸无效".to_string())?;
-
-            if is_all_black(&monitor_image) {
-                return Err("DXGI 截图像素全为空白。".into());
-            }
-
-            crop_monitor_frame(&monitor_image, monitor_rect, region)
+            image::RgbaImage::from_raw(region.width, region.height, rgba_bytes)
+                .ok_or_else(|| "DXGI 帧尺寸无效".to_string())
         }
     }
 }

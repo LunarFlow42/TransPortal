@@ -17,6 +17,7 @@ export function MemorySettingsPanel({ bare = false }: { bare?: boolean } = {}) {
   const [trimming, setTrimming] = useState(false);
   const [lastTrim, setLastTrim] = useState<TrimResult | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
+  const procfs = report?.measurement === 'linux_procfs';
 
   const loadUsage = async () => {
     setLoading(true);
@@ -66,7 +67,7 @@ export function MemorySettingsPanel({ bare = false }: { bare?: boolean } = {}) {
             </span>
           </div>
           <p className="text-[11px] text-[var(--muted)]">
-            {t('settings.advanced.rustMemoryDesc')}
+              {t(procfs ? 'settings.advanced.procfsMemoryDesc' : 'settings.advanced.rustMemoryDesc')}
           </p>
         </div>
 
@@ -94,7 +95,7 @@ export function MemorySettingsPanel({ bare = false }: { bare?: boolean } = {}) {
         >
           <HoverTipText
             text={isExpanded ? t('settings.advanced.collapseMemory') : t('settings.advanced.expandMemory')}
-            tip={t('settings.advanced.memoryWorkingSetTooltip')}
+            tip={t(procfs ? 'settings.advanced.procfsRssHint' : 'settings.advanced.memoryWorkingSetTooltip')}
             className="text-[11px]"
           />
           <ChevronDown
@@ -108,7 +109,7 @@ export function MemorySettingsPanel({ bare = false }: { bare?: boolean } = {}) {
               <div className="flex flex-col gap-0.5 rounded-[var(--r-inner)] border border-[var(--stroke)] bg-[var(--surface-2)] p-2">
                 <HoverTipText
                   text={t('settings.advanced.totalWorkingSet')}
-                  tip={t('settings.advanced.memoryWorkingSetTooltip')}
+                  tip={t(procfs ? 'settings.advanced.procfsRssHint' : 'settings.advanced.memoryWorkingSetTooltip')}
                   className="text-[10px] text-[var(--faint)]"
                 />
                 <span className="font-mono font-medium text-[var(--text)]">
@@ -118,8 +119,8 @@ export function MemorySettingsPanel({ bare = false }: { bare?: boolean } = {}) {
 
               <div className="flex flex-col gap-0.5 rounded-[var(--r-inner)] border border-[var(--stroke)] bg-[var(--surface-2)] p-2">
                 <HoverTipText
-                  text={t('settings.advanced.totalCommit')}
-                  tip={t('settings.advanced.memoryFootnote')}
+                  text={t(procfs ? 'settings.advanced.privateResident' : 'settings.advanced.totalCommit')}
+                  tip={t(procfs ? 'settings.advanced.procfsPrivateHint' : 'settings.advanced.memoryFootnote')}
                   className="text-[10px] text-[var(--faint)]"
                 />
                 <span className="font-mono font-medium text-[var(--text)]">

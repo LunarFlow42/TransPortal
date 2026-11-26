@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
-import { save } from '@tauri-apps/plugin-dialog';
-import { Bookmark, ChevronLeft, ChevronRight, Download, Loader2, RefreshCw, Search, Trash2 } from 'lucide-react';
+import { invoke } from '@tauri-apps/api/core';
+import { open, save } from '@tauri-apps/plugin-dialog';
+import { openUrl } from '@tauri-apps/plugin-opener';
+import { Bookmark, ChevronLeft, ChevronRight, Download, Loader2, RefreshCw, Search, Trash2, Upload } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button, IconButton, Input, Pill } from '../ui';
 import { LEARNING_CHANGED_EVENT, LEARNING_PAGE_SIZE, useLearningStore } from '../../store/useLearningStore';
@@ -71,6 +73,24 @@ export const LearningPanel: React.FC = () => {
     }
   };
 
+  const importSubLoom = async () => {
+    if (busy) return;
+    setChoosingFile(true);
+    setMessage(null);
+    useLearningStore.getState().clearError();
+    try {
+      const path = await open({ multiple: false, directory: false, filters: [{ name: 'SubLoom JSON', extensions: ['json'] }] });
+      if (typeof path !== 'string') return;
+      const result = await invoke<{ created: number; duplicates: number }>('learning_import_subloom', { path });
+      setMessage(t('learning.importedSubLoom', result));
+      refresh();
+    } catch (error) {
+      useLearningStore.setState({ error: String(error) });
+    } finally {
+      setChoosingFile(false);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-3">
       <p className="text-xs text-[var(--muted)] leading-relaxed">{t('learning.privacyHint')}</p>
@@ -96,7 +116,10 @@ export const LearningPanel: React.FC = () => {
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-[11px] text-[var(--muted)]">{t('learning.count', { count: total })}</span>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="button" size="sm" disabled={busy || loading} onClick={() => void importSubLoom()}>
+            <Upload className="h-3 w-3" />{t('learning.importSubLoom')}
+          </Button>
           {(['json', 'tsv'] as const).map((format) => (
             <Button type="button" key={format} size="sm" disabled={busy || loading} onClick={() => void exportCollection(format)}>
               {exporting === format ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
@@ -141,6 +164,12 @@ export const LearningPanel: React.FC = () => {
                   <span className="text-[10px] text-[var(--muted)]">{t(`learning.context.${entry.usage.context.source}`)}</span>
                   <p className="mt-1">{entry.usage.context.text}</p>
                   {entry.usage.context.translation && <p className="mt-1 text-[var(--muted)]">{entry.usage.context.translation}</p>}
+                  {entry.usage.context.video && /^https?:\/\//.test(entry.usage.context.video.url) && (
+                    <Button type="button" size="sm" variant="subtle" onClick={() => {
+                      const video = entry.usage.context?.video;
+                      if (video) void openUrl(video.url).catch((error: unknown) => useLearningStore.setState({ error: String(error) }));
+                    }}>{t('learning.openVideo', { time: new Date(entry.usage.context.video.timestamp_ms).toISOString().slice(11, 19) })}</Button>
+                  )}
                 </div>
               ) : <span className="text-[10px] text-[var(--muted)]">{t('learning.withoutExample')}</span>}
               {deleteId === entry.id && (

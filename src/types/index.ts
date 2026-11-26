@@ -136,7 +136,7 @@ export interface LookupNode {
   highlightWord?: string;
 }
 
-export type CaptureMethod = 'ui_automation' | 'clipboard' | 'ocr';
+export type CaptureMethod = 'ui_automation' | 'at_spi' | 'primary_selection' | 'clipboard' | 'ocr';
 
 export interface SelectionBounds {
   left: number;
@@ -174,12 +174,15 @@ export interface ShortcutStatus {
   active: string | null;
   error: string | null;
   system: boolean;
+  pending?: boolean;
 }
 
 export interface ShortcutReport {
   revision: number;
   ready: boolean;
   shortcuts: ShortcutStatus[];
+  portal_managed?: boolean;
+  keyboard_gestures?: boolean;
 }
 
 export interface IntegrityReport {
@@ -268,6 +271,8 @@ export interface OcrInstallProgress {
 
 export interface OcrStatus {
   supported: boolean;
+  monitoring_supported?: boolean;
+  compositor_selection?: boolean;
   engine: OcrEngineInfo;
   engines: OcrEngineInfo[];
   config: OcrConfig;
@@ -289,6 +294,7 @@ export type ProviderType =
   | 'google_free'
   | 'youdao_free'
   | 'tencent_free'
+  | 'bilibili_index'
   | 'openai';
 
 export type ThemeMode = 'system' | 'light' | 'dark';
@@ -310,7 +316,7 @@ export interface PersistedSettings {
   ocrPictureHotkey?: string;
   ocrTextHotkey?: string;
   ocrSearchHotkey?: string;
-  searchEngine?: 'auto' | 'bing' | 'google' | 'baidu' | string;
+  searchEngine?: string;
   replaceSelectionHotkey?: string;
   silentOcrHotkey?: string;
   inputTranslateHotkey?: string;
@@ -338,6 +344,7 @@ export interface PersistedSettings {
 }
 
 export interface MemoryReport {
+  measurement?: 'linux_procfs' | null;
   total_working_set_bytes: number;
   total_private_bytes: number;
   main_working_set_bytes: number;

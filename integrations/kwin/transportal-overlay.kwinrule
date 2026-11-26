@@ -1,0 +1,9 @@
+[TransPortalOverlay]
+Description=TransPortal passive lookup overlay
+acceptfocus=false
+acceptfocusrule=2
+title=^TransPortal Overlay [[][0-9]+[]]$
+titlematch=3
+wmclass=^(transportal|com[.]transportal[.]app)$
+wmclasscomplete=false
+wmclassmatch=3

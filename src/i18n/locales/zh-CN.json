@@ -20,6 +20,9 @@
     "search": "搜索设置项..."
   },
   "learning": {
+    "importSubLoom": "导入 SubLoom",
+    "importedSubLoom": "新增 {{created}} 条，匹配已有用法 {{duplicates}} 条。",
+    "openVideo": "打开来源视频（{{time}}）",
     "title": "生词收藏",
     "rememberUsage": "记住这个用法",
     "chooseUsageHint": "只保存你选择的一个释义和已有例句，不采集外部上下文。",
@@ -56,6 +59,7 @@
     "context": {
       "dictionary": "词典例句",
       "generated": "AI 生成例句",
+      "video": "视频字幕原句",
       "lookup": "已有点词原句"
     }
   },
@@ -97,7 +101,6 @@
       "searchEngineAuto": "智能自动分流匹配",
       "searchEngineBing": "微软必应",
       "searchEngineGoogle": "谷歌搜索",
-      "searchEngineBaidu": "百度搜索",
       "searchEngineCustom": "自定义搜索引擎 URL",
       "searchEngineHint": "用于截图文字搜索。默认自动将根据系统语言智能选择。",
       "urlTemplate": "URL 模板",
@@ -117,7 +120,8 @@
       "providerYoudao": "有道翻译",
       "providerTencent": "腾讯翻译君",
       "providerOpenai": "OpenAI 兼容模型",
-      "freeProvidersHint": "免密钥在线通道，开箱即用；必应、谷歌、有道、腾讯均支持智能语言识别。",
+      "freeProvidersHint": "必应、谷歌、有道、腾讯和哔哩哔哩均提供免密钥的在线翻译。",
+      "bilibiliHint": "哔哩哔哩 Index-Translate 无需 API Key。选用后，提交翻译的文字会发送给哔哩哔哩。",
       "targetLanguage": "目标译文语言",
       "targetLangHint": "输入语言与目标语言相同时将自动互译对调。",
       "openaiConfig": "自定义模型接口配置",
@@ -151,6 +155,11 @@
       "enrichedInstalled": "已导入富化词库 · {{phonetics}} 条音标、{{tags}} 条标签增强"
     },
     "shortcuts": {
+      "awaitingPortal": "等待桌面快捷键授权…",
+      "desktopAuthorized": "桌面已授权",
+      "waylandHint": "Wayland 快捷键由桌面授权，实际键位可由系统调整。剪贴板监控只能读取合成器提供的内容。",
+      "kwinGesturesReady": "KWin 手势插件已连接。双复制与落墨不会截断原按键；查词需要源应用提供可访问选区。",
+      "kwinGesturesMissing": "双复制与落墨需要启用可选的 TransPortal KWin 原生手势插件。",
       "resetKeybindings": "恢复默认键位",
       "resetKeybindingsSuccess": "已恢复默认快捷键",
       "recording": "按下组合键…",
@@ -219,6 +228,10 @@
       "doubleCopyPrompt": "选中文字，按住 Ctrl，在 0.5 秒内按两次 C。普通复制保持可用。"
     },
     "advanced": {
+      "procfsMemoryDesc": "来自 /proc 的本进程常驻内存（RSS），非固定估算值",
+      "procfsRssHint": "本进程及 WebKit 子进程的 RSS 合计；共享页可能重复计算。",
+      "privateResident": "私有常驻页",
+      "procfsPrivateHint": "smaps_rollup 的私有常驻页；权限不足时用 RssAnon 近似，不等同于 Windows Commit。",
       "integrity": "程序完整性校验",
       "integrityDesc": "离线词典数据库、本地核心引擎模型与静态资产自检",
       "capture": "截图管线诊断",
@@ -256,8 +269,8 @@
       "engine": "识别引擎",
       "engineHint": "选择本地系统 WinRT OCR 或纯离线 ONNX 深度学习推理引擎",
       "language": "识别语言",
-      "languageHint": "指定目标屏幕文字的语言模型（ONNX 默认支持中英文混排）",
-      "mixedLang": "中英混合通用识别",
+      "languageHint": "指定目标屏幕文字的语言模型（ONNX 支持简繁中文、英文、日文等 50 种语言）",
+      "mixedLang": "多语言通用识别（50 种语言）",
       "systemLang": "跟随系统语言",
       "notReady": "未就绪",
       "pictureDefaultView": "默认展示",
@@ -399,6 +412,7 @@
     "categoryTitle": "配置导航"
   },
   "shell": {
+    "portalCaptureHint": "截图由 Wayland 桌面授权并选择区域，不会后台录屏；持续监控尚未启用。",
     "translating": "正在翻译...",
     "ocrRecognizing": "正在分析识别屏幕文字...",
     "sourceText": "原文",
@@ -436,6 +450,7 @@
     "providerGoogle": "Google 谷歌",
     "providerYoudao": "有道翻译",
     "providerTencent": "腾讯翻译君",
+    "providerBilibili": "哔哩哔哩 Index-Translate",
     "providerOpenai": "OpenAI",
     "intervalSeconds": "{{count}} 秒",
     "selectWordHintPrefix": "划选文字后按 ",

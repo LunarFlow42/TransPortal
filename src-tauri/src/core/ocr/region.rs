@@ -165,7 +165,9 @@ impl RegionService {
         if pending.cancel.is_cancelled() {
             return Err("区域选择已取消。".into());
         }
-        Ok(pending.frozen.as_raw().clone())
+        let frozen = Arc::clone(&pending.frozen);
+        drop(state); // A 4K IPC copy must not block cancel or the next capture.
+        Ok(frozen.as_raw().clone())
     }
 
     /// Keep our own overlay windows out of desktop captures.
@@ -292,6 +294,11 @@ impl RegionService {
     }
 
     pub fn prewarm(app: &AppHandle) {
+        // A portal owns its selection UI. Never map/position a full-screen
+        // coordinate overlay on a compositor that does not expose coordinates.
+        if !app.state::<RegionService>().desktop.supports_monitoring() {
+            return;
+        }
         if let Ok(window) = Self::ensure_window(app) {
             let service = app.state::<RegionService>();
             if let Ok(bounds) = service.desktop.bounds() {
@@ -329,35 +336,31 @@ impl RegionService {
         let app_handle = app.clone();
         tauri::async_runtime::spawn(async move {
             tokio::time::sleep(std::time::Duration::from_millis(350)).await;
-            let service = app_handle.state::<RegionService>();
-            let should_show = {
-                let state = service.state.lock().unwrap();
-                state
-                    .pending
-                    .as_ref()
-                    .is_some_and(|p| p.selection.id == id && !p.cancel.is_cancelled())
-            };
-            if should_show {
-                let _ = Self::show_window(&app_handle);
-            }
+            let ui = app_handle.clone();
+            let _ = app_handle.run_on_main_thread(move || {
+                let _ = Self::show_window(&ui, id);
+            });
         });
         Ok(())
     }
 
-    pub fn show_window(app: &AppHandle) -> Result<(), String> {
+    pub fn show_window(app: &AppHandle, id: u64) -> Result<(), String> {
         let service = app.state::<RegionService>();
         {
             let state = service.state.lock().unwrap();
             let Some(pending) = state.pending.as_ref() else {
                 return Ok(());
             };
-            if pending.cancel.is_cancelled() {
+            if pending.selection.id != id || pending.cancel.is_cancelled() {
                 return Ok(());
             }
         }
         if let Some(window) = app.get_webview_window(WINDOW_LABEL) {
             let _ = PlatformWindow::set_ignore_cursor_events(&window, false);
-            window.show().map_err(|e| e.to_string())?;
+            if !PlatformWindow::is_window_visible(&window) {
+                window.show().map_err(|e| e.to_string())?;
+                PlatformWindow::force_show_window(&window);
+            }
         }
         Ok(())
     }

@@ -4,6 +4,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ensureDirectoryExecutables, ensureExecutable } from './executable-permissions.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -64,13 +65,18 @@ run('pnpm', [
   '{"build":{"devUrl":null,"beforeBuildCommand":null}}',
 ]);
 
-// 6. 输出结果与计算 SHA-256
+// 6. 补全可执行权限、输出结果与计算 SHA-256
 const tauriConf = JSON.parse(readFileSync(join(root, 'src-tauri/tauri.conf.json'), 'utf8'));
 const version = tauriConf.version;
-const nsisDir = join(root, 'src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis');
+const releaseDir = join(root, 'src-tauri/target/x86_64-pc-windows-msvc/release');
+const nsisDir = join(releaseDir, 'bundle/nsis');
 const installerPath = join(nsisDir, `TransPortal_${version}_x64-setup.exe`);
 
+await ensureDirectoryExecutables(releaseDir);
+await ensureDirectoryExecutables(nsisDir);
+
 if (existsSync(installerPath)) {
+  await ensureExecutable(installerPath);
   const buffer = readFileSync(installerPath);
   const hash = createHash('sha256').update(buffer).digest('hex');
   const sha256Path = `${installerPath}.sha256`;

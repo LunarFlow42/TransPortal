@@ -138,12 +138,9 @@ impl TtsAssets {
 
     /// Resolves the shared ONNX Runtime dynamic library (`onnxruntime.dll` / `.so`).
     pub fn resolve_runtime(&self) -> Result<PathBuf, String> {
-        let lib_name = match std::env::consts::OS {
-            "windows" => "onnxruntime.dll",
-            "linux" => "libonnxruntime.so.1.22.0",
-            "macos" => "libonnxruntime.1.22.0.dylib",
-            _ => "onnxruntime.dll",
-        };
+        let platform = crate::core::ocr::assets::current_platform();
+        let runtime = crate::core::ocr::assets::runtime_for(&platform)?;
+        let lib_name = runtime.library.as_str();
 
         // 1. Check OCR runtime directory first if configured
         if let Some(ocr_dir) = &self.ocr_runtime_dir {
@@ -382,7 +379,7 @@ pub fn verify_file(path: &Path, artifact: &Artifact) -> Result<(), String> {
         }
         hasher.update(&buffer[..read]);
     }
-    if format!("{:x}", hasher.finalize()) != artifact.sha256 {
+    if crate::core::integrity::hex_lower(&hasher.finalize()) != artifact.sha256 {
         return Err(format!("{} SHA-256 校验失败", artifact.name));
     }
     Ok(())

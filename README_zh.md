@@ -16,7 +16,7 @@
   <img src="https://img.shields.io/badge/Tauri-v2.12-blue?logo=tauri" alt="Tauri v2" />
   <img src="https://img.shields.io/badge/Rust-2024_Edition-orange?logo=rust" alt="Rust 2024" />
   <img src="https://img.shields.io/badge/React-19-61dafb?logo=react" alt="React 19" />
-  <img src="https://img.shields.io/badge/OCR-ONNX_PP--OCRv5-emerald" alt="ONNX OCR" />
+  <img src="https://img.shields.io/badge/OCR-ONNX_PP--OCRv6-emerald" alt="ONNX OCR" />
   <img src="https://img.shields.io/badge/TTS-Kokoro_ONNX-indigo" alt="Kokoro TTS" />
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License" />
 </p>
@@ -29,9 +29,9 @@ TransPortal 专为高频阅读、代码查阅与办公协作场景打造，彻�
 
 - ⚡ **毫秒级瞬态气泡（HUD Quick Popup）**：无边框无标题栏，贴近光标弹出并带屏幕边界智能钳制。失焦或按 `Esc` 毫秒级即时隐退，绝不干扰主工作区。
 - 🎯 **全局智能划词与原地替换**：优先通过 Windows 原生 UI Automation `TextPattern` 穿透捕获选区（失败自动平滑降级剪贴板）；支持将译文极速静默覆写回原选区输入框。
-- 🔍 **本地离线与双模 OCR 识别**：内置低延迟原生框选器，集成 **ONNX PP-OCRv5 FP32** 纯本地推理引擎（中英混合离线高精度识别，无需配置 Python 环境或独立显卡）；支持图文双栏对照、原图覆盖译文、截图文字搜索与静默提取入剪贴板。
+- 🔍 **本地离线与双模 OCR 识别**：内置低延迟原生框选器，集成 **ONNX PP-OCRv6 small FP32** 纯本地推理引擎（支持简繁中文、英文、日文等 50 种语言离线高精度识别，无需配置 Python 环境或独立显卡）；支持图文双栏对照、原图覆盖译文、截图文字搜索与静默提取入剪贴板。
 - 🔊 **纯离线 Kokoro ONNX 语音合成 (TTS)**：内置 INT8 量化神经语音模型（仅约 **90.6 MB** 资源包），支持离线生成自然流畅的高品质英音与美音发音，内置动态复合词音素分解与智能 fallback，查词即听纯正音色。
-- 📚 **富化离线词库与在线补充**：默认将约 77 万条 ECCEDICT 基础词库与英美音标、考试标签增强数据合并后导入 `redb`。本地数据可补充在线词卡的标签、词形与词频，释义来源保持独立；同时兼容 Bing、Google、有道、腾讯及自定义 OpenAI 兼容流式接口，支持**一键获取模型列表（Auto Fetch Models）**。
+- 📚 **富化离线词库与在线补充**：默认将约 77 万条 ECCEDICT 基础词库与英美音标、考试标签增强数据合并后导入 `redb`。本地数据可补充在线词卡的标签、词形与词频，释义来源保持独立；在线翻译支持 Bing、Google、有道、腾讯、哔哩哔哩 Index-Translate，以及支持**一键获取模型列表（Auto Fetch Models）**的自定义 OpenAI 兼容流式接口。
 - 🛡️ **微虚线交互与全量国际化 (i18n)**：界面杜绝冗余的 `?` 问号噪点与中英双拼括号，采用现代操作系统的微虚线暗线设计（Dashed Affordance），鼠标悬停（Hover）即优雅弹出磨砂玻璃说明；支持简体中文与英文无感即时切换。
 - 📊 **多管线捕获探针与截屏诊断**：内置多层捕获探针（DXGI / WGC Window / WGC Monitor / GDI），根据前台窗口属性自动调度最高效截屏通道，支持一键生成并复制全链路诊断报告。
 - 🍃 **精巧物理内存管理**：Rust 核心常驻物理内存仅需 **~30-60 MB**（相较传统 Electron 架构内存降低 70%+），内置后台双阶段物理内存深度修剪机制。
@@ -70,7 +70,7 @@ flowchart TD
     CORE["跨平台核心层 core/<br/>(翻译引擎注册表 / 字典编排 / 离线 redb / OCR 会话 / 热键状态)"]
     PLATFORM["操作系统契约层 platform/<br/>(WindowOps / SelectionOps / ClipboardOps / DesktopCapture)"]
     WIN["Windows 平台实现<br/>(Win32 / UI Automation / DWM / DXGI / Windows OCR)"]
-    LIN["Linux 平台实现<br/>(X11 / Wayland 原生适配)"]
+    LIN["Linux Wayland 平台实现<br/>(XDG Portal / GTK / procfs)"]
 
     UI <-->|"IPC 序列化通信"| IPC
     IPC --> CORE
@@ -82,12 +82,18 @@ flowchart TD
 - **架构约束守则**：`core/` 严禁包含操作系统特定宏（`cfg(target_os)`）与原生 API 依赖，所有跨平台能力均通过 `platform/` 抽象契约提供，并通过自动化架构检查脚本（`scripts/check-architecture.sh`）持续死守。
 - **窗口单例与状态同步**：瞬态浮窗与截图遮罩采用单例预热生命周期（`show` / `hide` / `set_position`），避免反复重建 WebView2 造成的白屏闪烁与内存泄漏；底层 Win32 API 与 Tao 窗口焦点保持强一致性同步唤醒。
 
+Linux 原生适配仅面向 **Wayland**：Portal 授权快捷键与截图、GTK 剪贴板/primary
+selection、合成器管理的窗口和真实 `/proc` 内存统计。持续录屏、输入注入尚未实现，
+不维护 X11。详见 [Wayland 能力与限制](docs/LINUX_WAYLAND.md)。
+[KDE Plasma 6 可选扩展](integrations/kwin/README.md) 提供鼠标旁不激活浮层、被动双复制和落墨手势，
+以及兼容文本字段的原地替换。替换不动剪贴板，不使用 libei 模拟按键。
+
 ---
 
 ## 💻 快速开始
 
 ### 运行环境准备
-- **Node.js** >= 18 + **pnpm**
+- **Node.js** >= 22.12 + **pnpm**
 - **Rust** (stable toolchain)
 - **操作系统**：
   - Windows 10 (2004+) / Windows 11（系统自带 WebView2）
@@ -102,7 +108,7 @@ cd TransPortal
 # 2. 安装前端依赖
 pnpm install
 
-# 3. 准备 OCR 离线模型资源（下载、校验并暂存 PP-OCRv5 模型）
+# 3. 准备 OCR 离线模型资源（下载、校验并暂存 PP-OCRv6 small 模型）
 pnpm ocr:prepare
 
 # 4. 启动本地开发热重载（Vite + Tauri）
@@ -155,6 +161,7 @@ pnpm build:release
 - 📖 [用户使用指南 (User Guide)](docs/USER_GUIDE.md)
 - 🧠 [本地 OCR 模型说明与基准测试](docs/OCR.md)
 - 🛡️ [安装包 SHA-256 启动完整性自检](docs/STARTUP_CHECKS.md)
+- [Linux Wayland 原生适配说明](docs/LINUX_WAYLAND.md)
 
 ---
 

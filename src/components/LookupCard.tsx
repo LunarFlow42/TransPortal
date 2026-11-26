@@ -119,9 +119,10 @@ export const LookupCard: React.FC<LookupCardProps> = ({
       { value: 'google_free' as ProviderType, label: 'Google' },
       { value: 'youdao_free' as ProviderType, label: i18n.language.startsWith('zh') ? '有道' : 'Youdao' },
       { value: 'tencent_free' as ProviderType, label: i18n.language.startsWith('zh') ? '腾讯' : 'Tencent' },
+      { value: 'bilibili_index' as ProviderType, label: t('shell.providerBilibili') },
       { value: 'openai' as ProviderType, label: 'OpenAI' },
     ],
-    [i18n.language],
+    [i18n.language, t],
   );
 
   const aiTemplateOptions = React.useMemo(

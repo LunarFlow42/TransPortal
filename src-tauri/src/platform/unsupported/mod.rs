@@ -28,6 +28,7 @@ impl Backend for UnsupportedBackend {
     type Clipboard = UnsupportedClipboard;
     type Gestures = UnsupportedGestures;
     type Desktop = UnsupportedDesktop;
+    type Shortcuts = super::shortcuts::NativeShortcuts;
     const CAPABILITIES: Capabilities = Capabilities::NONE;
 
     fn native_ocr() -> Option<Arc<dyn OcrEngine>> {
@@ -182,6 +183,9 @@ impl ClipboardOps for UnsupportedClipboard {
 #[derive(Default)]
 pub struct UnsupportedDesktop;
 impl DesktopCapture for UnsupportedDesktop {
+    fn supports_monitoring(&self) -> bool {
+        false
+    }
     fn bounds(&self) -> Result<ScreenRect, String> {
         Err("当前平台尚未支持屏幕区域自动翻译。".into())
     }
@@ -218,6 +222,7 @@ impl SystemOps for UnsupportedSystem {
 
 fn get_memory_usage() -> Result<MemoryReport, String> {
     Ok(MemoryReport {
+        measurement: None,
         total_working_set_bytes: 40 * 1024 * 1024,
         total_private_bytes: 30 * 1024 * 1024,
         main_working_set_bytes: 20 * 1024 * 1024,

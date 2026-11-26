@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { readdir } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ensureDirectoryExecutables, ensureExecutable } from './executable-permissions.mjs';
 import { releaseChecksums } from './integrity/release-checksums.mjs';
 import { seal } from './integrity/seal.mjs';
 
@@ -35,10 +36,14 @@ if (target ? target.includes('windows') : process.platform === 'win32') {
   const application = metadata.packages.find(pkg => resolve(pkg.manifest_path) === join(root, 'src-tauri', 'Cargo.toml'));
   const binary = application?.targets.find(target => target.kind.includes('bin'));
   if (!binary) throw new Error('Could not find the application executable in Cargo metadata');
-  await seal(join(buildDirectory, `${binary.name}.exe`), application.version, { installerManifest: false });
+  const executable = join(buildDirectory, `${binary.name}.exe`);
+  await ensureExecutable(executable);
+  await seal(executable, application.version, { installerManifest: false });
 }
 for (const directory of await readdir(bundleRoot, { withFileTypes: true })) {
   if (directory.isDirectory() && ['nsis', 'msi', 'dmg', 'deb', 'rpm', 'appimage'].includes(directory.name)) {
-    console.log(`Release checksums: ${await releaseChecksums(join(bundleRoot, directory.name))}`);
+    const bundleDirectory = join(bundleRoot, directory.name);
+    await ensureDirectoryExecutables(bundleDirectory);
+    console.log(`Release checksums: ${await releaseChecksums(bundleDirectory)}`);
   }
 }

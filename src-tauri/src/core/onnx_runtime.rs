@@ -41,14 +41,18 @@ mod tests {
 
     #[test]
     fn api_version_matches_ocr_and_tts_resources() {
-        let expected = format!("1.{}.0", ort::sys::ORT_API_VERSION);
-        assert_eq!(
+        let expected_prefix = format!("1.{}.", ort::sys::ORT_API_VERSION);
+        assert!(
+            crate::core::ocr::assets::manifest()
+                .runtime_version
+                .starts_with(&expected_prefix),
+            "OCR runtime {} must match ORT ABI 1.{}",
             crate::core::ocr::assets::manifest().runtime_version,
-            expected
+            ort::sys::ORT_API_VERSION
         );
         assert_eq!(
             crate::core::tts::assets::manifest().runtime_version,
-            expected
+            crate::core::ocr::assets::manifest().runtime_version
         );
     }
 

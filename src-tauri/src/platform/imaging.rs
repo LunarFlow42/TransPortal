@@ -7,6 +7,28 @@ pub fn is_all_black(image: &image::RgbaImage) -> bool {
     !image.pixels().any(|p| p[0] > 0 || p[1] > 0 || p[2] > 0)
 }
 
+/// Map physical desktop coordinates to a single GPU frame. The frame pool may
+/// still have its old allocation after a resize. Never read padding as content.
+pub fn readback_origin(
+    source: ScreenRect,
+    region: ScreenRect,
+    content: (u32, u32),
+    texture: (u32, u32),
+) -> Result<(u32, u32), String> {
+    region.validate()?;
+    if content != (source.width, source.height)
+        || content.0 > texture.0
+        || content.1 > texture.1
+        || !source.contains(&region)
+    {
+        return Err("捕获源尺寸已改变，或单帧未覆盖整个选区。".into());
+    }
+    Ok((
+        (i64::from(region.x) - i64::from(source.x)) as u32,
+        (i64::from(region.y) - i64::from(source.y)) as u32,
+    ))
+}
+
 pub fn crop_monitor_frame(
     monitor_image: &image::RgbaImage,
     monitor_rect: ScreenRect,
@@ -47,6 +69,30 @@ pub fn crop_monitor_frame(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn readback_uses_physical_offsets_and_rejects_resized_or_partial_surfaces() {
+        let screen = ScreenRect {
+            x: -3840,
+            y: -160,
+            width: 3840,
+            height: 2160,
+        };
+        let subtitle = ScreenRect {
+            x: -3200,
+            y: 1640,
+            width: 1840,
+            height: 160,
+        };
+        let size = (3840, 2160);
+        assert_eq!(
+            readback_origin(screen, subtitle, size, size).unwrap(),
+            (640, 1800)
+        );
+        assert!(readback_origin(screen, subtitle, (1920, 1080), size).is_err());
+        assert!(readback_origin(screen, subtitle, size, (3840, 1920)).is_err());
+        assert!(readback_origin(screen, ScreenRect { x: -10, ..subtitle }, size, size).is_err());
+    }
 
     #[test]
     fn test_crop_monitor_frame_fully_contained() {

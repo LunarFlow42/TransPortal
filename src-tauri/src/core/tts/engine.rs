@@ -7,7 +7,7 @@ use ort::environment::Environment;
 use ort::ep::CPU;
 use ort::inputs;
 use ort::session::Session;
-use ort::session::builder::GraphOptimizationLevel;
+use ort::session::builder::{AutoDevicePolicy, GraphOptimizationLevel};
 use ort::value::Tensor;
 use std::collections::HashMap;
 use std::ffi::CStr;
@@ -72,6 +72,8 @@ impl KokoroEngine {
         let builder = Session::builder(&environment)
             .map_err(|e| TtsError::Inference(format!("创建会话构建器失败: {e}")))?;
         let mut builder = builder
+            .with_auto_device(AutoDevicePolicy::Default)
+            .map_err(|e| TtsError::Inference(format!("配置默认设备策略失败: {e}")))?
             .with_execution_providers([CPU::default().with_arena_allocator(false).build()])
             .map_err(|e| TtsError::Inference(format!("配置 CPU Provider 失败: {e}")))?
             // Preserve rc.10's ORT_ENABLE_ALL setting on the bundled 1.22 runtime.

@@ -12,6 +12,24 @@ impl OcrUtils {
         mean_vals: &[f32],
         norm_vals: &[f32],
     ) -> Array4<f32> {
+        Self::normalize_channels(img_src, mean_vals, norm_vals, [0, 1, 2])
+    }
+
+    /// PaddleOCR's official exports consume BGR even though image::RgbImage is RGB.
+    pub fn subtract_mean_normalize_bgr(
+        img_src: &image::RgbImage,
+        mean_vals: &[f32],
+        norm_vals: &[f32],
+    ) -> Array4<f32> {
+        Self::normalize_channels(img_src, mean_vals, norm_vals, [2, 1, 0])
+    }
+
+    fn normalize_channels(
+        img_src: &image::RgbImage,
+        mean_vals: &[f32],
+        norm_vals: &[f32],
+        channels_order: [usize; 3],
+    ) -> Array4<f32> {
         let cols = img_src.width() as usize;
         let rows = img_src.height() as usize;
         let channels = 3usize;
@@ -24,7 +42,7 @@ impl OcrUtils {
             for c in 0..cols {
                 let pixel_offset = row_offset + c * channels;
                 for ch in 0..channels {
-                    let val = f32::from(raw[pixel_offset + ch]);
+                    let val = f32::from(raw[pixel_offset + channels_order[ch]]);
                     input_tensor[[0, ch, r, c]] = (val - mean_vals[ch]) * norm_vals[ch];
                 }
             }
@@ -143,9 +161,9 @@ impl OcrUtils {
         let mut part_img = image::RgbImage::new(img_crop_width, img_crop_height);
         imageproc::geometric_transformations::warp_into(
             &img_crop,
-            &projection,
+            projection,
             Interpolation::Nearest,
-            image::Rgb([255, 255, 255]),
+            imageproc::geometric_transformations::Border::Constant(image::Rgb([255, 255, 255])),
             &mut part_img,
         );
 

@@ -9,6 +9,7 @@ mod keyboard_hook;
 mod memory;
 mod ocr;
 mod pointer;
+mod readback;
 mod selection;
 mod size_move;
 mod system;
@@ -39,6 +40,7 @@ impl Backend for WindowsBackend {
     type Clipboard = WindowsClipboard;
     type Gestures = KeyboardHook;
     type Desktop = WindowsDesktop;
+    type Shortcuts = super::shortcuts::NativeShortcuts;
     const CAPABILITIES: Capabilities = Capabilities::ALL;
 
     fn native_ocr() -> Option<Arc<dyn OcrEngine>> {

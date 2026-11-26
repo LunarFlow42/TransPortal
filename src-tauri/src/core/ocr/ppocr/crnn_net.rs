@@ -1,5 +1,6 @@
 use super::types::{OcrError, TextLine};
 use super::utils::OcrUtils;
+use ndarray::{Array4, s};
 use ort::environment::Environment;
 use ort::inputs;
 use ort::session::Session;
@@ -17,6 +18,8 @@ pub struct CrnnNet {
     keys: Vec<String>,
     input_names: Vec<String>,
     dst_height: u32,
+    min_width: u32,
+    use_bgr: bool,
 }
 
 impl Default for CrnnNet {
@@ -32,6 +35,8 @@ impl CrnnNet {
             keys: Vec::new(),
             input_names: Vec::new(),
             dst_height: CRNN_DST_HEIGHT,
+            min_width: 1,
+            use_bgr: false,
         }
     }
 
@@ -41,6 +46,33 @@ impl CrnnNet {
         path: &str,
         num_thread: usize,
         builder_fn: Option<fn(SessionBuilder) -> ort::Result<SessionBuilder>>,
+    ) -> Result<(), OcrError> {
+        self.init_model_inner(environment, path, num_thread, builder_fn, None)
+    }
+
+    pub fn init_model_with_dictionary(
+        &mut self,
+        environment: &Environment,
+        path: &str,
+        character_dict_path: &str,
+        builder_fn: fn(SessionBuilder) -> ort::Result<SessionBuilder>,
+    ) -> Result<(), OcrError> {
+        self.init_model_inner(
+            environment,
+            path,
+            0,
+            Some(builder_fn),
+            Some(character_dict_path),
+        )
+    }
+
+    fn init_model_inner(
+        &mut self,
+        environment: &Environment,
+        path: &str,
+        num_thread: usize,
+        builder_fn: Option<fn(SessionBuilder) -> ort::Result<SessionBuilder>>,
+        character_dict_path: Option<&str>,
     ) -> Result<(), OcrError> {
         let builder = Session::builder(environment)?;
         let mut builder = match builder_fn {
@@ -69,18 +101,28 @@ impl CrnnNet {
         };
         self.dst_height = dst_height;
 
+        let keys = match character_dict_path {
+            Some(path) => Self::keys_from_metadata(Some(std::fs::read_to_string(path)?))?,
+            None => Self::keys_from_metadata(session.metadata()?.custom("character"))?,
+        };
+        let output = session.outputs().first().ok_or(OcrError::EmptyOutput)?;
+        match output.dtype() {
+            ort::value::ValueType::Tensor { shape, .. } if shape.len() == 3 => {
+                if shape[2] > 0 {
+                    Self::validate_dictionary_size(shape[2] as usize, keys.len())?;
+                }
+            }
+            _ => return Err(OcrError::InvalidModel("识别输出必须是 N×T×C 张量".into())),
+        }
+        self.min_width = if character_dict_path.is_some() {
+            320
+        } else {
+            1
+        };
+        self.use_bgr = character_dict_path.is_some();
+        self.keys = keys;
         self.session = Some(session);
-        self.keys = self.get_keys()?;
         Ok(())
-    }
-
-    fn get_keys(&mut self) -> Result<Vec<String>, OcrError> {
-        let session = self
-            .session
-            .as_ref()
-            .ok_or(OcrError::SessionNotInitialized)?;
-        let metadata = session.metadata()?;
-        Self::keys_from_metadata(metadata.custom("character"))
     }
 
     fn keys_from_metadata(character_list: Option<String>) -> Result<Vec<String>, OcrError> {
@@ -95,8 +137,20 @@ impl CrnnNet {
                 .filter(|s| !s.is_empty())
                 .map(|s| s.trim_end_matches('\r').to_string()),
         );
+        if keys.len() == 1 {
+            return Err(OcrError::InvalidModel("识别字典为空".into()));
+        }
         keys.push(" ".to_string());
         Ok(keys)
+    }
+
+    fn validate_dictionary_size(classes: usize, key_count: usize) -> Result<(), OcrError> {
+        if classes != key_count {
+            return Err(OcrError::InvalidModel(format!(
+                "识别模型有 {classes} 个类别，字典含 blank/space 共 {key_count} 项"
+            )));
+        }
+        Ok(())
     }
 
     pub fn get_text_lines(
@@ -123,6 +177,8 @@ impl CrnnNet {
     }
 
     fn get_text_line(&mut self, img_src: &image::RgbImage) -> Result<TextLine, OcrError> {
+        let input_tensors =
+            Self::preprocess(img_src, self.dst_height, self.min_width, self.use_bgr);
         let session = self
             .session
             .as_mut()
@@ -131,29 +187,49 @@ impl CrnnNet {
             return Err(OcrError::SessionNotInitialized);
         }
 
-        let scale = self.dst_height as f32 / (img_src.height() as f32).max(1.0);
-        let dst_width = ((img_src.width() as f32 * scale) as u32).max(1);
-
-        let src_resize = image::imageops::resize(
-            img_src,
-            dst_width,
-            self.dst_height,
-            image::imageops::FilterType::Triangle,
-        );
-
-        let input_tensors =
-            OcrUtils::subtract_mean_normalize(&src_resize, &MEAN_VALUES, &NORM_VALUES);
         let input_tensor = Tensor::from_array(input_tensors)?;
 
         let outputs = session.run(inputs![self.input_names[0].as_str() => input_tensor])?;
 
         let (_, red_data) = outputs.iter().next().ok_or(OcrError::EmptyOutput)?;
         let (shape, src_slice) = red_data.try_extract_tensor::<f32>()?;
+        if shape.len() != 3 || shape[0] != 1 || shape[1] <= 0 || shape[2] <= 0 {
+            return Err(OcrError::InvalidModel("识别输出必须是 1×T×C 张量".into()));
+        }
         let height = shape[1] as usize;
         let width = shape[2] as usize;
-        let src_data: Vec<f32> = src_slice.to_vec();
 
-        Self::score_to_text_line(&src_data, height, width, &self.keys)
+        Self::score_to_text_line(src_slice, height, width, &self.keys)
+    }
+
+    fn preprocess(
+        img: &image::RgbImage,
+        dst_height: u32,
+        min_width: u32,
+        use_bgr: bool,
+    ) -> Array4<f32> {
+        let scale = dst_height as f32 / (img.height() as f32).max(1.0);
+        let dst_width = ((img.width() as f32 * scale).ceil() as u32).max(1);
+        let resized = image::imageops::resize(
+            img,
+            dst_width,
+            dst_height,
+            image::imageops::FilterType::Triangle,
+        );
+        let normalized = if use_bgr {
+            OcrUtils::subtract_mean_normalize_bgr(&resized, &MEAN_VALUES, &NORM_VALUES)
+        } else {
+            OcrUtils::subtract_mean_normalize(&resized, &MEAN_VALUES, &NORM_VALUES)
+        };
+        if dst_width >= min_width {
+            return normalized;
+        }
+        // PaddleOCR pads after normalization: padding is zero, not white (+1).
+        let mut padded = Array4::zeros((1, 3, dst_height as usize, min_width as usize));
+        padded
+            .slice_mut(s![.., .., .., ..dst_width as usize])
+            .assign(&normalized);
+        padded
     }
 
     fn score_to_text_line(
@@ -162,20 +238,17 @@ impl CrnnNet {
         width: usize,
         keys: &[String],
     ) -> Result<TextLine, OcrError> {
+        Self::validate_dictionary_size(width, keys.len())?;
+        if width == 0 || height == 0 || height.checked_mul(width) != Some(output_data.len()) {
+            return Err(OcrError::InvalidModel("识别输出尺寸与数据长度不符".into()));
+        }
         let mut text_line = TextLine::default();
         let mut last_index = 0usize;
 
         let mut text_score_sum = 0.0f32;
         let mut text_score_count = 0usize;
 
-        for i in 0..height {
-            let start = i * width;
-            let stop = (i + 1) * width;
-            if start >= output_data.len() {
-                break;
-            }
-            let slice = &output_data[start..stop.min(output_data.len())];
-
+        for (i, slice) in output_data.chunks_exact(width).enumerate() {
             let (max_index, max_value) = slice.iter().enumerate().fold(
                 (0usize, f32::MIN),
                 |(max_idx, max_val), (idx, &val)| {
@@ -187,6 +260,9 @@ impl CrnnNet {
                 },
             );
 
+            if !max_value.is_finite() {
+                return Err(OcrError::InvalidModel("识别输出包含无效置信度".into()));
+            }
             if max_index > 0 && max_index < keys.len() && !(i > 0 && max_index == last_index) {
                 text_line.text.push_str(&keys[max_index]);
                 text_score_sum += max_value;
@@ -220,5 +296,52 @@ mod tests {
     fn character_metadata_preserves_blank_and_space_tokens() {
         let keys = CrnnNet::keys_from_metadata(Some("中\r\n\nA\r\n文\n".into())).unwrap();
         assert_eq!(keys, ["#", "中", "A", "文", " "]);
+    }
+
+    #[test]
+    fn v6_dictionary_preserves_unicode_and_matches_ctc_class_count() {
+        let keys = CrnnNet::keys_from_metadata(Some("!\n繁\nあ\né\n　\n🛅\n".into())).unwrap();
+        assert_eq!(keys, ["#", "!", "繁", "あ", "é", "　", "🛅", " "]);
+        assert!(CrnnNet::validate_dictionary_size(8, keys.len()).is_ok());
+        assert!(CrnnNet::validate_dictionary_size(7, keys.len()).is_err());
+        assert!(CrnnNet::keys_from_metadata(Some("\n\r\n".into())).is_err());
+    }
+
+    #[test]
+    fn v6_preprocessing_uses_bgr_48px_height_and_zero_padding_to_320px() {
+        let img = image::RgbImage::from_pixel(10, 24, image::Rgb([255, 0, 0]));
+        let tensor = CrnnNet::preprocess(&img, 48, 320, true);
+        assert_eq!(tensor.shape(), [1, 3, 48, 320]);
+        assert_eq!(tensor[[0, 0, 0, 0]], -1.0);
+        assert_eq!(tensor[[0, 2, 0, 0]], 1.0);
+        assert_eq!(tensor[[0, 0, 0, 19]], -1.0);
+        assert_eq!(tensor[[0, 0, 0, 20]], 0.0);
+        assert_eq!(tensor[[0, 2, 47, 319]], 0.0);
+        let wide = image::RgbImage::new(401, 48);
+        assert_eq!(
+            CrnnNet::preprocess(&wide, 48, 320, true).shape(),
+            [1, 3, 48, 401]
+        );
+    }
+
+    #[test]
+    fn ctc_decoding_keeps_duplicates_separated_by_blank_and_spaces() {
+        let keys = CrnnNet::keys_from_metadata(Some("a\n中\n".into())).unwrap();
+        let data: Vec<f32> = [1, 1, 0, 1, 3, 2, 2]
+            .into_iter()
+            .flat_map(|index| (0..4).map(move |i| if i == index { 0.9 } else { 0.01 }))
+            .collect();
+        let line = CrnnNet::score_to_text_line(&data, 7, 4, &keys).unwrap();
+        assert_eq!(line.text, "aa 中");
+        assert!((line.text_score - 0.9).abs() < 1e-6);
+    }
+
+    #[test]
+    fn malformed_ctc_outputs_fail_instead_of_truncating_or_panicking() {
+        let keys = CrnnNet::keys_from_metadata(Some("a\n".into())).unwrap();
+        assert!(CrnnNet::score_to_text_line(&[0.0; 2], 1, 2, &keys).is_err());
+        assert!(CrnnNet::score_to_text_line(&[0.0; 2], 1, 3, &keys).is_err());
+        assert!(CrnnNet::score_to_text_line(&[], 0, 3, &keys).is_err());
+        assert!(CrnnNet::score_to_text_line(&[f32::INFINITY; 3], 1, 3, &keys).is_err());
     }
 }

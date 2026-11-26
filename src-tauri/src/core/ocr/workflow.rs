@@ -8,7 +8,7 @@ use crate::platform::clipboard::ClipboardOps;
 use crate::platform::clipboard::ClipboardOrigin;
 use crate::platform::gestures::{GestureEvent, GestureObserver, GestureSource};
 use crate::platform::window::WindowOps;
-use crate::platform::{CAPABILITIES, PlatformClipboard, PlatformGestures, PlatformWindow};
+use crate::platform::{PlatformClipboard, PlatformGestures, PlatformWindow, capabilities};
 use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, mpsc};
@@ -22,6 +22,8 @@ const POLL_INTERVAL: Duration = Duration::from_millis(50);
 #[derive(Debug, Serialize)]
 pub struct OcrStatus {
     pub supported: bool,
+    pub monitoring_supported: bool,
+    pub compositor_selection: bool,
     pub engine: OcrEngineInfo,
     pub engines: Vec<OcrEngineInfo>,
     pub config: OcrConfig,
@@ -131,7 +133,7 @@ impl OcrService {
 impl OcrService {
     /// Screenshot OCR needs desktop capture; image files work everywhere.
     pub fn supported(&self) -> bool {
-        CAPABILITIES.screen_capture
+        capabilities().screen_capture
     }
 
     pub fn config(&self) -> OcrConfig {
@@ -155,6 +157,8 @@ impl OcrService {
             });
         OcrStatus {
             supported: self.supported(),
+            monitoring_supported: crate::platform::desktop().supports_monitoring() && self.supported(),
+            compositor_selection: self.supported() && <crate::platform::PlatformShortcuts as crate::platform::shortcuts::ShortcutOps>::uses_portal(),
             engine,
             engines,
             config,
@@ -284,7 +288,9 @@ impl OcrService {
     }
 
     pub fn install_observer(&self, app: &AppHandle) {
-        if !CAPABILITIES.keyboard_gestures {
+        if (!capabilities().keyboard_gestures && !PlatformGestures::discovers_availability())
+            || self.observer.lock().unwrap().is_some()
+        {
             return;
         }
         let (sender, receiver) = mpsc::sync_channel(16);
@@ -318,6 +324,24 @@ impl OcrService {
                             }
                             GestureEvent::Snip { clipboard_revision } => {
                                 crate::core::shortcut::on_system_snip(&app, clipboard_revision);
+                            }
+                            GestureEvent::CompositorSelection {
+                                double_copy,
+                                process,
+                                epoch,
+                            } => {
+                                let app = app.clone();
+                                tauri::async_runtime::spawn_blocking(move || {
+                                    crate::core::shortcut::on_compositor_gesture(
+                                        &app,
+                                        double_copy,
+                                        process,
+                                        epoch,
+                                    );
+                                });
+                            }
+                            GestureEvent::AvailabilityChanged => {
+                                crate::core::shortcut::gesture_availability_changed(&app)
                             }
                             GestureEvent::Cancel => {
                                 service.cancel(&app);
@@ -356,7 +380,7 @@ impl OcrService {
         app.state::<super::monitor::MonitorService>()
             .stop(app, true);
         if !self.supported() {
-            return Err("当前平台尚未提供截图 OCR；请在 Windows 10/11 使用此功能。".into());
+            return Err("当前桌面没有可用的原生截图能力；可打开本地图片进行 OCR。".into());
         }
         if revision.is_some() && self.observer.lock().unwrap().is_none() {
             return Err("截图快捷键监听不可用，请重启 TransPortal 后重试。".into());
@@ -405,6 +429,32 @@ impl OcrService {
         cancel: Cancellation,
     ) -> Result<(), String> {
         crate::core::shell::hide_now(app);
+        let desktop = crate::platform::desktop();
+        if let Some(image) = desktop.select_image(&|| cancel.is_cancelled()) {
+            let image = match image {
+                Err(_) if cancel.is_cancelled() || !self.is_current(event.id) => return Ok(()),
+                result => result?,
+            };
+            if cancel.is_cancelled() || !self.is_current(event.id) {
+                return Ok(());
+            }
+            let (engine, config) = self.registry.snapshot()?;
+            let mut progress = event.clone();
+            progress.stage = OcrStage::Recognizing;
+            self.publish(app, progress, true);
+            return self.recognize_image(
+                app,
+                event.clone(),
+                OcrImage {
+                    width: image.width(),
+                    height: image.height(),
+                    rgba: image.as_raw(),
+                },
+                self.clipboard.revision(),
+                engine,
+                config.language,
+            );
+        }
         let region = app.state::<RegionService>();
         let selection = region.freeze(app, event.mode.into(), event.id, cancel)?;
         if let Some(foreground) = region.get_saved_foreground(selection) {
@@ -784,7 +834,6 @@ pub fn resolve_search_url(engine: Option<&str>, sys_lang: &str, query: &str) -> 
     match engine {
         "bing" => format!("https://www.bing.com/search?q={encoded_query}"),
         "google" => format!("https://www.google.com/search?q={encoded_query}"),
-        "baidu" => format!("https://www.baidu.com/s?wd={encoded_query}"),
         custom if custom.contains("%s") => custom.replace("%s", &encoded_query),
         custom if custom.starts_with("http://") || custom.starts_with("https://") => {
             format!("{custom}{encoded_query}")
@@ -855,10 +904,12 @@ impl OcrService {
                 || event.mode == OcrMode::Search
             {
                 if event.mode == OcrMode::Silent || event.mode == OcrMode::Search {
-                    let _ = app.clipboard().write_text(event.text.clone());
-                    event.copied = true;
+                    match self.clipboard.write_text(app, &event.text) {
+                        Ok(()) => event.copied = true,
+                        Err(error) => event.copy_error = Some(format!("复制失败：{error}")),
+                    }
                 } else if image_revision != 0 && self.clipboard.revision() == image_revision {
-                    match app.clipboard().write_text(event.text.clone()) {
+                    match self.clipboard.write_text(app, &event.text) {
                         Ok(()) => event.copied = true,
                         Err(error) => {
                             event.copy_error =
@@ -1113,10 +1164,6 @@ mod tests {
         assert_eq!(
             resolve_search_url(Some("google"), "zh-CN", "rust"),
             "https://www.google.com/search?q=rust"
-        );
-        assert_eq!(
-            resolve_search_url(Some("baidu"), "en-US", "rust"),
-            "https://www.baidu.com/s?wd=rust"
         );
     }
 }

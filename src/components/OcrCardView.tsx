@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { useTranslation } from 'react-i18next';
 import { dismissShell } from '../hooks/useWindowAnimation';
 import {
   Check,
@@ -42,6 +43,7 @@ const TARGET_LANG_OPTIONS = [
 ];
 
 export const OcrCardView: React.FC<{ event: OcrEvent }> = ({ event }) => {
+  const { t } = useTranslation();
   const storeTargetLang = useAppStore((state) => state.ocrTarget || state.targetLanguage);
   const [targetLang, setTargetLang] = useState<string>(storeTargetLang || 'zh-CN');
   const [translation, setTranslation] = useState<string>('');
@@ -260,6 +262,7 @@ export const OcrCardView: React.FC<{ event: OcrEvent }> = ({ event }) => {
             <option value="google_free">Google</option>
             <option value="youdao_free">有道</option>
             <option value="tencent_free">腾讯</option>
+            <option value="bilibili_index">{t('shell.providerBilibili')}</option>
             <option value="openai">OpenAI</option>
           </select>
 

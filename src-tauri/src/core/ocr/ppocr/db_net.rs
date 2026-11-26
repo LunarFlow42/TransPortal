@@ -20,6 +20,15 @@ const NORM_VALUES: [f32; 3] = [
 pub struct DbNet {
     session: Option<Session>,
     input_names: Vec<String>,
+    use_bgr: bool,
+    use_dilation: bool,
+}
+
+struct DbPostprocess {
+    box_score_thresh: f32,
+    box_thresh: f32,
+    un_clip_ratio: f32,
+    use_dilation: bool,
 }
 
 impl Default for DbNet {
@@ -33,7 +42,14 @@ impl DbNet {
         Self {
             session: None,
             input_names: Vec::new(),
+            use_bgr: false,
+            use_dilation: true,
         }
+    }
+
+    pub(super) fn use_ppocr_v6(&mut self) {
+        self.use_bgr = true;
+        self.use_dilation = false;
     }
 
     pub fn init_model(
@@ -58,6 +74,8 @@ impl DbNet {
             .map(|input| input.name().to_string())
             .collect();
         self.session = Some(session);
+        self.use_bgr = false;
+        self.use_dilation = true;
         Ok(())
     }
 
@@ -94,8 +112,11 @@ impl DbNet {
             image::imageops::FilterType::Triangle,
         );
 
-        let input_tensors =
-            OcrUtils::subtract_mean_normalize(&src_resize, &MEAN_VALUES, &NORM_VALUES);
+        let input_tensors = if self.use_bgr {
+            OcrUtils::subtract_mean_normalize_bgr(&src_resize, &MEAN_VALUES, &NORM_VALUES)
+        } else {
+            OcrUtils::subtract_mean_normalize(&src_resize, &MEAN_VALUES, &NORM_VALUES)
+        };
         let tensor = Tensor::from_array(input_tensors)?;
 
         let outputs = session.run(inputs![self.input_names[0].as_str() => tensor])?;
@@ -105,9 +126,12 @@ impl DbNet {
             src_resize.height(),
             src_resize.width(),
             scale,
-            box_score_thresh,
-            box_thresh,
-            un_clip_ratio,
+            &DbPostprocess {
+                box_score_thresh,
+                box_thresh,
+                un_clip_ratio,
+                use_dilation: self.use_dilation,
+            },
         )?;
 
         Ok(text_boxes)
@@ -118,9 +142,7 @@ impl DbNet {
         rows: u32,
         cols: u32,
         s: &ScaleParam,
-        box_score_thresh: f32,
-        box_thresh: f32,
-        un_clip_ratio: f32,
+        params: &DbPostprocess,
     ) -> Result<Vec<TextBox>, OcrError> {
         let max_side_thresh = 3.0f32;
         let mut rs_boxes = Vec::new();
@@ -143,18 +165,22 @@ impl DbNet {
 
         let threshold_img = imageproc::contrast::threshold(
             &cbuf_img,
-            (box_thresh * 255.0).clamp(0.0, 255.0) as u8,
+            (params.box_thresh * 255.0).clamp(0.0, 255.0) as u8,
             imageproc::contrast::ThresholdType::Binary,
         );
 
-        let dilate_img = imageproc::morphology::dilate(
-            &threshold_img,
-            imageproc::distance_transform::Norm::LInf,
-            1,
-        );
+        let contour_img = if params.use_dilation {
+            imageproc::morphology::dilate(
+                &threshold_img,
+                imageproc::distance_transform::Norm::LInf,
+                1,
+            )
+        } else {
+            threshold_img
+        };
 
         let img_contours: Vec<imageproc::contours::Contour<i32>> =
-            imageproc::contours::find_contours(&dilate_img);
+            imageproc::contours::find_contours(&contour_img);
 
         for contour in img_contours {
             if contour.points.len() <= 2 {
@@ -168,11 +194,11 @@ impl DbNet {
             }
 
             let score = Self::get_score(&contour, &pred_img)?;
-            if score < box_score_thresh {
+            if score < params.box_score_thresh {
                 continue;
             }
 
-            let clip_box = Self::unclip(&min_box, un_clip_ratio)?;
+            let clip_box = Self::unclip(&min_box, params.un_clip_ratio)?;
             if clip_box.len() <= 2 {
                 continue;
             }

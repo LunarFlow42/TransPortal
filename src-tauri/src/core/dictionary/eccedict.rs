@@ -115,7 +115,7 @@ async fn download_base(
             file.flush().await.map_err(|error| error.to_string())?;
             drop(file);
             if downloaded != manifest.base.bytes
-                || format!("{:x}", hash.finalize()) != manifest.base.sha256
+                || crate::core::integrity::hex_lower(&hash.finalize()) != manifest.base.sha256
             {
                 return Err("Dictionary download failed pinned integrity verification".into());
             }
@@ -245,7 +245,7 @@ mod tests {
         let mut manifest = enrichment::manifest().unwrap();
         manifest.base.urls = vec![mirror("wrong").await, mirror("hello").await];
         manifest.base.bytes = 5;
-        manifest.base.sha256 = format!("{:x}", Sha256::digest(b"hello"));
+        manifest.base.sha256 = crate::core::integrity::hex_lower(&Sha256::digest(b"hello"));
         let client = reqwest::Client::builder()
             .no_proxy()
             .timeout(std::time::Duration::from_secs(3))
@@ -267,7 +267,7 @@ mod tests {
         let mut manifest = enrichment::manifest().unwrap();
         manifest.base.urls = vec![mirror("hello").await];
         manifest.base.bytes = 5;
-        manifest.base.sha256 = format!("{:x}", Sha256::digest(b"hello"));
+        manifest.base.sha256 = crate::core::integrity::hex_lower(&Sha256::digest(b"hello"));
         let client = reqwest::Client::builder()
             .no_proxy()
             .timeout(std::time::Duration::from_secs(3))

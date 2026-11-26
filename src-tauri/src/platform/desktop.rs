@@ -42,6 +42,19 @@ impl ScreenRect {
 }
 
 pub trait DesktopCapture: Send + Sync {
+    /// An explicit compositor-authorized still image, used instead of a global
+    /// coordinate selector on restricted desktops. None uses the normal selector.
+    fn select_image(
+        &self,
+        _cancelled: &(dyn Fn() -> bool + Sync),
+    ) -> Option<Result<image::RgbaImage, String>> {
+        None
+    }
+
+    /// Repeated capture must not re-prompt screenshot permission each interval.
+    fn supports_monitoring(&self) -> bool {
+        true
+    }
     fn bounds(&self) -> Result<ScreenRect, String>;
     fn capture(&self, region: ScreenRect) -> Result<image::RgbaImage, String>;
     /// Keep translated output out of later screenshots to avoid feedback loops.

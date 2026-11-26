@@ -15,6 +15,13 @@ pub enum ContextSource {
     Lookup,
     Dictionary,
     Generated,
+    Video,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VideoSource {
+    pub url: String,
+    pub timestamp_ms: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -22,6 +29,8 @@ pub struct LearningContext {
     pub text: String,
     pub translation: Option<String>,
     pub source: ContextSource,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub video: Option<VideoSource>,
 }
 
 /// One chosen definition and, optionally, an example already on the word card.
@@ -76,4 +85,10 @@ pub struct LearningBackup {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ExportResult {
     pub entry_count: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ImportResult {
+    pub created: u64,
+    pub duplicates: u64,
 }

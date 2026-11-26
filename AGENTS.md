@@ -72,22 +72,25 @@ The backend is one codebase for every OS. `src-tauri/src/` splits into:
 - `lib.rs` (composition root) and `commands.rs` (IPC adapters only; command names are a frontend contract).
 - `core/`: cross-platform application logic (translation, dictionary, OCR workflow, selection, shortcuts, overlay, clipboard monitor, integrity).
 - `platform/`: OS contracts and their implementations.
-  - Contracts: `window.rs` (`WindowOps`), `selection.rs` (`SelectionOps`), `clipboard.rs` (`ClipboardOps`), `gestures.rs` (`GestureSource`), `desktop.rs` (`DesktopCapture`), `system.rs` (`SystemOps`).
+  - Contracts: `window.rs` (`WindowOps`), `selection.rs` (`SelectionOps`), `clipboard.rs` (`ClipboardOps`), `gestures.rs` (`GestureSource`), `shortcuts.rs` (`ShortcutOps`), `desktop.rs` (`DesktopCapture`), `system.rs` (`SystemOps`).
   - `mod.rs`: the `Backend` trait, `Capabilities`, the one `#[cfg]` switch that picks `ActiveBackend`, the `Platform*` aliases, the factories (`desktop()`, `native_ocr()`) and `CAPABILITIES`.
   - Portable helpers, built and tested on every OS: `placement.rs`, `imaging.rs`, `key_sequence.rs`.
-  - Backends: `windows/`, `linux/` (phase 1 delegates to `unsupported/`) and `unsupported/` (every other target; also built in Windows test builds so the contract tests cover it).
+  - Backends: `windows/`, `linux/` (Wayland-only: XDG portals, GTK, procfs) and `unsupported/` (every other target; also built in Windows test builds so the contract tests cover it). Do not add or maintain X11 adapters; do not use XWayland to bypass compositor permissions.
 
 Dependency rules (checked by `scripts/check-architecture.sh`):
 
 - `core` uses only the public contracts, types, `Platform*` aliases, factories and `CAPABILITIES` of `crate::platform`. It contains no `cfg(target_os)` and never uses the `windows` crate. Write `crate::core::...` (the module shares its name with the standard `core` crate).
 - Contracts and backends may use `core::ocr`'s engine interface types (`OcrEngine`, `OcrImage`, `OcrBlock`, ...) to implement it. They must not use core services, `app.state`, window labels or `transportal://` event names; core passes windows and callbacks in.
 - `cfg(target_os)` appears only in `platform/mod.rs` and inside the backends. OS-specific crates go under `[target.'cfg(...)'.dependencies]` in `Cargo.toml`.
-- Shared code asks `CAPABILITIES` whether a feature exists (keyboard gestures, system snip, selection replace, screen capture, clipboard events) instead of checking the OS.
+- Shared code calls `platform::capabilities()` for runtime availability (keyboard gestures, system snip, selection replace, screen capture, clipboard events) instead of checking the OS. `CAPABILITIES` is the static backend baseline, not session detection. One-shot screenshot support is distinct from `DesktopCapture::supports_monitoring()`.
 - Adding a contract means adding an associated type to `Backend`; every backend then fails to compile until it provides one.
 
 ## Linux verification
 
 CI runs clippy and tests on `ubuntu-24.04`. Full Linux packaging (`.deb` / `.rpm` / `.AppImage`) is maintained on the dedicated `feat/linux-native` branch while Wayland native contracts are being developed. Locally, on a Linux machine with the Tauri build dependencies (`pkg-config libssl-dev libdbus-1-dev libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev`):
+
+- Wayland design, permissions and manual verification: `docs/LINUX_WAYLAND.md`. Linux portal tests require `dbus-daemon`, launch their own private bus, and must never request the developer's real screenshot/shortcut permissions.
+- Keep `shell`, `settings`, and `ocr-region` declarations even though Wayland uses compositor-owned screenshot selection. Keep the Windows native shortcut plugin; Linux initializes Portal shortcuts instead.
 
 - In `src-tauri/`: `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test`
 - Packages: `APPIMAGE_EXTRACT_AND_RUN=1 pnpm tauri build` (output in `src-tauri/target/release/bundle/{deb,rpm,appimage}`)

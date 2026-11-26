@@ -1,14 +1,11 @@
 //! Direct3D 11 Windows.Graphics.Capture (WGC) modern capture pipeline.
 //!
-//! Provides zero-flicker, real-time screen capture directly from the Windows Compositor
-//! and Direct3D swapchain. This eliminates the ~16ms stale frame delay and taskbar
-//! flicker associated with legacy GDI / PrintWindow captures in borderless fullscreen games
-//! (Independent Flip / MPO), and fully supports hybrid laptops and virtual displays (IDD).
+//! A one-shot frame pool per request; only the D3D device is reused. In flip-model
+//! fullscreen games even window capture's first surface can be the previous scene.
 
+use crate::platform::capture_frames::{self, FramePolicy, POOL_SIZE};
 use crate::platform::desktop::ScreenRect;
-use crate::platform::imaging::crop_monitor_frame;
-use std::sync::mpsc::channel;
-use std::time::Duration;
+use std::sync::mpsc::sync_channel;
 use windows::Graphics::Capture::{
     Direct3D11CaptureFramePool, GraphicsCaptureItem, GraphicsCaptureSession,
 };
@@ -19,11 +16,9 @@ use windows::Win32::Graphics::Direct3D::{
     D3D_DRIVER_TYPE_HARDWARE, D3D_DRIVER_TYPE_WARP, D3D_FEATURE_LEVEL_11_0,
 };
 use windows::Win32::Graphics::Direct3D11::{
-    D3D11_CPU_ACCESS_READ, D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_MAP_READ,
-    D3D11_MAPPED_SUBRESOURCE, D3D11_SDK_VERSION, D3D11_TEXTURE2D_DESC, D3D11_USAGE_STAGING,
+    D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_MAP_READ, D3D11_MAPPED_SUBRESOURCE, D3D11_SDK_VERSION,
     D3D11CreateDevice, ID3D11Device, ID3D11DeviceContext, ID3D11Texture2D,
 };
-use windows::Win32::Graphics::Dxgi::Common::DXGI_SAMPLE_DESC;
 use windows::Win32::Graphics::Dxgi::IDXGIDevice;
 use windows::Win32::Graphics::Gdi::HMONITOR;
 use windows::Win32::System::WinRT::Direct3D11::{
@@ -124,12 +119,12 @@ impl WgcDesktop {
     }
 
     /// Captures a GraphicsCaptureItem (monitor or window) and crops to `region`.
-    pub fn capture_item(
+    fn capture_item(
         &self,
         item: GraphicsCaptureItem,
         item_rect: ScreenRect,
         region: ScreenRect,
-        drain_newer: bool,
+        policy: FramePolicy,
     ) -> Result<(image::RgbaImage, WgcMetrics), String> {
         let total_start = std::time::Instant::now();
         let size = item
@@ -143,7 +138,7 @@ impl WgcDesktop {
         let frame_pool = Direct3D11CaptureFramePool::CreateFreeThreaded(
             &self.winrt_device,
             DirectXPixelFormat::B8G8R8A8UIntNormalized,
-            3,
+            POOL_SIZE as i32,
             size,
         )
         .map_err(|e| format!("Failed to create Direct3D11CaptureFramePool: {e}"))?;
@@ -156,8 +151,8 @@ impl WgcDesktop {
         let _ = session.SetIsBorderRequired(false);
         let _ = session.SetIsCursorCaptureEnabled(false);
 
-        let (tx, rx) = channel();
-        let _token = frame_pool
+        let (tx, rx) = sync_channel(POOL_SIZE);
+        let token = frame_pool
             .FrameArrived(&windows::Foundation::TypedEventHandler::<
                 Direct3D11CaptureFramePool,
                 windows::core::IInspectable,
@@ -165,7 +160,7 @@ impl WgcDesktop {
                 if let Ok(pool) = pool.ok()
                     && let Ok(frame) = pool.TryGetNextFrame()
                 {
-                    let _ = tx.send(frame);
+                    let _ = tx.try_send(frame);
                 }
                 Ok(())
             }))
@@ -174,10 +169,12 @@ impl WgcDesktop {
         struct WgcSessionGuard {
             session: GraphicsCaptureSession,
             frame_pool: Direct3D11CaptureFramePool,
+            token: i64,
         }
 
         impl Drop for WgcSessionGuard {
             fn drop(&mut self) {
+                let _ = self.frame_pool.RemoveFrameArrived(self.token);
                 let _ = self.session.Close();
                 let _ = self.frame_pool.Close();
             }
@@ -186,39 +183,24 @@ impl WgcDesktop {
         let guard = WgcSessionGuard {
             session: session.clone(),
             frame_pool: frame_pool.clone(),
+            token,
         };
 
         session
             .StartCapture()
             .map_err(|e| format!("Failed to start GraphicsCaptureSession: {e}"))?;
-        let capture_started = std::time::Instant::now();
-
-        // Wait up to 300ms for the initial frame (frame 0) to arrive
-        let mut frame = rx
-            .recv_timeout(Duration::from_millis(300))
-            .map_err(|e| format!("等待 WGC 画面就绪超时: {e}"))?;
-        let frame0_latency_ms = capture_started.elapsed().as_millis() as u64;
-
-        let frame1_start = std::time::Instant::now();
-        let mut frame1_latency_ms = None;
-        let mut frames_drained = 0;
-
-        // Smart drain:
-        // For monitor capture during iFlip transitions, wait up to 120ms for Frame 1.
-        // For window capture, Frame 0 is already the direct swapchain frame, so return immediately.
-        if drain_newer && let Ok(newer_frame) = rx.recv_timeout(Duration::from_millis(120)) {
-            frame1_latency_ms = Some(frame1_start.elapsed().as_millis() as u64);
-            frame = newer_frame;
-            while let Ok(latest) = rx.try_recv() {
-                frame = latest;
-                frames_drained += 1;
-            }
-        }
-
-        // Stop session and frame pool promptly
-        drop(guard);
-
+        let picked = capture_frames::pick(&rx, policy, |frame| {
+            frame
+                .SystemRelativeTime()
+                .ok()
+                .map(|t| t.Duration)
+                .filter(|t| *t > 0)
+        })?;
         let staging_start = std::time::Instant::now();
+        let frame = picked.frame;
+        let content = frame
+            .ContentSize()
+            .map_err(|e| format!("读取 WGC 内容尺寸失败：{e}"))?;
         let surface = frame
             .Surface()
             .map_err(|e| format!("Failed to get frame Surface: {e}"))?;
@@ -233,39 +215,25 @@ impl WgcDesktop {
                 .map_err(|e| format!("Failed to extract ID3D11Texture2D from surface: {e}"))?
         };
 
-        let mut desc = D3D11_TEXTURE2D_DESC::default();
-        unsafe { texture.GetDesc(&mut desc) };
+        let staging = super::readback::stage_region(
+            &self.d3d11_device,
+            &self.d3d11_context,
+            &texture,
+            item_rect,
+            (content.Width as u32, content.Height as u32),
+            region,
+        )?;
+        // The pool owns the source surface until the copy is submitted. The
+        // staging texture is ours; mapping it synchronizes the GPU write.
+        drop(texture);
+        drop(access);
+        drop(surface);
+        drop(frame);
+        drop(rx);
+        drop(guard);
 
-        let staging_desc = D3D11_TEXTURE2D_DESC {
-            Width: desc.Width,
-            Height: desc.Height,
-            MipLevels: 1,
-            ArraySize: 1,
-            Format: desc.Format,
-            SampleDesc: DXGI_SAMPLE_DESC {
-                Count: 1,
-                Quality: 0,
-            },
-            Usage: D3D11_USAGE_STAGING,
-            BindFlags: 0,
-            CPUAccessFlags: D3D11_CPU_ACCESS_READ.0 as u32,
-            MiscFlags: 0,
-        };
-
-        let mut staging: Option<ID3D11Texture2D> = None;
-        unsafe {
-            self.d3d11_device
-                .CreateTexture2D(&staging_desc, None, Some(&mut staging))
-                .map_err(|e| format!("Failed to create staging texture: {e}"))?;
-        }
-        let staging = staging.ok_or_else(|| "Staging texture is None".to_string())?;
-
-        unsafe {
-            self.d3d11_context.CopyResource(&staging, &texture);
-        }
-
-        let width = desc.Width as usize;
-        let height = desc.Height as usize;
+        let width = region.width as usize;
+        let height = region.height as usize;
         let mut rgba_bytes = vec![0u8; width * height * 4];
 
         let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
@@ -306,21 +274,19 @@ impl WgcDesktop {
         drop(_map_guard);
         let staging_copy_ms = staging_start.elapsed().as_millis() as u64;
 
-        let full_image = image::RgbaImage::from_raw(desc.Width, desc.Height, rgba_bytes)
+        let image = image::RgbaImage::from_raw(region.width, region.height, rgba_bytes)
             .ok_or_else(|| "Failed to construct RgbaImage from WGC buffer".to_string())?;
-
-        let cropped = crop_monitor_frame(&full_image, item_rect, region)?;
         let total_ms = total_start.elapsed().as_millis() as u64;
 
         let metrics = WgcMetrics {
-            frame0_latency_ms,
-            frame1_latency_ms,
-            frames_drained,
+            frame0_latency_ms: picked.frame0_latency_ms,
+            frame1_latency_ms: picked.frame1_latency_ms,
+            frames_drained: picked.frames_drained,
             staging_copy_ms,
             total_ms,
         };
 
-        Ok((cropped, metrics))
+        Ok((image, metrics))
     }
 
     /// Captures the specified monitor using Windows.Graphics.Capture and crops to `region`.
@@ -329,6 +295,7 @@ impl WgcDesktop {
         monitor: HMONITOR,
         monitor_rect: ScreenRect,
         region: ScreenRect,
+        policy: FramePolicy,
     ) -> Result<(image::RgbaImage, WgcMetrics), String> {
         let interop: IGraphicsCaptureItemInterop =
             windows::core::factory::<GraphicsCaptureItem, IGraphicsCaptureItemInterop>()
@@ -340,7 +307,7 @@ impl WgcDesktop {
                 .map_err(|e| format!("Failed to create GraphicsCaptureItem for monitor: {e}"))?
         };
 
-        self.capture_item(item, monitor_rect, region, true)
+        self.capture_item(item, monitor_rect, region, policy)
     }
 
     /// Captures the specified window using Windows.Graphics.Capture and crops to `region`.
@@ -349,6 +316,7 @@ impl WgcDesktop {
         window: HWND,
         window_rect: ScreenRect,
         region: ScreenRect,
+        policy: FramePolicy,
     ) -> Result<(image::RgbaImage, WgcMetrics), String> {
         let interop: IGraphicsCaptureItemInterop =
             windows::core::factory::<GraphicsCaptureItem, IGraphicsCaptureItemInterop>()
@@ -360,8 +328,7 @@ impl WgcDesktop {
                 .map_err(|e| format!("Failed to create GraphicsCaptureItem for window: {e}"))?
         };
 
-        // Window capture targets the window swapchain directly: Frame 0 is already live, drain_newer is false
-        self.capture_item(item, window_rect, region, false)
+        self.capture_item(item, window_rect, region, policy)
     }
 }
 

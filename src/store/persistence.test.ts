@@ -48,3 +48,20 @@ describe('persistent OCR configuration', () => {
     expect(store.save).toHaveBeenCalledOnce();
   });
 });
+
+describe('translation and search preferences', () => {
+  it('reads the saved Bilibili provider without writing settings', async () => {
+    const { store } = settingsFile({ provider: 'bilibili_index' });
+    const { loadSettings } = await import('./persistence');
+    expect(await loadSettings()).toMatchObject({ provider: 'bilibili_index' });
+    expect(store.set).not.toHaveBeenCalled();
+    expect(store.save).not.toHaveBeenCalled();
+  });
+
+  it('keeps explicitly configured search URLs intact', async () => {
+    const searchEngine = 'https://example.com/q?term=%s';
+    settingsFile({ searchEngine });
+    const { loadSettings } = await import('./persistence');
+    expect(await loadSettings()).toMatchObject({ searchEngine });
+  });
+});

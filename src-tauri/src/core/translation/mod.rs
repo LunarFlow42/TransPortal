@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
 
+mod bilibili;
 pub mod bing;
 pub mod google;
 pub mod lang;
@@ -73,6 +74,11 @@ pub enum ProviderError {
 pub trait Translator: Send + Sync {
     /// Return full translated result asynchronously
     async fn translate(&self, query: &TranslateQuery) -> Result<TranslateResult, ProviderError>;
+
+    /// Whether a failed request may be retried with a different service.
+    fn allows_automatic_fallback(&self) -> bool {
+        true
+    }
 
     /// Stream translation chunks via Tauri IPC Channel.
     ///
@@ -146,6 +152,9 @@ pub fn registry() -> &'static [(&'static str, ProviderFactory)] {
         ("youdao_free", |_config| Arc::new(YoudaoFreeProvider::new())),
         ("tencent_free", |_config| {
             Arc::new(TencentFreeProvider::new())
+        }),
+        ("bilibili_index", |_config| {
+            Arc::new(bilibili::BilibiliProvider)
         }),
         ("openai", |config| {
             Arc::new(OpenAiCompatibleProvider::new(config.unwrap_or_default()))
